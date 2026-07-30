@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { verifyDormantInstallReadback } from "../scripts/verify-dormant-install-postflight.mjs";
+import { verifyDormantUpgradeReadback } from "../scripts/verify-dormant-upgrade-postflight.mjs";
 
 const contract = JSON.parse(
   readFileSync(
@@ -18,19 +18,16 @@ function noProhibitedSchemaField(value: unknown): boolean {
   );
 }
 
-function readback(phase: "installed" | "rolled_back") {
+function readback(phase: "upgraded" | "rolled_back") {
   return {
-    contract_id: "moonsleep.partner.dormant-install-readback.v1",
+    contract_id: "moonsleep.partner.dormant-upgrade-readback.v1",
     phase,
-    app:
-      phase === "installed"
-        ? {
-            present: true,
-            app_id: "moonsleep-partner-desk",
-            app_version: "0.3.1",
-            state: "active",
-          }
-        : { present: false },
+    app: {
+      present: true,
+      app_id: "moonsleep-partner-desk",
+      app_version: phase === "upgraded" ? "0.3.2" : "0.3.1",
+      state: "active",
+    },
     health: {
       status: "ok",
       continuous_projection: "dormant_pending_backfill_parity_and_activation_receipt",
@@ -44,20 +41,13 @@ function readback(phase: "installed" | "rolled_back") {
       provider_write_authority: false,
       reply_authority: false,
     },
-    work:
-      phase === "installed"
-        ? {
-            owned_job_count: 1,
-            owned_job_status: "inactive",
-            owned_subscription_count: 2,
-            enabled_subscription_count: 0,
-          }
-        : {
-            owned_job_count: 0,
-            owned_subscription_count: 0,
-            enabled_subscription_count: 0,
-          },
-    profiles: { registration_delta: 8 },
+    work: {
+      owned_job_count: 1,
+      owned_job_status: "inactive",
+      owned_subscription_count: 2,
+      enabled_subscription_count: 0,
+    },
+    profiles: { registration_delta: 0 },
     state_deltas: Object.fromEntries(
       Object.entries(contract.forbidden_effects)
         .filter(([field]) => field !== "provider_call_count")
@@ -72,54 +62,61 @@ function readback(phase: "installed" | "rolled_back") {
 
 test("release contract is exact, dormant, rollback-bound, and has no prohibited schema field", () => {
   assert.equal(contract.app.app_id, "moonsleep-partner-desk");
-  assert.equal(contract.app.app_version, "0.3.1");
+  assert.equal(contract.app.app_version, "0.3.2");
   assert.equal(contract.governing_core.commit, "f6ff4816befeba60a480e05597f2fa904b4144a3");
   assert.equal(contract.governing_core.tree, "75de9b1a5b813933187c2a685945760bf1737329");
-  assert.equal(contract.dormant_install.endpoint, "/api/apps/install");
-  assert.deepEqual(contract.dormant_install.request, {
+  assert.equal(contract.dormant_upgrade.endpoint, "/api/apps/upgrade");
+  assert.deepEqual(contract.dormant_upgrade.request, {
     appId: "moonsleep-partner-desk",
+    targetVersion: "0.3.2",
     packageRef: "${HOST_EXTRACTED_PACKAGE_DIR}",
   });
-  assert.equal(contract.rollback.endpoint, "/api/apps/uninstall");
-  assert.equal(contract.dormant_install.expected_owned_job_status, "inactive");
-  assert.equal(contract.dormant_install.expected_enabled_subscription_count, 0);
+  assert.equal(contract.dormant_upgrade.preconditions.current_app_version, "0.3.1");
+  assert.equal(contract.rollback.endpoint, "/api/apps/upgrade");
+  assert.equal(contract.rollback.request.targetVersion, "0.3.1");
+  assert.equal(
+    contract.rollback.request.packageRef,
+    "/var/lib/nex/state/packages/installed/app/moonsleep-partner-desk/releases/0.3.1",
+  );
+  assert.equal(contract.dormant_upgrade.expected_owned_job_status, "inactive");
+  assert.equal(contract.dormant_upgrade.expected_enabled_subscription_count, 0);
   assert.ok(Object.values(contract.authority).every((value) => value === false));
   assert.equal(noProhibitedSchemaField(contract), true);
 });
 
-test("accepts the exact installed dormant readback", () => {
-  const receipt = verifyDormantInstallReadback(readback("installed"), contract);
+test("accepts the exact upgraded dormant readback", () => {
+  const receipt = verifyDormantUpgradeReadback(readback("upgraded"), contract);
   assert.equal(receipt.ok, true);
-  assert.equal(receipt.phase, "installed");
+  assert.equal(receipt.phase, "upgraded");
   assert.equal(receipt.provider_calls, 0);
 });
 
-test("accepts exact first-install rollback and immutable profile-registry residue", () => {
-  const receipt = verifyDormantInstallReadback(readback("rolled_back"), contract);
+test("accepts exact rollback to the retained dormant 0.3.1 release", () => {
+  const receipt = verifyDormantUpgradeReadback(readback("rolled_back"), contract);
   assert.equal(receipt.ok, true);
   assert.equal(receipt.phase, "rolled_back");
-  assert.equal(receipt.profile_registration_delta, 8);
+  assert.equal(receipt.profile_registration_delta, 0);
 });
 
 test("fails closed on any provider call, enabled subscription, or local evidence write", () => {
-  const providerCall = readback("installed");
+  const providerCall = readback("upgraded");
   providerCall.effects.provider_call_count = 1;
   assert.throws(
-    () => verifyDormantInstallReadback(providerCall, contract),
+    () => verifyDormantUpgradeReadback(providerCall, contract),
     /provider calls are forbidden/,
   );
 
-  const enabledSubscription = readback("installed");
+  const enabledSubscription = readback("upgraded");
   enabledSubscription.work.enabled_subscription_count = 1;
   assert.throws(
-    () => verifyDormantInstallReadback(enabledSubscription, contract),
+    () => verifyDormantUpgradeReadback(enabledSubscription, contract),
     /work is not dormant/,
   );
 
-  const factWrite = readback("installed");
+  const factWrite = readback("upgraded");
   factWrite.state_deltas.fact_delta = 1;
   assert.throws(
-    () => verifyDormantInstallReadback(factWrite, contract),
+    () => verifyDormantUpgradeReadback(factWrite, contract),
     /fact_delta must equal 0/,
   );
 });

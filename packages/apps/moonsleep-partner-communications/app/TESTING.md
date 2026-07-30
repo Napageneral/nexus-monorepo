@@ -47,7 +47,7 @@ and verifying a clean worktree:
 npm run build:production-release
 ```
 
-This emits the hash-bound archive, release manifest, and dormant-install input
+This emits the hash-bound archive, release manifest, and dormant-upgrade input
 under ignored `dist/`. It performs no install or production action. Validate a
 later runtime readback with:
 

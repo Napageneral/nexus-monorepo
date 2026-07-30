@@ -55,12 +55,12 @@ function zeroAuthority(input, contract) {
   }
 }
 
-export function verifyDormantInstallReadback(input, contract) {
+export function verifyDormantUpgradeReadback(input, contract) {
   const readback = row(input, "readback");
-  if (readback.contract_id !== "moonsleep.partner.dormant-install-readback.v1") {
+  if (readback.contract_id !== "moonsleep.partner.dormant-upgrade-readback.v1") {
     fail("readback contract identity is invalid");
   }
-  if (!["installed", "rolled_back"].includes(readback.phase)) {
+  if (!["upgraded", "rolled_back"].includes(readback.phase)) {
     fail("readback phase is invalid");
   }
   zeroDeltas(readback, contract);
@@ -71,28 +71,28 @@ export function verifyDormantInstallReadback(input, contract) {
   const profiles = row(readback.profiles, "profiles");
   const profileDelta = integer(profiles.registration_delta, "profiles.registration_delta");
   if (!contract.allowed_local_mutations.profile_registration_count.includes(profileDelta)) {
-    fail("profile registration delta is outside the dormant-install allowance");
+    fail("profile registration delta is outside the dormant-upgrade allowance");
   }
 
-  if (readback.phase === "installed") {
+  if (readback.phase === "upgraded") {
     if (
       app.present !== true ||
       app.app_id !== contract.app.app_id ||
       app.app_version !== contract.app.app_version ||
-      app.state !== contract.dormant_install.expected_app_state
+      app.state !== contract.dormant_upgrade.expected_app_state
     ) {
-      fail("installed app identity or state is invalid");
+      fail("upgraded app identity or state is invalid");
     }
     const health = row(readback.health, "health");
     if (
       health.status !== "ok" ||
-      health.continuous_projection !== contract.dormant_install.expected_continuous_projection ||
+      health.continuous_projection !== contract.dormant_upgrade.expected_continuous_projection ||
       health.canonical_evidence?.fact_profiles_registered !==
-        contract.dormant_install.expected_fact_profile_count ||
+        contract.dormant_upgrade.expected_fact_profile_count ||
       health.canonical_evidence?.observation_profiles_registered !==
-        contract.dormant_install.expected_observation_profile_count ||
+        contract.dormant_upgrade.expected_observation_profile_count ||
       health.canonical_evidence?.set_profiles_registered_in_package !==
-        contract.dormant_install.expected_set_profile_count ||
+        contract.dormant_upgrade.expected_set_profile_count ||
       health.canonical_evidence?.registration_complete !== true ||
       health.canonical_evidence?.canonical_promotion_enabled !== false ||
       health.provider_write_authority !== false ||
@@ -102,28 +102,32 @@ export function verifyDormantInstallReadback(input, contract) {
     }
     if (
       work.owned_job_count !== 1 ||
-      work.owned_job_status !== contract.dormant_install.expected_owned_job_status ||
+      work.owned_job_status !== contract.dormant_upgrade.expected_owned_job_status ||
       work.owned_subscription_count !==
-        contract.dormant_install.expected_owned_subscription_count ||
+        contract.dormant_upgrade.expected_owned_subscription_count ||
       work.enabled_subscription_count !==
-        contract.dormant_install.expected_enabled_subscription_count
+        contract.dormant_upgrade.expected_enabled_subscription_count
     ) {
-      fail("installed Partner work is not dormant and exact");
+      fail("upgraded Partner work is not dormant and exact");
     }
   } else {
-    if (app.present !== false) fail("rolled-back app must be absent");
     if (
+      app.present !== contract.rollback.expected_app_present ||
+      app.app_id !== contract.app.app_id ||
+      app.app_version !== contract.rollback.expected_app_version ||
+      app.state !== contract.dormant_upgrade.expected_app_state ||
       work.owned_job_count !== contract.rollback.expected_owned_job_count ||
+      work.owned_job_status !== contract.rollback.expected_owned_job_status ||
       work.owned_subscription_count !== contract.rollback.expected_owned_subscription_count ||
-      work.enabled_subscription_count !== 0
+      work.enabled_subscription_count !== contract.rollback.expected_enabled_subscription_count
     ) {
-      fail("rollback left owned Partner work behind");
+      fail("rollback did not restore the exact dormant 0.3.1 state");
     }
   }
 
   return {
     ok: true,
-    contract_id: "moonsleep.partner.dormant-install-postflight-receipt.v1",
+    contract_id: "moonsleep.partner.dormant-upgrade-postflight-receipt.v1",
     phase: readback.phase,
     app_id: contract.app.app_id,
     app_version: contract.app.app_version,
@@ -162,7 +166,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = parseArgs(process.argv.slice(2));
   const inputBytes = readFileSync(resolve(args.input), "utf8");
   const contract = JSON.parse(readFileSync(RELEASE_CONTRACT_PATH, "utf8"));
-  const receipt = verifyDormantInstallReadback(JSON.parse(inputBytes), contract);
+  const receipt = verifyDormantUpgradeReadback(JSON.parse(inputBytes), contract);
   writeFileSync(
     resolve(args.out),
     `${JSON.stringify(canonicalValue(receipt), null, 2)}\n`,
