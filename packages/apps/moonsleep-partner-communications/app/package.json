@@ -1,11 +1,13 @@
 {
   "name": "moonsleep-partner-desk-app",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build --config ui/vite.config.ts",
-    "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts ui/src/*.test.ts"
+    "prepare:canonical-migration": "node --experimental-strip-types scripts/prepare-canonical-migration.mjs",
+    "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts ui/src/*.test.ts",
+    "test:canonical-prep": "./scripts/test-canonical-prep-cleanroom.sh"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

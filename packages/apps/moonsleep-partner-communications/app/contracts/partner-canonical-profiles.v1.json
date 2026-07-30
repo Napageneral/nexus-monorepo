@@ -1,0 +1,983 @@
+{
+  "contract_id": "moonsleep.partner.canonical-profiles.v1",
+  "contract_version": 1,
+  "domain_id": "moonsleep.partner",
+  "owner_package": "moonsleep-partner-desk",
+  "owner_package_baseline_version": "0.2.1",
+  "governing_core": {
+    "publication_commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
+    "commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
+    "tree": "75de9b1a5b813933187c2a685945760bf1737329",
+    "postgres_backend_commit": "903d7be2fca4a12d22a7868cc403dd0cef8f312f",
+    "specification_sha256": "3c91f28fbda0754e295e51f1d3060ebec479cf08d57c54c867aca5608ba8c40b"
+  },
+  "governing_partner_design": {
+    "commit": "06f4c00ab2da4a6be1b84f57f9b20cc36c07b31c",
+    "tree": "8860b194ec1913e3fc8661dcff7533d8f156c7d6",
+    "specification_sha256": "d93e1ce4f7fcd4222ccd6b98c89e49fe372a8515b711e0673141b1a2e0e62c2c"
+  },
+  "activation_state": "dormant_source_registration",
+  "authority_ceiling": {
+    "source_record_read": true,
+    "fact_candidate_create": true,
+    "shadow_observation_create": true,
+    "review_receipt_create": true,
+    "reviewed_observation_promote": true,
+    "partner_projection_write": true,
+    "provider_read": false,
+    "provider_write": false,
+    "identity_merge": false,
+    "external_domain_write": false,
+    "draft_or_send": false
+  },
+  "shared_contracts": {
+    "source_revision_reference": "SourceRevisionRefV1",
+    "continuous_source_run_receipt": "continuous_source_run_receipt_v1",
+    "review_promotion_receipt": "ReviewPromotionReceiptV1",
+    "projection_outbox": "projection_outbox_v1"
+  },
+  "stable_subjects": [
+    {
+      "subject_type": "partner_workspace",
+      "identity_fields": [
+        "workspace_id",
+        "canonical_partner_entity_id"
+      ]
+    },
+    {
+      "subject_type": "source_message_revision",
+      "identity_fields": [
+        "provider",
+        "connection_id",
+        "source_logical_record_id",
+        "source_revision_sha256"
+      ]
+    },
+    {
+      "subject_type": "native_conversation",
+      "identity_fields": [
+        "provider",
+        "connection_id",
+        "provider_thread_id"
+      ]
+    },
+    {
+      "subject_type": "partner_open_loop",
+      "identity_fields": [
+        "workspace_id",
+        "canonical_partner_entity_id",
+        "open_loop_id"
+      ]
+    },
+    {
+      "subject_type": "external_operational_object",
+      "identity_fields": [
+        "owning_domain",
+        "external_subject_type",
+        "external_subject_id"
+      ]
+    }
+  ],
+  "fact_profiles": [
+    {
+      "profile_id": "moonsleep.partner.communication-classification.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "fact",
+      "fact_type": "partner_communication_classification",
+      "subject_type": "source_message_revision",
+      "required_source_revision_refs": 1,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relationship_labels",
+          "topic_labels",
+          "partner_relevance",
+          "confidence_millionths",
+          "rationale",
+          "contains_actionable_signal"
+        ],
+        "properties": {
+          "relationship_labels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "topic_labels": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "production_schedule",
+                "purchase_order",
+                "shipment_freight",
+                "payment_balance",
+                "sample_prototype",
+                "product_specification",
+                "material_fabric",
+                "quality_defect",
+                "inventory_allocation",
+                "packaging_labeling",
+                "compliance_testing",
+                "pricing_quote",
+                "document_attachment",
+                "general_relationship"
+              ]
+            }
+          },
+          "partner_relevance": {
+            "type": "string",
+            "enum": [
+              "included",
+              "excluded",
+              "review_required"
+            ]
+          },
+          "confidence_millionths": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "language_code": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 16
+          },
+          "contains_actionable_signal": {
+            "type": "boolean"
+          },
+          "classifier_review_reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.open-loop-signal.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "fact",
+      "fact_type": "partner_open_loop_signal",
+      "subject_type": "source_message_revision",
+      "required_source_revision_refs": 1,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "signal_type",
+          "responsible_side",
+          "statement_summary",
+          "explicitness",
+          "candidate_action",
+          "referenced_subjects",
+          "evidence_fragment_refs",
+          "requires_human_review"
+        ],
+        "properties": {
+          "signal_type": {
+            "type": "string",
+            "enum": [
+              "question",
+              "request",
+              "commitment",
+              "decision",
+              "blocker",
+              "progress",
+              "closure_candidate",
+              "informational"
+            ]
+          },
+          "responsible_side": {
+            "type": "string",
+            "enum": [
+              "moonsleep",
+              "partner",
+              "shared",
+              "unclear"
+            ]
+          },
+          "statement_summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "explicitness": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "strongly_implied",
+              "ambiguous"
+            ]
+          },
+          "candidate_open_loop_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "candidate_title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "candidate_action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "attach",
+              "transition",
+              "propose_resolution",
+              "informational_only",
+              "needs_review"
+            ]
+          },
+          "referenced_subjects": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "evidence_fragment_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "requires_human_review": {
+            "type": "boolean"
+          },
+          "review_reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.structured-claim.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "fact",
+      "fact_type": "partner_structured_claim",
+      "subject_type": "source_message_revision",
+      "required_source_revision_refs": 1,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_type",
+          "claim_role",
+          "value_text",
+          "source_quote_digest",
+          "explicitness"
+        ],
+        "properties": {
+          "claim_type": {
+            "type": "string",
+            "enum": [
+              "money",
+              "quantity",
+              "date",
+              "time_window",
+              "document",
+              "external_subject",
+              "status_statement"
+            ]
+          },
+          "claim_role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "value_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "currency_code": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "minor_units": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          },
+          "quantity_text": {
+            "type": "string",
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "unit_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "date_value": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "timestamp_value": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "time_window_start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "time_window_end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "external_subject_reference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_quote_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "explicitness": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "strongly_implied",
+              "ambiguous"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.source-coverage.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "fact",
+      "fact_type": "partner_source_coverage",
+      "subject_type": "source_message_revision",
+      "required_source_revision_refs": 1,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_logical_record_id",
+          "source_revision_sha256",
+          "coverage_disposition",
+          "candidate_open_loop_ids",
+          "coverage_reason",
+          "coverage_policy_version",
+          "requires_human_review"
+        ],
+        "properties": {
+          "source_logical_record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "source_revision_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "coverage_disposition": {
+            "type": "string",
+            "enum": [
+              "open_loop_evidence",
+              "informational",
+              "provider_system",
+              "attachment_only",
+              "needs_review"
+            ]
+          },
+          "candidate_open_loop_ids": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "coverage_reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "coverage_policy_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "requires_human_review": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.workspace-admission.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "fact",
+      "fact_type": "partner_workspace_admission",
+      "subject_type": "source_message_revision",
+      "required_source_revision_refs": 1,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "canonical_partner_entity_id",
+          "contact_id",
+          "partner_category",
+          "admission_status",
+          "decision_origin",
+          "evidence_fragment_refs",
+          "requires_human_review"
+        ],
+        "properties": {
+          "canonical_partner_entity_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "contact_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "partner_category": {
+            "type": "string",
+            "enum": [
+              "vendor",
+              "fulfillment_partner",
+              "logistics_partner",
+              "packaging_partner",
+              "marketplace_partner",
+              "professional_service",
+              "creator_partner"
+            ]
+          },
+          "admission_status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "probable",
+              "unresolved",
+              "ambiguous"
+            ]
+          },
+          "decision_origin": {
+            "type": "string",
+            "enum": [
+              "exact_provider_anchor",
+              "operator_review",
+              "model_proposal",
+              "none"
+            ]
+          },
+          "evidence_fragment_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "requires_human_review": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "observation_profiles": [
+    {
+      "profile_id": "moonsleep.partner.workspace-state.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "observation",
+      "observation_type": "partner_workspace_state",
+      "subject_type": "partner_workspace",
+      "head_key_fields": [
+        "workspace_id",
+        "observation_profile_id",
+        "canonical_partner_entity_id"
+      ],
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "canonical_partner_entity_id",
+          "partner_categories",
+          "person_organization_relationships",
+          "contact_ids",
+          "connection_ids",
+          "native_conversation_refs",
+          "unresolved_identity_count",
+          "unresolved_admission_count",
+          "source_freshness_by_provider",
+          "current_open_loop_ids",
+          "source_coverage_summary"
+        ],
+        "properties": {
+          "canonical_partner_entity_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "partner_categories": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "person_organization_relationships": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object"
+            }
+          },
+          "contact_ids": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "connection_ids": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "native_conversation_refs": {
+            "type": "array",
+            "maxItems": 4096,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "unresolved_identity_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unresolved_admission_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_freshness_by_provider": {
+            "type": "object"
+          },
+          "current_open_loop_ids": {
+            "type": "array",
+            "maxItems": 10000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "source_coverage_summary": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.open-loop-state.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "observation",
+      "observation_type": "partner_open_loop_state",
+      "subject_type": "partner_open_loop",
+      "head_key_fields": [
+        "workspace_id",
+        "observation_profile_id",
+        "canonical_partner_entity_id",
+        "open_loop_id"
+      ],
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "open_loop_id",
+          "canonical_partner_entity_id",
+          "title",
+          "operational_summary",
+          "topic_labels",
+          "semantic_lifecycle",
+          "responsible_side",
+          "primary_evidence_revision",
+          "supporting_evidence_revisions",
+          "closure_evidence_revisions",
+          "external_subject_refs",
+          "conflicting_fact_dispositions",
+          "review_receipt_refs",
+          "promotion_receipt_refs"
+        ],
+        "properties": {
+          "open_loop_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "canonical_partner_entity_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "operational_summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "topic_labels": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "semantic_lifecycle": {
+            "type": "string",
+            "enum": [
+              "open",
+              "waiting_on_partner",
+              "waiting_on_moonsleep",
+              "blocked",
+              "resolved",
+              "superseded",
+              "dismissed"
+            ]
+          },
+          "responsible_side": {
+            "type": "string",
+            "enum": [
+              "moonsleep",
+              "partner",
+              "shared",
+              "unclear"
+            ]
+          },
+          "primary_evidence_revision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "supporting_evidence_revisions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4096,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "closure_evidence_revisions": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "external_subject_refs": {
+            "type": "array",
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "deadline_date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "partner_promised_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "superseding_open_loop_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "conflicting_fact_dispositions": {
+            "type": "array",
+            "maxItems": 4096,
+            "items": {
+              "type": "object"
+            }
+          },
+          "review_receipt_refs": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "promotion_receipt_refs": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        }
+      }
+    },
+    {
+      "profile_id": "moonsleep.partner.source-coverage-state.v1",
+      "profile_version": "1.0.0",
+      "profile_class": "observation",
+      "observation_type": "partner_source_coverage_state",
+      "subject_type": "source_message_revision",
+      "head_key_fields": [
+        "workspace_id",
+        "observation_profile_id",
+        "source_logical_record_id"
+      ],
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_logical_record_id",
+          "current_source_revision_sha256",
+          "coverage_disposition",
+          "reviewed_open_loop_ids",
+          "superseded_source_revision_refs",
+          "proposal_conflicts",
+          "missing_reason"
+        ],
+        "properties": {
+          "source_logical_record_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "current_source_revision_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "coverage_disposition": {
+            "type": "string",
+            "enum": [
+              "open_loop_evidence",
+              "informational",
+              "provider_system",
+              "attachment_only",
+              "needs_review"
+            ]
+          },
+          "reviewed_open_loop_ids": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "superseded_source_revision_refs": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "proposal_conflicts": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object"
+            }
+          },
+          "review_receipt_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "missing_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "source_not_captured",
+              "source_revision_ambiguous",
+              "identity_unresolved",
+              "partner_admission_unreviewed",
+              "fact_not_extracted",
+              "conflicting_evidence",
+              "review_required",
+              "owning_domain_unavailable",
+              "not_applicable",
+              "withheld_by_authority",
+              null
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "sealed_set_profiles": [
+    {
+      "set_profile_id": "moonsleep.partner.extraction-source-set.v1",
+      "core_definition_id": "evidence_set_v1",
+      "member_type": "fact_element",
+      "purpose": "partner_extraction_source_review",
+      "resolver_id": "moonsleep.partner.workspace-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.structured-claim.v1",
+        "moonsleep.partner.workspace-admission.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.workspace-state.v1"
+      ],
+      "identity_fields": [
+        "workspace_id",
+        "member_digest",
+        "resolver_policy_version",
+        "target_observation_profile_id",
+        "expected_head_id"
+      ]
+    },
+    {
+      "set_profile_id": "moonsleep.partner.resolver-fact-set.v1",
+      "core_definition_id": "evidence_set_v1",
+      "member_type": "fact_element",
+      "purpose": "partner_open_loop_resolution",
+      "resolver_id": "moonsleep.partner.open-loop-state-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.open-loop-signal.v1",
+        "moonsleep.partner.structured-claim.v1",
+        "moonsleep.partner.source-coverage.v1",
+        "moonsleep.partner.workspace-admission.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.open-loop-state.v1"
+      ],
+      "identity_fields": [
+        "workspace_id",
+        "subject_reference",
+        "member_digest",
+        "resolver_policy_version",
+        "target_observation_profile_id",
+        "expected_head_id"
+      ]
+    },
+    {
+      "set_profile_id": "moonsleep.partner.comparison-set.v1",
+      "core_definition_id": "evidence_set_v1",
+      "member_type": "fact_element",
+      "purpose": "partner_source_coverage_comparison",
+      "resolver_id": "moonsleep.partner.source-coverage-resolver.v1",
+      "resolver_policy_version": "1.0.0",
+      "allowed_fact_profiles": [
+        "moonsleep.partner.communication-classification.v1",
+        "moonsleep.partner.source-coverage.v1"
+      ],
+      "target_observation_profiles": [
+        "moonsleep.partner.source-coverage-state.v1"
+      ],
+      "identity_fields": [
+        "workspace_id",
+        "subject_reference",
+        "member_digest",
+        "resolver_policy_version",
+        "target_observation_profile_id",
+        "expected_head_id"
+      ]
+    }
+  ],
+  "core_contract_requirements": [
+    {
+      "requirement_id": "CORE-01",
+      "capability": "immutable_source_revision_refs"
+    },
+    {
+      "requirement_id": "CORE-02",
+      "capability": "versioned_element_profile_registration_and_validation"
+    },
+    {
+      "requirement_id": "CORE-03",
+      "capability": "sealed_memory_set_digest_and_immutability"
+    },
+    {
+      "requirement_id": "CORE-04",
+      "capability": "cas_observation_head_commit"
+    },
+    {
+      "requirement_id": "CORE-05",
+      "capability": "receipt_bound_ingress_identity_reconciliation"
+    },
+    {
+      "requirement_id": "CORE-06",
+      "capability": "projection_outbox_and_health"
+    }
+  ]
+}
