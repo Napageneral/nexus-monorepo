@@ -1,5 +1,36 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+diagnostic_stage="00_harness_initialization"
+diagnostic_command_class="initialization"
+diagnostic_command_name="harness_startup"
+
+diagnostic_failure() {
+  local exit_code="$?"
+  local source_line="${BASH_LINENO[0]:-0}"
+  trap - ERR
+  printf >&2 \
+    '[partner-canonical] failure stage=%s line=%s command_class=%s command_name=%s exit=%s\n' \
+    "${diagnostic_stage}" "${source_line}" "${diagnostic_command_class}" \
+    "${diagnostic_command_name}" "${exit_code}"
+  exit "${exit_code}"
+}
+
+begin_check() {
+  local next_stage="$1"
+  local next_command_class="$2"
+  local next_command_name="$3"
+  [[ "${next_stage}" =~ ^[0-9]{2}_[a-z0-9_]+$ ]]
+  [[ "${next_command_class}" =~ ^[a-z0-9_]+$ ]]
+  [[ "${next_command_name}" =~ ^[a-z0-9_]+$ ]]
+  diagnostic_stage="${next_stage}"
+  diagnostic_command_class="${next_command_class}"
+  diagnostic_command_name="${next_command_name}"
+  printf '[partner-canonical] phase stage=%s command_class=%s command_name=%s\n' \
+    "${diagnostic_stage}" "${diagnostic_command_class}" "${diagnostic_command_name}"
+}
+
+trap diagnostic_failure ERR
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 UMBRELLA_ROOT="$(cd "${ROOT_DIR}/../../../.." && pwd -P)"
@@ -275,6 +306,7 @@ pass_check() {
   checks+=("$1")
 }
 
+begin_check "01_source_exact" "source" "build_and_compare_synthetic_records"
 echo "[partner-canonical] build deterministic provider-free synthetic records"
 node --experimental-strip-types "${ROOT_DIR}/scripts/build-synthetic-surewal-records.mjs" \
   --fixture "${ROOT_DIR}/fixtures/canonical/surewal-cross-channel-golden.v1.json" \
@@ -288,6 +320,7 @@ jq -e '.record_count == 6 and .alibaba_record_count == 5 and .gmail_record_count
 record_output_sha256="$(shasum -a 256 "${runner_temp}/records-first.jsonl" | awk '{print $1}')"
 pass_check "01_source_exact"
 
+begin_check "02_postgres_17" "postgres" "bootstrap_postgres_17"
 echo "[partner-canonical] create isolated PostgreSQL 17 and terminal-core runtime"
 docker network create --internal "${network}" >/dev/null
 docker volume create "${postgres_volume}" >/dev/null
@@ -355,6 +388,8 @@ postgres_version="$(docker exec -u postgres "${postgres_container}" \
   psql -X -d moonsleep_nex -Atqc 'SHOW server_version')"
 [[ "${postgres_version}" == 17.* ]]
 pass_check "02_postgres_17"
+
+begin_check "03_postgres_migration" "postgres" "apply_terminal_core_migration"
 docker exec -i "${postgres_container}" psql -X -U postgres -d moonsleep_nex \
   -v ON_ERROR_STOP=1 <<SQL >/dev/null
 CREATE ROLE ${migrator_role} LOGIN;
@@ -374,6 +409,7 @@ jq -e '.ok == true and .storage_profile == "moonsleep-postgres-v1"' \
   <<<"${migration_receipt}" >/dev/null
 pass_check "03_postgres_migration"
 
+begin_check "04_runtime_health" "runtime" "start_and_verify_runtime_custody"
 docker run -d --name "${runtime_container}" --platform linux/amd64 \
   --network "${network}" --read-only --security-opt no-new-privileges \
   --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
@@ -412,9 +448,12 @@ jq -e \
    .data == "/var/lib/nex/state/data"' \
   <<<"${runtime_state_contract}" >/dev/null
 pass_check "04_runtime_health"
+
+begin_check "05_app_install" "runtime" "install_partner_package"
 install_app
 pass_check "05_app_install"
 
+begin_check "06_five_fact_profiles" "runtime" "verify_fact_profiles"
 health_before="$(runtime_call moonsleep-partner-desk.healthcheck '{}')"
 jq -e '
   .status == "ok" and
@@ -422,34 +461,49 @@ jq -e '
   .provider_write_authority == false and
   .reply_authority == false and
   .canonical_evidence.fact_profiles_registered == 5 and
-  .canonical_evidence.observation_profiles_registered == 3 and
-  .canonical_evidence.set_profiles_registered_in_package == 3 and
   .canonical_evidence.registration_complete == true and
   .canonical_evidence.canonical_promotion_enabled == false
 ' <<<"${health_before}" >/dev/null
 pass_check "06_five_fact_profiles"
+
+begin_check "07_three_observation_profiles" "assertion" "verify_observation_profiles"
+jq -e '.canonical_evidence.observation_profiles_registered == 3' \
+  <<<"${health_before}" >/dev/null
 pass_check "07_three_observation_profiles"
+
+begin_check "08_three_set_profiles" "assertion" "verify_set_profiles"
+jq -e '.canonical_evidence.set_profiles_registered_in_package == 3' \
+  <<<"${health_before}" >/dev/null
 pass_check "08_three_set_profiles"
+
+begin_check "09_job_inactive" "runtime" "verify_job_inactive"
 jobs_before="$(runtime_call jobs.list '{}')"
-subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
 jq -e '(.jobs | length) == 1 and .jobs[0].status == "inactive"' \
   <<<"${jobs_before}" >/dev/null
 pass_check "09_job_inactive"
+
+begin_check "10_subscriptions_disabled" "runtime" "verify_subscriptions_disabled"
+subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
 jq -e '(.subscriptions | length) == 2 and all(.subscriptions[]; .enabled == 0)' \
   <<<"${subscriptions_before}" >/dev/null
 pass_check "10_subscriptions_disabled"
 
+begin_check "11_zero_provider_adapter_state" "postgres" "verify_zero_provider_adapter_state"
 initial_counts="$(postgres_counts)"
 jq -e '.records == 0 and .receipts == 0 and .events == 0 and .entities == 3 and .contacts == 0 and .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0' \
   <<<"${initial_counts}" >/dev/null
 pass_check "11_zero_provider_adapter_state"
 
 seed_params='{"platform":"alibaba","space_id":"alibaba-moonsleep-fixture","contact_id":"surewal-rebecca-fixture","source_observation_id":"partner-canonical:surewal-fixture:v1","observed_at":1784680000000,"contact_name":"Surewal Rebecca","entity_name":"Surewal","entity_type":"organization","tags":["Partner","Supplier","Alibaba"]}'
+
+begin_check "12_identity_first_observation" "runtime" "observe_fixture_identity"
 seed_first="$(runtime_call contacts.observe "${seed_params}")"
-seed_second="$(runtime_call contacts.observe "${seed_params}")"
 jq -e '.created_entity == true and .created_contact == true and .replayed == false' \
   <<<"${seed_first}" >/dev/null
 pass_check "12_identity_first_observation"
+
+begin_check "13_identity_replay" "runtime" "replay_fixture_identity"
+seed_second="$(runtime_call contacts.observe "${seed_params}")"
 jq -e '.created_entity == false and .created_contact == false and .replayed == true' \
   <<<"${seed_second}" >/dev/null
 pass_check "13_identity_replay"
@@ -469,6 +523,7 @@ node --experimental-strip-types "${ROOT_DIR}/scripts/build-synthetic-surewal-rec
   --fixture "${runner_temp}/fixture-bound.json" \
   --out "${runner_temp}/records-bound.jsonl" >/dev/null
 
+begin_check "14_six_records_ingested" "runtime" "ingest_six_fixture_records"
 ingest_first="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-bound.jsonl "$token"
@@ -476,6 +531,8 @@ ingest_first="$(docker exec "${runtime_container}" sh -c '
 jq -e '.completed == 6 and .skipped == 0 and .other == 0 and .total == 6' \
   <<<"${ingest_first}" >/dev/null
 pass_check "14_six_records_ingested"
+
+begin_check "15_record_replay_zero_duplicate" "runtime" "replay_six_fixture_records"
 ingest_second="$(docker exec "${runtime_container}" sh -c '
   token=$(cat /run/moonsleep-load-credentials/runtime-token)
   exec node /proof/ingest-jsonl-cleanroom.mjs /evidence/records-bound.jsonl "$token"
@@ -484,6 +541,7 @@ jq -e '.completed == 0 and .skipped == 6 and .other == 0 and .total == 6' \
   <<<"${ingest_second}" >/dev/null
 pass_check "15_record_replay_zero_duplicate"
 
+begin_check "16_postgres_revision_binding" "runtime" "bind_postgres_revisions"
 jq -c '.records[].source_record_id' "${runner_temp}/fixture-bound.json" |
 while IFS= read -r quoted_record_id; do
   record_id="$(jq -r . <<<"${quoted_record_id}")"
@@ -498,6 +556,7 @@ done | jq -s 'sort_by(.source_record_id)' > "${runner_temp}/revision-bindings.js
 jq -e 'length == 6' "${runner_temp}/revision-bindings.json" >/dev/null
 pass_check "16_postgres_revision_binding"
 
+begin_check "17_runtime_plan_exact" "source" "build_exact_runtime_plan"
 node --experimental-strip-types "${ROOT_DIR}/scripts/build-canonical-runtime-plan.mjs" \
   --manifest "${ROOT_DIR}/contracts/partner-canonical-profiles.v1.json" \
   --fixture "${runner_temp}/fixture-bound.json" \
@@ -507,6 +566,7 @@ jq -e '.fact_count == 26 and .observation_candidate_count == 9 and .set_profile_
   "${runner_temp}/plan-receipt.json" >/dev/null
 pass_check "17_runtime_plan_exact"
 
+begin_check "18_facts_sets_candidates_first_apply" "runtime" "apply_canonical_runtime_plan"
 docker exec "${runtime_container}" node /proof/apply-canonical-runtime-plan.mjs \
   --plan /evidence/runtime-plan.json \
   --token_file /run/moonsleep-load-credentials/runtime-token \
@@ -515,6 +575,7 @@ jq -e '.fact_created == 26 and .fact_reused == 0 and .set_created == 9 and .set_
   "${runner_temp}/apply-first.json" >/dev/null
 pass_check "18_facts_sets_candidates_first_apply"
 
+begin_check "19_core_storage_counts" "memory" "verify_first_apply_storage_counts"
 counts_after_first="$(postgres_counts)"
 memory_after_first="$(memory_counts)"
 jq -e '.records == 6 and .revisions == 6 and .receipts == 6 and .events == 6 and .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0' \
@@ -523,6 +584,7 @@ jq -e '.profiles == 8 and .fact_profiles == 5 and .observation_profiles == 3 and
   <<<"${memory_after_first}" >/dev/null
 pass_check "19_core_storage_counts"
 
+begin_check "20_full_replay_zero_duplicate" "replay" "replay_canonical_runtime_plan"
 docker exec "${runtime_container}" node /proof/apply-canonical-runtime-plan.mjs \
   --plan /evidence/runtime-plan.json \
   --token_file /run/moonsleep-load-credentials/runtime-token \
@@ -535,6 +597,7 @@ memory_after_replay="$(memory_counts)"
 [[ "$(jq -S -c . <<<"${memory_after_first}")" = "$(jq -S -c . <<<"${memory_after_replay}")" ]]
 pass_check "20_full_replay_zero_duplicate"
 
+begin_check "21_joined_pg_memory_stale_head_outbox_zero_authority" "memory" "prove_joined_evidence_cas_outbox"
 jq -e '
   .provider_write == false and
   .identity_merge == false and
@@ -582,6 +645,7 @@ jq -e '
 ' <<<"${memory_after_joined}" >/dev/null
 pass_check "21_joined_pg_memory_stale_head_outbox_zero_authority"
 
+begin_check "22_restart_durability" "restart" "verify_restart_durability"
 docker restart "${runtime_container}" >/dev/null
 wait_for_runtime
 health_after_restart="$(runtime_call moonsleep-partner-desk.healthcheck '{}')"

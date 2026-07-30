@@ -12,6 +12,34 @@ const runtimeCall = harness.slice(
   harness.indexOf("runtime_call()"),
   harness.indexOf("prove_joined_evidence()"),
 );
+const diagnosticContract = harness.slice(
+  harness.indexOf("set -Eeuo pipefail"),
+  harness.indexOf("ROOT_DIR="),
+);
+const expectedChecks = [
+  "01_source_exact",
+  "02_postgres_17",
+  "03_postgres_migration",
+  "04_runtime_health",
+  "05_app_install",
+  "06_five_fact_profiles",
+  "07_three_observation_profiles",
+  "08_three_set_profiles",
+  "09_job_inactive",
+  "10_subscriptions_disabled",
+  "11_zero_provider_adapter_state",
+  "12_identity_first_observation",
+  "13_identity_replay",
+  "14_six_records_ingested",
+  "15_record_replay_zero_duplicate",
+  "16_postgres_revision_binding",
+  "17_runtime_plan_exact",
+  "18_facts_sets_candidates_first_apply",
+  "19_core_storage_counts",
+  "20_full_replay_zero_duplicate",
+  "21_joined_pg_memory_stale_head_outbox_zero_authority",
+  "22_restart_durability",
+] as const;
 
 function captureRuntimeCallParams(args: string[]): Buffer {
   const result = spawnSync(
@@ -129,6 +157,89 @@ test("preserves runtime call parameter bytes for omitted, empty-object, and none
   const nonempty = '{"supplier":"Surewal","amount":22834.95}';
   assert.deepEqual(captureRuntimeCallParams(["contacts.observe", nonempty]), Buffer.from(nonempty));
   assert.doesNotMatch(runtimeCall, /\$\{2:-\{\}\}/);
+});
+
+test("emits sanitized failure diagnostics without secrets, arguments, environment, or payloads", () => {
+  assert.match(diagnosticContract, /^set -Eeuo pipefail/m);
+  assert.match(diagnosticContract, /trap diagnostic_failure ERR/);
+  assert.doesNotMatch(diagnosticContract, /BASH_COMMAND/);
+  assert.doesNotMatch(diagnosticContract, /(?:printenv|set\s+-[^\\n]*x)/);
+  assert.doesNotMatch(
+    diagnosticContract,
+    /(?:runtime_token|postgres_dsn|record_payload|NEXUS_RUNTIME_TOKEN)/,
+  );
+
+  const secret = "nex_rt_secret_must_not_appear";
+  const payload = '{"private_record":"must_not_appear"}';
+  const result = spawnSync(
+    "bash",
+    [
+      "-c",
+      `
+        ${diagnosticContract}
+        begin_check "21_joined_pg_memory_stale_head_outbox_zero_authority" \
+          "memory" "prove_joined_evidence_cas_outbox"
+        export NEXUS_RUNTIME_TOKEN="$1"
+        private_record_payload="$2"
+        false
+      `,
+      "diagnostic-contract",
+      secret,
+      payload,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stdout,
+    "[partner-canonical] phase stage=21_joined_pg_memory_stale_head_outbox_zero_authority command_class=memory command_name=prove_joined_evidence_cas_outbox\n",
+  );
+  assert.match(
+    result.stderr,
+    /^\[partner-canonical\] failure stage=21_joined_pg_memory_stale_head_outbox_zero_authority line=[0-9]+ command_class=memory command_name=prove_joined_evidence_cas_outbox exit=1\n$/,
+  );
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(secret));
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /must_not_appear|private_record/);
+});
+
+test("places one safe breadcrumb before every exact 22-check phase", () => {
+  const breadcrumbs = [
+    ...harness.matchAll(
+      /^begin_check "([^"]+)" "([a-z0-9_]+)" "([a-z0-9_]+)"$/gm,
+    ),
+  ].map((match) => ({
+    check: match[1],
+    commandClass: match[2],
+    commandName: match[3],
+    index: match.index,
+  }));
+  const passes = [...harness.matchAll(/^pass_check "([^"]+)"$/gm)].map((match) => ({
+    check: match[1],
+    index: match.index,
+  }));
+
+  assert.deepEqual(
+    breadcrumbs.map((item) => item.check),
+    expectedChecks,
+  );
+  assert.deepEqual(
+    passes.map((item) => item.check),
+    expectedChecks,
+  );
+  assert.equal(new Set(breadcrumbs.map((item) => item.check)).size, 22);
+
+  for (const [index, breadcrumb] of breadcrumbs.entries()) {
+    const pass = passes[index];
+    assert.equal(breadcrumb.check, pass.check);
+    assert.ok(breadcrumb.index < pass.index);
+    const phaseBody = harness.slice(breadcrumb.index, pass.index);
+    assert.match(
+      phaseBody,
+      /(?:\bjq\b|\bcmp\b|\[\[|\bruntime_call\b|\bdocker\b|\bnode\b|\binstall_app\b|\bwait_for_|\bpostgres_counts\b|\bmemory_counts\b|\bprove_joined_evidence\b)/,
+    );
+    assert.match(breadcrumb.commandClass, /^[a-z0-9_]+$/);
+    assert.match(breadcrumb.commandName, /^[a-z0-9_]+$/);
+  }
 });
 
 test("stages the root-custodied token before running joined memory proof as the serving identity", () => {
