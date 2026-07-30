@@ -67,6 +67,39 @@ test("synthetic Surewal records are exact, provider-free, and replay-stable", ()
           !containsProhibitedField(record),
       ),
     );
+    const runtimeDerivedIdentityFields = [
+      "sender_entity_id",
+      "receiver_entity_id",
+      "sender_contact_id",
+      "receiver_contact_id",
+      "space_id",
+      "container_kind",
+      "container_id",
+      "sender_name",
+    ];
+    assert.ok(
+      records.every((record) => {
+        const sourceRevisionPayload =
+          record.payload.metadata.source_revision_payload;
+        return (
+          sourceRevisionPayload.external_record_id ===
+            record.payload.external_record_id &&
+          sourceRevisionPayload.provider_message_id ===
+            record.payload.metadata.provider_message_id &&
+          sourceRevisionPayload.provider_thread_id ===
+            record.payload.metadata.provider_thread_id &&
+          sourceRevisionPayload.source_revision_sha256 ===
+            record.payload.metadata.source_revision_sha256 &&
+          sourceRevisionPayload.source_run_receipt_ref ===
+            record.payload.metadata.source_run_receipt_ref &&
+          sourceRevisionPayload.provider_object_sha256 ===
+            record.payload.payload.provider_object_sha256 &&
+          runtimeDerivedIdentityFields.every(
+            (field) => !(field in sourceRevisionPayload),
+          )
+        );
+      }),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -33,6 +33,20 @@ const lines = fixture.records.map((record, index) => {
   if (!Number.isSafeInteger(observedAt)) {
     throw new Error(`record ${index} has an invalid observed_at`);
   }
+  const sourceRevisionPayload = {
+    external_record_id: record.source_record_id,
+    family: "message",
+    provider_message_id: record.provider_message_id,
+    provider_thread_id: record.provider_thread_id,
+    source_revision_sha256: record.source_revision_sha256,
+    source_run_receipt_ref: record.source_revision_ref.source_run_receipt_ref,
+    provider_object_sha256: providerObjectSha256,
+    provider_read_authority: true,
+    provider_write_authority: false,
+    source_mutation_authority: false,
+    financial_authority: false,
+    synthetic_cleanroom: true,
+  };
   return canonicalJson({
     operation: "record.ingest",
     routing: {
@@ -73,16 +87,8 @@ const lines = fixture.records.map((record, index) => {
         provider_object_sha256: providerObjectSha256,
       },
       metadata: {
-        family: "message",
-        provider_message_id: record.provider_message_id,
-        provider_thread_id: record.provider_thread_id,
-        source_revision_sha256: record.source_revision_sha256,
-        source_run_receipt_ref: record.source_revision_ref.source_run_receipt_ref,
-        provider_read_authority: true,
-        provider_write_authority: false,
-        source_mutation_authority: false,
-        financial_authority: false,
-        synthetic_cleanroom: true,
+        ...sourceRevisionPayload,
+        source_revision_payload: sourceRevisionPayload,
       },
     },
   });

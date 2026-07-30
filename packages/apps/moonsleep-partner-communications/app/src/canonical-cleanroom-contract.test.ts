@@ -242,6 +242,38 @@ test("places one safe breadcrumb before every exact 22-check phase", () => {
   }
 });
 
+test("requires a third exact replay and a fail-fast one-revision binding function", () => {
+  const check16 = harness.slice(
+    harness.indexOf(
+      'begin_check "16_postgres_revision_binding" "runtime" "bind_postgres_revisions"',
+    ),
+    harness.indexOf('pass_check "16_postgres_revision_binding"') +
+      'pass_check "16_postgres_revision_binding"'.length,
+  );
+  const bindingFunction = harness.slice(
+    harness.indexOf("bind_postgres_revisions()"),
+    harness.indexOf("wait_for_postgres()"),
+  );
+
+  assert.match(
+    check16,
+    /ingest_third="\$\(docker exec "\$\{runtime_container\}"[\s\S]*\/evidence\/records-bound\.jsonl/,
+  );
+  assert.match(
+    check16,
+    /jq -e '\.completed == 0 and \.skipped == 6 and \.other == 0 and \.total == 6'/,
+  );
+  assert.match(check16, /\nbind_postgres_revisions\n/);
+  assert.match(
+    bindingFunction,
+    /if ! revisions="\$\(runtime_call records\.revisions\.list[\s\S]*return 1[\s\S]*if ! jq -e '\(\.revisions \| length\) == 1/,
+  );
+  assert.match(
+    bindingFunction,
+    /done < <\(jq -c '\.\[\]' "\$\{runner_temp\}\/record-row-bindings\.json"\)/,
+  );
+});
+
 test("stages the root-custodied token before running joined memory proof as the serving identity", () => {
   const joinedProof = harness.slice(
     harness.indexOf("prove_joined_evidence()"),
