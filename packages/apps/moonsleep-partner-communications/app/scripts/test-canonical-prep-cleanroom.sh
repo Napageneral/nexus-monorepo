@@ -12,18 +12,23 @@ mkdir -p \
   "$cleanroom/app/contracts" \
   "$cleanroom/app/fixtures/canonical" \
   "$cleanroom/app/scripts" \
-  "$cleanroom/app/src"
+  "$cleanroom/app/src" \
+  "$cleanroom/nex/src/storage/migrations/memory"
 
 cp "$app_dir/contracts/partner-canonical-profiles.v1.json" "$cleanroom/app/contracts/"
 cp "$app_dir/fixtures/canonical/surewal-cross-channel-golden.v1.json" "$cleanroom/app/fixtures/canonical/"
-cp "$app_dir/scripts/prepare-canonical-migration.mjs" "$cleanroom/app/scripts/"
-cp "$app_dir/scripts/build-synthetic-surewal-records.mjs" "$cleanroom/app/scripts/"
+cp "$app_dir/scripts/"*.mjs "$cleanroom/app/scripts/"
+cp "$app_dir/scripts/test-canonical-surewal-postgres-cleanroom.sh" \
+  "$cleanroom/app/scripts/"
 cp "$app_dir/src/"*.ts "$cleanroom/app/src/"
+cp "$app_dir/../../../../nex/src/storage/migrations/memory/helpers.ts" \
+  "$cleanroom/nex/src/storage/migrations/memory/helpers.ts"
 
 chmod -R u=rwX,go= "$cleanroom"
 cd "$cleanroom/app"
 
-node --test --experimental-strip-types src/*.test.ts
+NEX_CORE_REPO="$cleanroom/nex" \
+  node --test --experimental-strip-types src/*.test.ts
 
 node --experimental-strip-types scripts/prepare-canonical-migration.mjs \
   --manifest contracts/partner-canonical-profiles.v1.json \

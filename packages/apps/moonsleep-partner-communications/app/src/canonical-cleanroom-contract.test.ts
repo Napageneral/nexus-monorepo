@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { test } from "node:test";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const harness = readFileSync(
@@ -19,11 +19,11 @@ const joinedEvidenceProof = readFileSync(
   new URL("../scripts/prove-canonical-joined-evidence.mjs", import.meta.url),
   "utf8",
 );
+const coreRepo = process.env.NEX_CORE_REPO
+  ? resolve(process.env.NEX_CORE_REPO)
+  : fileURLToPath(new URL("../../../../../nex", import.meta.url));
 const boundCoreMemoryMigrations = readFileSync(
-  new URL(
-    "../../../../../nex/src/storage/migrations/memory/helpers.ts",
-    import.meta.url,
-  ),
+  join(coreRepo, "src/storage/migrations/memory/helpers.ts"),
   "utf8",
 );
 const canonicalManifestPath = fileURLToPath(

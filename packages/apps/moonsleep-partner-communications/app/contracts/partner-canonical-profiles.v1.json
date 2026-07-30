@@ -5,9 +5,9 @@
   "owner_package": "moonsleep-partner-desk",
   "owner_package_baseline_version": "0.2.1",
   "governing_core": {
-    "publication_commit": "7e83ed75da31bab776c41b806fb87488085548e7",
-    "commit": "5b09aa16746b08e455a10eb0f789b990efd2cf2e",
-    "tree": "51fa415054c1857ea8c63594923ded8ce020d29b",
+    "publication_commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
+    "commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
+    "tree": "75de9b1a5b813933187c2a685945760bf1737329",
     "postgres_backend_commit": "903d7be2fca4a12d22a7868cc403dd0cef8f312f",
     "specification_sha256": "3c91f28fbda0754e295e51f1d3060ebec479cf08d57c54c867aca5608ba8c40b"
   },

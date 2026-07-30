@@ -44,19 +44,18 @@ canonical-promotion authority, or deliver to a production domain.
 
 ## Governing Identities
 
-- merged Wave 1 Nex publication:
-  `7e83ed75da31bab776c41b806fb87488085548e7`
-- corrected shared-core checkpoint:
-  `5b09aa16746b08e455a10eb0f789b990efd2cf2e`
-- corrected shared-core tree:
-  `51fa415054c1857ea8c63594923ded8ce020d29b`
+- merged current Nex publication:
+  `f6ff4816befeba60a480e05597f2fa904b4144a3`
+- current shared-core checkpoint:
+  `f6ff4816befeba60a480e05597f2fa904b4144a3`
+- current shared-core tree:
+  `75de9b1a5b813933187c2a685945760bf1737329`
 - corrected shared-core proof:
   PostgreSQL 17.10 43 of 43 passed with zero skipped checks, failures, or
   residue; independent audit reported P0/P1/P2 equal to 0/0/0
 - publication state:
-  the corrected checkpoint is not yet merged because its owner's local GitHub
-  authentication is invalid; `7e83ed75da31bab776c41b806fb87488085548e7`
-  remains the last merged publication recorded by the manifest
+  the current checkpoint is merged and available from the canonical Nex
+  repository
 - PostgreSQL continuous-evidence backend:
   `903d7be2fca4a12d22a7868cc403dd0cef8f312f`
 - continuous-evidence program and model checkpoint:
@@ -244,7 +243,7 @@ manifest.
 Run:
 
 ```bash
-NEX_RELEASE_IMAGE=<exact-5b09aa16-linux-amd64-image> \
+NEX_RELEASE_IMAGE=<exact-f6ff4816-linux-amd64-image> \
 POSTGRES_RELEASE_IMAGE=<exact-postgresql-17-linux-amd64-image> \
 CLEANROOM_RECEIPT_PATH=/private/tmp/moonsleep-partner-canonical-surewal-pg17-receipt.json \
 ./scripts/test-canonical-surewal-postgres-cleanroom.sh

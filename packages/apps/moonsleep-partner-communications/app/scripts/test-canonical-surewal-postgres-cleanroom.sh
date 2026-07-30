@@ -261,32 +261,34 @@ wait_for_runtime() {
 }
 
 install_app() {
-  local release_id="cleanroom-partner-${app_sha256:0:16}"
-  local operation_id="${release_id}-install"
-  local staged_path="/var/lib/nex/state/packages/staging/${operation_id}/artifact.tar.gz"
-  local size_bytes body response
-  size_bytes="$(LC_ALL=C wc -c < "${APP_ARTIFACT}" | tr -d '[:space:]')"
+  local package_dir="/var/lib/nex/state/packages/cleanroom/moonsleep-partner-desk-${app_sha256:0:16}"
+  local body response
   docker exec --user "${runtime_uid}:${runtime_gid}" "${runtime_container}" sh -c '
     set -eu
-    install -d -m 0700 "$(dirname "$2")"
-    cp "$1" "$2"
-    chmod 0600 "$2"
-  ' sh "/artifacts/moonsleep-partner-desk-${APP_VERSION}.tar.gz" "${staged_path}"
+    artifact="$1"
+    expected_sha256="$2"
+    package_dir="$3"
+    actual_sha256="$(sha256sum "$artifact" | awk "{print \$1}")"
+    test "$actual_sha256" = "$expected_sha256"
+    rm -rf -- "$package_dir"
+    install -d -m 0700 "$package_dir"
+    tar -xzf "$artifact" -C "$package_dir"
+    test -f "$package_dir/app.nexus.json"
+    test ! -L "$package_dir/app.nexus.json"
+  ' sh "/artifacts/moonsleep-partner-desk-${APP_VERSION}.tar.gz" "${app_sha256}" "${package_dir}"
   body="$(jq -nc \
-    --arg package_id "moonsleep-partner-desk" \
-    --arg version "${APP_VERSION}" \
-    --arg release_id "${release_id}" \
-    --arg operation_id "${operation_id}" \
-    --arg server_path "${staged_path}" \
-    --arg sha256 "${app_sha256}" \
-    --argjson size_bytes "${size_bytes}" \
-    '{kind:"app",package_id:$package_id,version:$version,release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
+    --arg app_id "moonsleep-partner-desk" \
+    --arg package_ref "${package_dir}" \
+    '{appId:$app_id,packageRef:$package_ref}')"
   response="$(docker exec "${runtime_container}" sh -c '
     token=$(cat /run/moonsleep-load-credentials/runtime-token)
     exec curl -sS -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
-      --data "$1" http://127.0.0.1:18789/api/operator/packages/install
+      --data "$1" http://127.0.0.1:18789/api/apps/install
   ' sh "${body}")"
-  jq -e '.ok == true and .package_id == "moonsleep-partner-desk" and .status == "active"' \
+  jq -e \
+    --arg version "${APP_VERSION}" \
+    '.installed == true and .app.appId == "moonsleep-partner-desk" and
+     .app.version == $version and .app.state == "active"' \
     <<<"${response}" >/dev/null
 }
 
