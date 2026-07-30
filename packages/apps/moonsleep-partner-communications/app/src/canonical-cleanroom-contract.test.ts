@@ -71,7 +71,7 @@ test("drops to the discovered serving identity before invoking the Nex CLI", () 
   );
   assert.match(
     runtimeCall,
-    /token=\$\(cat \/run\/moonsleep-load-credentials\/runtime-token\)/,
+    /token=\$\(cat \/run\/moonsleep-load-credentials\/runtime-token\)[\s\S]*export NEXUS_RUNTIME_TOKEN="\$token"[\s\S]*exec setpriv/,
   );
   assert.match(
     runtimeCall,
@@ -85,6 +85,11 @@ test("drops to the discovered serving identity before invoking the Nex CLI", () 
     runtimeCall,
     /token=\$\(cat[\s\S]*\n\s*exec \/opt\/nex\/nexus\.mjs/,
   );
+  assert.doesNotMatch(runtimeCall, /--token(?:=|\s)/);
+  assert.doesNotMatch(runtimeCall, /--url(?:=|\s)/);
+  assert.doesNotMatch(runtimeCall, /env\s+NEXUS_RUNTIME_TOKEN=/);
+  assert.doesNotMatch(runtimeCall, /(?:echo|printf)\s+["']?\$token/);
+  assert.doesNotMatch(runtimeCall, /set\s+-[^\\n]*x/);
 });
 
 test("stages the root-custodied token before running joined memory proof as the serving identity", () => {

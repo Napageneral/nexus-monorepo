@@ -96,10 +96,11 @@ runtime_call() {
     runtime_gid="$2"
     method="$3"
     params="$4"
+    export NEXUS_RUNTIME_TOKEN="$token"
     exec setpriv \
       --reuid="$runtime_uid" --regid="$runtime_gid" --clear-groups --no-new-privs \
       /opt/nex/nexus.mjs runtime call "$method" --params "$params" --json \
-      --url ws://127.0.0.1:18789 --token "$token"
+      --timeout 60000
   ' sh "${runtime_uid}" "${runtime_gid}" "${method}" "${params}"
 }
 
