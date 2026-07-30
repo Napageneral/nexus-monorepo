@@ -79,6 +79,13 @@ test("keeps all canonical observation candidates staged and promotion authority 
 
 test("creates exact generic evidence-set scopes for every Partner observation profile", () => {
   const plan = runtimePlan();
+  const profileByFactId = new Map(
+    plan.fact_plans.map((fact) => [
+      fact.candidate_fact_id,
+      fact.create_params.profileId,
+    ]),
+  );
+  const coveredFactIds = new Set<string>();
   for (const observation of plan.observation_plans) {
     assert.equal(observation.set_create_params.definitionId, "evidence_set_v1");
     assert.equal(observation.set_create_params.evidenceScope.domain, "moonsleep.partner");
@@ -94,7 +101,47 @@ test("creates exact generic evidence-set scopes for every Partner observation pr
       [...observation.candidate_fact_ids].sort(),
       observation.candidate_fact_ids,
     );
+    const allowedProfiles = new Set(
+      observation.set_create_params.evidenceScope.allowedFactProfiles.map(
+        (profile) => profile.profileId,
+      ),
+    );
+    for (const factId of observation.candidate_fact_ids) {
+      coveredFactIds.add(factId);
+      assert.ok(allowedProfiles.has(profileByFactId.get(factId)!));
+    }
   }
+  assert.equal(coveredFactIds.size, 26);
+  assert.deepEqual(
+    [...coveredFactIds].sort(),
+    plan.fact_plans.map((fact) => fact.candidate_fact_id).sort(),
+  );
+});
+
+test("rejects an out-of-scope fact before any runtime request is emitted", () => {
+  const manifest = loadCanonicalPartnerManifest();
+  const migration = prepareLegacyPartnerMigration(manifest, fixture);
+  const workspace = migration.observation_candidates.find(
+    (candidate) =>
+      candidate.observation_profile_id === "moonsleep.partner.workspace-state.v1",
+  );
+  assert.ok(workspace);
+  const outOfScopeFact = migration.facts.find(
+    (fact) => fact.fact_profile_id === "moonsleep.partner.open-loop-signal.v1",
+  );
+  assert.ok(outOfScopeFact);
+  workspace.sealed_fact_set.member_ids.push(outOfScopeFact.fact_id);
+  workspace.sealed_fact_set.member_ids.sort();
+  workspace.sealed_fact_set.member_count = workspace.sealed_fact_set.member_ids.length;
+  assert.throws(
+    () =>
+      buildCanonicalPartnerRuntimePlan({
+        manifest,
+        migration,
+        sourceRevisionBindings: bindings(),
+      }),
+    /fact profile is outside set scope/,
+  );
 });
 
 test("rejects missing, extra, duplicate, and malformed core revision bindings", () => {

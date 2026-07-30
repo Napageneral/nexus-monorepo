@@ -436,7 +436,7 @@ function observationCandidate(input: {
   }
   const sealedFactSet = sealMemberSet(
     input.manifest,
-    "moonsleep.partner.resolver-fact-set.v1",
+    canonicalPartnerObservationSetProfileId(input.observationProfileId),
     input.factIds,
   );
   validateProfilePayload(
@@ -486,6 +486,43 @@ function observationCandidate(input: {
   };
 }
 
+export function canonicalPartnerObservationSetProfileId(
+  observationProfileId: string,
+): string {
+  if (observationProfileId === "moonsleep.partner.workspace-state.v1") {
+    return "moonsleep.partner.extraction-source-set.v1";
+  }
+  if (observationProfileId === "moonsleep.partner.open-loop-state.v1") {
+    return "moonsleep.partner.resolver-fact-set.v1";
+  }
+  if (observationProfileId === "moonsleep.partner.source-coverage-state.v1") {
+    return "moonsleep.partner.comparison-set.v1";
+  }
+  throw new Error(`unsupported Partner observation profile: ${observationProfileId}`);
+}
+
+function factIdsWithinSetScope(input: {
+  manifest: CanonicalPartnerManifest;
+  setProfileId: string;
+  candidateFactIds: string[];
+  factsById: Map<string, CanonicalFactCandidate>;
+}): string[] {
+  const profile = input.manifest.sealed_set_profiles.find(
+    (candidate) => candidate.set_profile_id === input.setProfileId,
+  );
+  if (!profile) {
+    throw new Error(`unknown sealed-set profile ${input.setProfileId}`);
+  }
+  const allowedProfiles = new Set(profile.allowed_fact_profiles);
+  return input.candidateFactIds.filter((factId) => {
+    const fact = input.factsById.get(factId);
+    if (!fact) {
+      throw new Error(`observation candidate references an unknown fact: ${factId}`);
+    }
+    return allowedProfiles.has(fact.fact_profile_id);
+  });
+}
+
 function createObservationCandidates(
   manifest: CanonicalPartnerManifest,
   input: LegacyPartnerMigrationInput,
@@ -493,6 +530,7 @@ function createObservationCandidates(
   facts: CanonicalFactCandidate[],
 ): ShadowObservationCandidate[] {
   const factIdsByRecord = new Map<string, string[]>();
+  const factsById = requireUniqueBy(facts, (fact) => fact.fact_id, "canonical facts");
   for (const fact of facts) {
     for (const ref of fact.source_revision_refs) {
       const current = factIdsByRecord.get(ref.source_logical_record_id) ?? [];
@@ -556,7 +594,14 @@ function createObservationCandidates(
           .filter((entry) => entry.disposition === "open_loop_evidence").length,
       },
     },
-    factIds: allFactIds,
+    factIds: factIdsWithinSetScope({
+      manifest,
+      setProfileId: canonicalPartnerObservationSetProfileId(
+        "moonsleep.partner.workspace-state.v1",
+      ),
+      candidateFactIds: allFactIds,
+      factsById,
+    }),
     resolverId: "moonsleep.partner.workspace-resolver.v1",
   }));
 
@@ -585,7 +630,14 @@ function createObservationCandidates(
         review_receipt_ref: `legacy-review:${input.legacy_review_revision_sha256}`,
         missing_reason: null,
       },
-      factIds: factIdsByRecord.get(record.source_record_id) ?? [],
+      factIds: factIdsWithinSetScope({
+        manifest,
+        setProfileId: canonicalPartnerObservationSetProfileId(
+          "moonsleep.partner.source-coverage-state.v1",
+        ),
+        candidateFactIds: factIdsByRecord.get(record.source_record_id) ?? [],
+        factsById,
+      }),
       resolverId: "moonsleep.partner.source-coverage-resolver.v1",
     }));
   }
@@ -639,7 +691,14 @@ function createObservationCandidates(
         review_receipt_refs: [`legacy-review:${input.legacy_review_revision_sha256}`],
         promotion_receipt_refs: [],
       },
-      factIds: loopFactIds,
+      factIds: factIdsWithinSetScope({
+        manifest,
+        setProfileId: canonicalPartnerObservationSetProfileId(
+          "moonsleep.partner.open-loop-state.v1",
+        ),
+        candidateFactIds: loopFactIds,
+        factsById,
+      }),
       resolverId: "moonsleep.partner.open-loop-state-resolver.v1",
     }));
   }
@@ -660,10 +719,16 @@ export function prepareLegacyPartnerMigration(
 ): LegacyPartnerMigrationPlan {
   const maps = assertMigrationInput(input);
   const facts = createLegacyFacts(manifest, input, maps);
+  const factsById = requireUniqueBy(facts, (fact) => fact.fact_id, "canonical facts");
   const extractionSourceSet = sealMemberSet(
     manifest,
     "moonsleep.partner.extraction-source-set.v1",
-    facts.map((fact) => fact.fact_id),
+    factIdsWithinSetScope({
+      manifest,
+      setProfileId: "moonsleep.partner.extraction-source-set.v1",
+      candidateFactIds: facts.map((fact) => fact.fact_id),
+      factsById,
+    }),
   );
   const observationCandidates = createObservationCandidates(
     manifest,

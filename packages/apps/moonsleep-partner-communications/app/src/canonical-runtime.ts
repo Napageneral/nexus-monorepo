@@ -4,10 +4,11 @@ import {
   sha256,
 } from "./canonical-prep.ts";
 import type { CanonicalPartnerManifest } from "./canonical-prep.js";
-import type {
-  LegacyPartnerMigrationPlan,
-  ShadowObservationCandidate,
-} from "./legacy-migration.js";
+import {
+  canonicalPartnerObservationSetProfileId,
+  type LegacyPartnerMigrationPlan,
+  type ShadowObservationCandidate,
+} from "./legacy-migration.ts";
 
 type JsonObject = Record<string, unknown>;
 
@@ -114,19 +115,6 @@ function requireBindingMap(bindings: CoreSourceRevisionBinding[]) {
   return result;
 }
 
-function observationSetProfileId(profileId: string): string {
-  if (profileId === "moonsleep.partner.workspace-state.v1") {
-    return "moonsleep.partner.extraction-source-set.v1";
-  }
-  if (profileId === "moonsleep.partner.open-loop-state.v1") {
-    return "moonsleep.partner.resolver-fact-set.v1";
-  }
-  if (profileId === "moonsleep.partner.source-coverage-state.v1") {
-    return "moonsleep.partner.comparison-set.v1";
-  }
-  throw new Error(`unsupported Partner observation profile: ${profileId}`);
-}
-
 function canonicalPartnerSourceManifestSha256(): string {
   return sha256(readFileSync(DEFAULT_CANONICAL_MANIFEST_PATH));
 }
@@ -136,6 +124,7 @@ function observationPlan(input: {
   migration: LegacyPartnerMigrationPlan;
   candidate: ShadowObservationCandidate;
   sourceManifestSha256: string;
+  factProfileById: Map<string, string>;
 }): CanonicalObservationRuntimePlan {
   const profile = input.manifest.observation_profiles.find(
     (candidate) => candidate.profile_id === input.candidate.observation_profile_id,
@@ -145,7 +134,9 @@ function observationPlan(input: {
       `observation profile is absent from the canonical manifest: ${input.candidate.observation_profile_id}`,
     );
   }
-  const setProfileId = observationSetProfileId(input.candidate.observation_profile_id);
+  const setProfileId = canonicalPartnerObservationSetProfileId(
+    input.candidate.observation_profile_id,
+  );
   const setProfile = input.manifest.sealed_set_profiles.find(
     (candidate) => candidate.set_profile_id === setProfileId,
   );
@@ -160,9 +151,24 @@ function observationPlan(input: {
   if (setProfile.resolver_id !== input.candidate.resolver_id) {
     throw new Error(`set profile resolver mismatch: ${setProfileId}`);
   }
+  if (input.candidate.sealed_fact_set.set_profile_id !== setProfileId) {
+    throw new Error(`observation candidate sealed-set profile mismatch: ${setProfileId}`);
+  }
   const candidateFactIds = [...input.candidate.sealed_fact_set.member_ids].sort();
   if (candidateFactIds.length === 0) {
     throw new Error(`observation candidate has no facts: ${input.candidate.candidate_id}`);
+  }
+  const allowedFactProfiles = new Set(setProfile.allowed_fact_profiles);
+  for (const factId of candidateFactIds) {
+    const factProfileId = input.factProfileById.get(factId);
+    if (!factProfileId) {
+      throw new Error(`observation candidate references an unknown fact: ${factId}`);
+    }
+    if (!allowedFactProfiles.has(factProfileId)) {
+      throw new Error(
+        `observation candidate fact profile is outside set scope: ${factProfileId}`,
+      );
+    }
   }
   return {
     candidate_id: input.candidate.candidate_id,
@@ -269,6 +275,12 @@ export function buildCanonicalPartnerRuntimePlan(input: {
   }
 
   const factIds = new Set(factPlans.map((fact) => fact.candidate_fact_id));
+  const factProfileById = new Map(
+    factPlans.map((fact) => [
+      fact.candidate_fact_id,
+      fact.create_params.profileId,
+    ]),
+  );
   const observationPlans = input.migration.observation_candidates.map((candidate) => {
     if (candidate.sealed_fact_set.member_ids.some((factId) => !factIds.has(factId))) {
       throw new Error(`observation candidate references an unknown fact: ${candidate.candidate_id}`);
@@ -278,8 +290,19 @@ export function buildCanonicalPartnerRuntimePlan(input: {
       migration: input.migration,
       candidate,
       sourceManifestSha256,
+      factProfileById,
     });
   });
+
+  const coveredFactIds = new Set(
+    observationPlans.flatMap((observation) => observation.candidate_fact_ids),
+  );
+  if (
+    coveredFactIds.size !== factIds.size ||
+    [...factIds].some((factId) => !coveredFactIds.has(factId))
+  ) {
+    throw new Error("observation plans do not cover every canonical fact");
+  }
 
   if (
     new Set(observationPlans.map((plan) => plan.set_profile_id)).size !==

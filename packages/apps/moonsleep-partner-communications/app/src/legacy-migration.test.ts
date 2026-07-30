@@ -98,7 +98,7 @@ test("Surewal golden fixture creates exact canonical fact and observation candid
   assert.equal(plan.facts.length, 26);
   assert.equal(plan.observation_candidates.length, 9);
   assert.equal(new Set(plan.observation_candidates.map((row) => row.head_key)).size, 9);
-  assert.equal(plan.extraction_source_set.member_count, 26);
+  assert.equal(plan.extraction_source_set.member_count, 14);
   assert.equal(plan.projection_candidate.observation_candidate_ids.length, 9);
   assert.equal(plan.authority.provider_write, false);
   assert.equal(plan.authority.identity_merge, false);
@@ -136,20 +136,29 @@ test("golden workspace preserves two native channels and two independent open lo
   const payment = loops.find(
     (loop) => loop.open_loop_id === "surewal-payment-balance-fixture",
   );
-  assert.equal(production?.semantic_lifecycle, "resolved");
-  assert.deepEqual(production?.closure_evidence_revisions, ["6".repeat(64)]);
+  assert.ok(production);
+  assert.ok(payment);
+  assert.equal(production.semantic_lifecycle, "resolved");
+  assert.deepEqual(production.closure_evidence_revisions, ["6".repeat(64)]);
   assert.equal(
-    (production?.supporting_evidence_revisions as unknown[]).length,
+    (production.supporting_evidence_revisions as unknown[]).length,
     5,
   );
-  assert.equal(payment?.semantic_lifecycle, "waiting_on_moonsleep");
-  assert.deepEqual(payment?.closure_evidence_revisions, []);
+  assert.equal(payment.semantic_lifecycle, "waiting_on_moonsleep");
+  assert.deepEqual(payment.closure_evidence_revisions, []);
 });
 
 test("existing 0.2.1 Surewal baseline maps completely into canonical shadow candidates", () => {
   const input = existingSurewalBaselineFixture();
   const plan = prepareLegacyPartnerMigration(manifest, input);
-  assert.equal(plan.extraction_source_set.member_count, plan.facts.length);
+  assert.equal(
+    plan.extraction_source_set.member_count,
+    plan.facts.filter((fact) =>
+      manifest.sealed_set_profiles[0]!.allowed_fact_profiles.includes(
+        fact.fact_profile_id,
+      )
+    ).length,
+  );
   assert.equal(
     plan.observation_candidates.filter(
       (candidate) =>
