@@ -636,11 +636,11 @@ pass_check "20_full_replay_zero_duplicate"
 
 begin_check "21_joined_pg_memory_stale_head_outbox_zero_authority" "memory" "prove_joined_evidence_cas_outbox"
 jq -e '
-  .provider_write == false and
-  .identity_merge == false and
-  .external_domain_write == false and
-  .draft_or_send == false and
-  .canonical_promotion == false
+  .authority.provider_write == false and
+  .authority.identity_merge == false and
+  .authority.external_domain_write == false and
+  .authority.draft_or_send == false and
+  .authority.canonical_promotion == false
 ' "${runner_temp}/runtime-plan.json" >/dev/null
 jq -e '.promotions == 0 and .heads == 0 and .outbox == 0 and .observations == 0' \
   <<<"${memory_after_replay}" >/dev/null

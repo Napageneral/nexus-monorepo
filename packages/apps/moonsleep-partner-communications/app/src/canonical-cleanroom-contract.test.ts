@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const harness = readFileSync(
   new URL("../scripts/test-canonical-surewal-postgres-cleanroom.sh", import.meta.url),
@@ -17,6 +25,18 @@ const boundCoreMemoryMigrations = readFileSync(
     import.meta.url,
   ),
   "utf8",
+);
+const canonicalManifestPath = fileURLToPath(
+  new URL("../contracts/partner-canonical-profiles.v1.json", import.meta.url),
+);
+const canonicalFixturePath = fileURLToPath(
+  new URL(
+    "../fixtures/canonical/surewal-cross-channel-golden.v1.json",
+    import.meta.url,
+  ),
+);
+const runtimePlanBuilderPath = fileURLToPath(
+  new URL("../scripts/build-canonical-runtime-plan.mjs", import.meta.url),
 );
 
 const runtimeCall = harness.slice(
@@ -79,6 +99,25 @@ function captureRuntimeCallParams(args: string[]): Buffer {
   );
   assert.equal(result.status, 0, result.stderr.toString("utf8"));
   return result.stdout;
+}
+
+function jqProgramForPlanArtifact(targetName: string): string {
+  const matches = [
+    ...harness.matchAll(
+      /jq -e '([^']*)'\s*(?:\\\n\s*)?"\$\{runner_temp\}\/(plan-receipt|runtime-plan)\.json"/g,
+    ),
+  ].filter((match) => match[2] === targetName);
+  assert.equal(matches.length, 1, `expected one jq contract for ${targetName}`);
+  return matches[0]![1]!;
+}
+
+function jqAccepts(program: string, value: unknown): boolean {
+  const result = spawnSync("jq", ["-e", program], {
+    input: JSON.stringify(value),
+    encoding: "utf8",
+  });
+  assert.equal(result.error, undefined);
+  return result.status === 0;
 }
 
 test("bootstraps the state volume with the image-discovered serving identity", () => {
@@ -322,6 +361,75 @@ test("binds every proof SQLite table to the exact core memory schema", () => {
       coreTables.has(table),
       `Partner proof references a table absent from bound core memory migrations: ${table}`,
     );
+  }
+});
+
+test("executes every plan and receipt jq contract against an exact generated plan", () => {
+  const temporaryDirectory = mkdtempSync(
+    join(tmpdir(), "partner-runtime-plan-contract-"),
+  );
+  try {
+    const fixture = JSON.parse(readFileSync(canonicalFixturePath, "utf8")) as {
+      records: Array<{ source_record_id: string }>;
+    };
+    const bindingsPath = join(temporaryDirectory, "bindings.json");
+    const planPath = join(temporaryDirectory, "runtime-plan.json");
+    writeFileSync(
+      bindingsPath,
+      `${JSON.stringify(
+        fixture.records.map((record, index) => ({
+          source_record_id: record.source_record_id,
+          revision_id: `contract-revision-${index + 1}`,
+          payload_sha256: `${(index + 10).toString(16)}`.repeat(64).slice(0, 64),
+        })),
+      )}\n`,
+      { mode: 0o600 },
+    );
+    const generated = spawnSync(
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        runtimePlanBuilderPath,
+        "--manifest",
+        canonicalManifestPath,
+        "--fixture",
+        canonicalFixturePath,
+        "--bindings",
+        bindingsPath,
+        "--out",
+        planPath,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(generated.status, 0, generated.stderr);
+    const plan = JSON.parse(readFileSync(planPath, "utf8")) as {
+      authority: Record<string, boolean>;
+    };
+    const receipt = JSON.parse(generated.stdout) as Record<string, unknown>;
+    const receiptProgram = jqProgramForPlanArtifact("plan-receipt");
+    const planProgram = jqProgramForPlanArtifact("runtime-plan");
+
+    assert.equal(jqAccepts(receiptProgram, receipt), true);
+    assert.equal(jqAccepts(planProgram, plan), true);
+    assert.equal(
+      jqAccepts(receiptProgram, {
+        ...receipt,
+        canonical_promotion_authority: true,
+      }),
+      false,
+    );
+    assert.equal(
+      jqAccepts(planProgram, {
+        ...plan,
+        authority: {
+          ...plan.authority,
+          canonical_promotion: true,
+        },
+      }),
+      false,
+    );
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
   }
 });
 
