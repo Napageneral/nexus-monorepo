@@ -542,17 +542,31 @@ jq -e '.completed == 0 and .skipped == 6 and .other == 0 and .total == 6' \
 pass_check "15_record_replay_zero_duplicate"
 
 begin_check "16_postgres_revision_binding" "runtime" "bind_postgres_revisions"
-jq -c '.records[].source_record_id' "${runner_temp}/fixture-bound.json" |
-while IFS= read -r quoted_record_id; do
-  record_id="$(jq -r . <<<"${quoted_record_id}")"
-  revisions="$(runtime_call records.revisions.list "$(jq -nc --arg record_id "${record_id}" '{record_id:$record_id}')")"
+records_snapshot="$(runtime_call records.list '{"limit":7,"offset":0}')"
+install -m 0600 /dev/null "${runner_temp}/records-list-snapshot.json"
+printf '%s\n' "${records_snapshot}" > "${runner_temp}/records-list-snapshot.json"
+node "${ROOT_DIR}/scripts/resolve-canonical-record-row-bindings.mjs" \
+  --fixture "${runner_temp}/fixture-bound.json" \
+  --records_snapshot "${runner_temp}/records-list-snapshot.json" \
+  --out "${runner_temp}/record-row-bindings.json" \
+  > "${runner_temp}/record-row-bindings-receipt.json"
+jq -e '.binding_count == 6 and .unique_source_record_count == 6 and .unique_record_row_count == 6 and .provider_calls == 0 and .provider_write_authority == false' \
+  "${runner_temp}/record-row-bindings-receipt.json" >/dev/null
+install -m 0600 /dev/null "${runner_temp}/revision-bindings.jsonl"
+while IFS= read -r binding; do
+  source_record_id="$(jq -r '.source_record_id' <<<"${binding}")"
+  record_row_id="$(jq -r '.record_id' <<<"${binding}")"
+  revisions="$(runtime_call records.revisions.list "$(jq -nc --arg record_id "${record_row_id}" '{record_id:$record_id}')")"
   jq -e '(.revisions | length) == 1 and (.revisions[0].id | length) > 0 and (.revisions[0].payload_sha256 | test("^[0-9a-f]{64}$"))' \
     <<<"${revisions}" >/dev/null
-  jq -nc --arg source_record_id "${record_id}" \
+  jq -nc --arg source_record_id "${source_record_id}" \
     --arg revision_id "$(jq -r '.revisions[0].id' <<<"${revisions}")" \
     --arg payload_sha256 "$(jq -r '.revisions[0].payload_sha256' <<<"${revisions}")" \
-    '{source_record_id:$source_record_id,revision_id:$revision_id,payload_sha256:$payload_sha256}'
-done | jq -s 'sort_by(.source_record_id)' > "${runner_temp}/revision-bindings.json"
+    '{source_record_id:$source_record_id,revision_id:$revision_id,payload_sha256:$payload_sha256}' \
+    >> "${runner_temp}/revision-bindings.jsonl"
+done < <(jq -c '.[]' "${runner_temp}/record-row-bindings.json")
+jq -s 'sort_by(.source_record_id)' \
+  "${runner_temp}/revision-bindings.jsonl" > "${runner_temp}/revision-bindings.json"
 jq -e 'length == 6' "${runner_temp}/revision-bindings.json" >/dev/null
 pass_check "16_postgres_revision_binding"
 
