@@ -7,6 +7,17 @@ const harness = readFileSync(
   new URL("../scripts/test-canonical-surewal-postgres-cleanroom.sh", import.meta.url),
   "utf8",
 );
+const joinedEvidenceProof = readFileSync(
+  new URL("../scripts/prove-canonical-joined-evidence.mjs", import.meta.url),
+  "utf8",
+);
+const boundCoreMemoryMigrations = readFileSync(
+  new URL(
+    "../../../../../nex/src/storage/migrations/memory/helpers.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const runtimeCall = harness.slice(
   harness.indexOf("runtime_call()"),
@@ -272,6 +283,46 @@ test("requires a third exact replay and a fail-fast one-revision binding functio
     bindingFunction,
     /done < <\(jq -c '\.\[\]' "\$\{runner_temp\}\/record-row-bindings\.json"\)/,
   );
+});
+
+test("binds every proof SQLite table to the exact core memory schema", () => {
+  const referencedTables = new Set([
+    ...[...harness.matchAll(/\bcount\("([a-z_]+)"/g)].map((match) => match[1]!),
+    ...[...joinedEvidenceProof.matchAll(/\breadCount\("([a-z_]+)"/g)].map(
+      (match) => match[1]!,
+    ),
+    ...[...joinedEvidenceProof.matchAll(/\bFROM\s+([a-z_]+)/g)].map(
+      (match) => match[1]!,
+    ),
+  ]);
+  assert.deepEqual(
+    [...referencedTables].sort(),
+    [
+      "canonical_observation_heads",
+      "element_profiles",
+      "elements",
+      "evidence_commit_receipts",
+      "fact_creation_receipts",
+      "observation_candidate_dispositions",
+      "observation_candidate_promotions",
+      "observation_candidates",
+      "projection_outbox",
+      "set_members",
+      "set_seals",
+      "sets",
+    ],
+  );
+
+  const coreTables = new Set(
+    [...boundCoreMemoryMigrations.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-z_]+)/g)]
+      .map((match) => match[1]!),
+  );
+  for (const table of referencedTables) {
+    assert.ok(
+      coreTables.has(table),
+      `Partner proof references a table absent from bound core memory migrations: ${table}`,
+    );
+  }
 });
 
 test("stages the root-custodied token before running joined memory proof as the serving identity", () => {
