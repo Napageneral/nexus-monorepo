@@ -63,3 +63,59 @@ test("binds the bootstrap receipt into the terminal cleanroom receipt", () => {
     /\.uid == \$uid and \.gid == \$gid and[\s\S]*\.config_precreated == false/,
   );
 });
+
+test("drops to the discovered serving identity before invoking the Nex CLI", () => {
+  const runtimeCall = harness.slice(
+    harness.indexOf("runtime_call()"),
+    harness.indexOf("prove_joined_evidence()"),
+  );
+  assert.match(
+    runtimeCall,
+    /token=\$\(cat \/run\/moonsleep-load-credentials\/runtime-token\)/,
+  );
+  assert.match(
+    runtimeCall,
+    /exec setpriv \\\n\s+--reuid="\$runtime_uid" --regid="\$runtime_gid" --clear-groups --no-new-privs \\\n\s+\/opt\/nex\/nexus\.mjs runtime call/,
+  );
+  assert.match(
+    runtimeCall,
+    /' sh "\$\{runtime_uid\}" "\$\{runtime_gid\}" "\$\{method\}" "\$\{params\}"/,
+  );
+  assert.doesNotMatch(
+    runtimeCall,
+    /token=\$\(cat[\s\S]*\n\s*exec \/opt\/nex\/nexus\.mjs/,
+  );
+});
+
+test("stages the root-custodied token before running joined memory proof as the serving identity", () => {
+  const joinedProof = harness.slice(
+    harness.indexOf("prove_joined_evidence()"),
+    harness.indexOf("wait_for_postgres()"),
+  );
+  assert.match(
+    joinedProof,
+    /cp \/run\/moonsleep-load-credentials\/runtime-token "\$\{staged_dir\}\/runtime-token"/,
+  );
+  assert.match(
+    joinedProof,
+    /chown -R "\$\{runtime_uid\}:\$\{runtime_gid\}" "\$\{staged_dir\}"/,
+  );
+  assert.ok(
+    joinedProof.indexOf('chmod 0400 "${staged_dir}/runtime-token"') <
+      joinedProof.indexOf(
+        'chown -R "${runtime_uid}:${runtime_gid}" "${staged_dir}"',
+      ),
+  );
+  assert.match(
+    joinedProof,
+    /exec setpriv \\\n\s+--reuid="\$runtime_uid" --regid="\$runtime_gid" --clear-groups --no-new-privs \\\n\s+sh -c/,
+  );
+  assert.match(
+    joinedProof,
+    /node \/proof\/prove-canonical-joined-evidence\.mjs[\s\S]*--token_file "\$\{staged_dir\}\/runtime-token"/,
+  );
+  assert.doesNotMatch(
+    harness,
+    /docker exec "\$\{runtime_container\}" node \\\n\s+\/proof\/prove-canonical-joined-evidence\.mjs/,
+  );
+});

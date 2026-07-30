@@ -90,10 +90,42 @@ trap 'exit 143' TERM
 runtime_call() {
   local method="$1" params="${2:-{}}"
   docker exec "${runtime_container}" sh -c '
+    set -eu
     token=$(cat /run/moonsleep-load-credentials/runtime-token)
-    exec /opt/nex/nexus.mjs runtime call "$1" --params "$2" --json \
+    runtime_uid="$1"
+    runtime_gid="$2"
+    method="$3"
+    params="$4"
+    exec setpriv \
+      --reuid="$runtime_uid" --regid="$runtime_gid" --clear-groups --no-new-privs \
+      /opt/nex/nexus.mjs runtime call "$method" --params "$params" --json \
       --url ws://127.0.0.1:18789 --token "$token"
-  ' sh "${method}" "${params}"
+  ' sh "${runtime_uid}" "${runtime_gid}" "${method}" "${params}"
+}
+
+prove_joined_evidence() {
+  docker exec "${runtime_container}" sh -c '
+    set -eu
+    runtime_uid="$1"
+    runtime_gid="$2"
+    staged_dir="$(mktemp -d /tmp/partner-joined-evidence.XXXXXX)"
+    cp /evidence/revision-bindings.json "${staged_dir}/revision-bindings.json"
+    cp /run/moonsleep-load-credentials/runtime-token "${staged_dir}/runtime-token"
+    chmod 0700 "${staged_dir}"
+    chmod 0600 "${staged_dir}/revision-bindings.json"
+    chmod 0400 "${staged_dir}/runtime-token"
+    chown -R "${runtime_uid}:${runtime_gid}" "${staged_dir}"
+    exec setpriv \
+      --reuid="$runtime_uid" --regid="$runtime_gid" --clear-groups --no-new-privs \
+      sh -c '\''
+        set -eu
+        staged_dir="$1"
+        trap '\''"'\''"'\''rm -rf -- "$staged_dir"'\''"'\''"'\'' EXIT
+        node /proof/prove-canonical-joined-evidence.mjs \
+          --bindings "${staged_dir}/revision-bindings.json" \
+          --token_file "${staged_dir}/runtime-token"
+      '\'' sh "${staged_dir}"
+  ' sh "${runtime_uid}" "${runtime_gid}"
 }
 
 wait_for_postgres() {
@@ -507,10 +539,7 @@ jq -e '
 ' "${runner_temp}/runtime-plan.json" >/dev/null
 jq -e '.promotions == 0 and .heads == 0 and .outbox == 0 and .observations == 0' \
   <<<"${memory_after_replay}" >/dev/null
-joined_evidence="$(docker exec "${runtime_container}" node \
-  /proof/prove-canonical-joined-evidence.mjs \
-  --bindings /evidence/revision-bindings.json \
-  --token_file /run/moonsleep-load-credentials/runtime-token)"
+joined_evidence="$(prove_joined_evidence)"
 jq -e '
   .ok == true and
   .joined.fact_count == 26 and
