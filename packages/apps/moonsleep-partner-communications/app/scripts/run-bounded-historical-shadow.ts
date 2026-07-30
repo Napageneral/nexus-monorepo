@@ -8,9 +8,10 @@ const { values } = parseArgs({
     request: { type: "string" },
     postgres_url_file: { type: "string" },
     postgres_schema: { type: "string" },
+    canonical_manifest: { type: "string" },
     shadow_memory: { type: "string" },
     receipt: { type: "string" },
-    psql: { type: "string", default: "psql" },
+    runtime_module_root: { type: "string" },
   },
   strict: true,
 });
@@ -19,8 +20,10 @@ for (const field of [
   "request",
   "postgres_url_file",
   "postgres_schema",
+  "canonical_manifest",
   "shadow_memory",
   "receipt",
+  "runtime_module_root",
 ] as const) {
   if (!values[field]) throw new Error(`--${field} is required`);
 }
@@ -32,10 +35,11 @@ const receipt = await executePartnerShadowAdapter({
   requestPath: values.request!,
   postgresUrlFile: values.postgres_url_file!,
   postgresSchema: values.postgres_schema!,
+  canonicalManifestPath: values.canonical_manifest!,
   shadowMemoryPath: values.shadow_memory!,
   receiptPath: values.receipt!,
   expectedOwnerUid: 0,
-  psqlCommand: values.psql,
+  runtimeModuleRoot: values.runtime_module_root!,
 });
 process.stdout.write(
   `${JSON.stringify({
