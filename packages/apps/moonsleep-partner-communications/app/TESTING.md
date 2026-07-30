@@ -35,8 +35,10 @@ or grant authority. Those operations remain blocked until the shared Wave 1
 core contract is published and consumed.
 
 The production-shaped Linux/AMD64 PostgreSQL proof is run through
-`scripts/test-full-postgres-alibaba-cleanroom.sh` after packaging the app and
-Alibaba adapter against an exact Nex release image.
+`scripts/test-canonical-surewal-postgres-cleanroom.sh` after packaging the app
+against an exact Nex release image. The canonical runner uses the governed app
+installation API and keeps provider reads, adapter installation, live data,
+promotion, and production outside the synthetic proof.
 
 The focused suite also creates the exact 7,986-record production corpus shape
 in memory, commits one 50-record proposal batch, and proves:
