@@ -53,6 +53,13 @@ export type PartnerShadowRevisionStore = {
   getRecordRevision(id: string): Promise<PartnerShadowRevisionRow | null>;
 };
 
+export type VerifiedPartnerShadowIdentityBinding = {
+  identity_receipt_id: string;
+  identity_result_digest: string;
+  contact_observation_id: string;
+  canonical_entity_id: string;
+};
+
 export type PartnerShadowProjection = {
   coverage_disposition:
     | "open_loop_evidence"
@@ -101,6 +108,8 @@ type SelectedPartnerShadowMember = PartnerShadowMemberRequest & {
   source_timestamp: number;
   observed_at: number;
   subject_ref: string;
+  entity_ids: string[];
+  review_receipt_ref: string | null;
 };
 
 export type PartnerShadowComparison = {
@@ -307,6 +316,7 @@ function registerProfiles(
 async function selectMembers(
   store: PartnerShadowRevisionStore,
   request: PartnerShadowCohortRequest,
+  identityBindings?: ReadonlyMap<string, VerifiedPartnerShadowIdentityBinding>,
 ): Promise<SelectedPartnerShadowMember[]> {
   if (!COHORT_ID.test(request.cohort_id)) throw new Error("cohort_id is invalid");
   opaque(request.connection_id, "connection_id");
@@ -353,6 +363,24 @@ async function selectMembers(
       throw new Error(`unsupported Partner source platform: ${revision.platform}`);
     }
     parseAuthority(revision.authority_declaration_json);
+    const identityBinding = identityBindings?.get(member.revision_id);
+    if (identityBindings && !identityBinding) {
+      throw new Error(`reviewed identity binding is absent: ${member.revision_id}`);
+    }
+    const canonicalEntityId = identityBinding
+      ? opaque(identityBinding.canonical_entity_id, "identity_binding.canonical_entity_id")
+      : null;
+    if (identityBinding) {
+      opaque(identityBinding.identity_receipt_id, "identity_binding.identity_receipt_id");
+      exactSha(
+        identityBinding.identity_result_digest,
+        "identity_binding.identity_result_digest",
+      );
+      opaque(
+        identityBinding.contact_observation_id,
+        "identity_binding.contact_observation_id",
+      );
+    }
     selected.push({
       ...member,
       source_logical_record_ref: sourceLogicalRef,
@@ -366,6 +394,13 @@ async function selectMembers(
       source_timestamp: revision.source_timestamp,
       observed_at: revision.observed_at,
       subject_ref: `partner-source:${digest(sourceLogicalRef)}`,
+      entity_ids: canonicalEntityId ? [canonicalEntityId] : [],
+      review_receipt_ref: identityBinding
+        ? `partner-identity:${digest({
+            identity_receipt_id: identityBinding.identity_receipt_id,
+            identity_result_digest: identityBinding.identity_result_digest,
+          })}`
+        : null,
     });
   }
   return selected;
@@ -397,7 +432,7 @@ function comparisons(members: SelectedPartnerShadowMember[]): PartnerShadowCompa
 
 function observationPayload(member: SelectedPartnerShadowMember): JsonObject {
   const candidate = member.candidate_projection;
-  return {
+  const payload: JsonObject = {
     source_logical_record_id: member.source_logical_record_ref,
     current_source_revision_sha256: member.source_revision_sha256,
     coverage_disposition: candidate.coverage_disposition,
@@ -408,6 +443,10 @@ function observationPayload(member: SelectedPartnerShadowMember): JsonObject {
     })),
     missing_reason: candidate.missing_reason,
   };
+  if (member.review_receipt_ref) {
+    payload.review_receipt_ref = member.review_receipt_ref;
+  }
+  return payload;
 }
 
 function outboxCount(memoryDb: DatabaseSync, targetDomain: string): number {
@@ -456,7 +495,7 @@ function runPass(
       producerId: "moonsleep-partner-desk",
       producerVersion: "0.3.1",
       extractionPolicyRef: POLICY_REF,
-      reviewReceiptRef: null,
+      reviewReceiptRef: member.review_receipt_ref,
       sourceRevisionRefs: [
         {
           revision_id: member.revision_id,
@@ -464,7 +503,7 @@ function runPass(
           fragment_refs: [],
         },
       ],
-      entityIds: [],
+      entityIds: member.entity_ids,
       sourceJobId: null,
       asOf: member.source_timestamp,
       idempotencyKey: `partner-pd10-fact:${cohortId}:${member.revision_id}`,
@@ -530,11 +569,11 @@ function runPass(
           disposition: "supports",
         },
       ],
-      entityIds: [],
+      entityIds: member.entity_ids,
       resolverId: RESOLVER_ID,
       resolverVersion: RESOLVER_VERSION,
       resolverPolicyVersion: RESOLVER_VERSION,
-      reviewReceiptRef: null,
+      reviewReceiptRef: member.review_receipt_ref,
       actorRef: ACTOR_REF,
       policyRef: POLICY_REF,
       idempotencyKey: `partner-pd10-observation:${cohortId}:${member.revision_id}`,
@@ -606,13 +645,18 @@ export async function runPartnerBoundedHistoricalShadow(
     shadowMemoryDb: DatabaseSync;
     request: PartnerShadowCohortRequest;
     canonicalManifestPath?: string;
+    identityBindings?: ReadonlyMap<string, VerifiedPartnerShadowIdentityBinding>;
   },
 ): Promise<PartnerShadowReceipt> {
   const canonicalManifestPath =
     input.canonicalManifestPath ?? DEFAULT_CANONICAL_MANIFEST_PATH;
   const manifestSha256 = sourceManifestSha256(canonicalManifestPath);
   registerProfiles(input.shadowMemoryDb, canonicalManifestPath);
-  const members = await selectMembers(input.revisionStore, input.request);
+  const members = await selectMembers(
+    input.revisionStore,
+    input.request,
+    input.identityBindings,
+  );
   const comparison = comparisons(members);
   const targetDomain = `partner.shadow.pd10.${digest(input.request.cohort_id).slice(0, 24)}`;
   const firstPass = runPass(
