@@ -3,8 +3,8 @@
   "contract_version": 1,
   "app": {
     "app_id": "moonsleep-partner-desk",
-    "app_version": "0.3.1",
-    "artifact_relative_path": "dist/moonsleep-partner-desk-0.3.1.tar.gz"
+    "app_version": "0.3.2",
+    "artifact_relative_path": "dist/moonsleep-partner-desk-0.3.2.tar.gz"
   },
   "governing_core": {
     "commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
@@ -27,15 +27,18 @@
       "app_version_exact"
     ]
   },
-  "dormant_install": {
+  "dormant_upgrade": {
     "http_method": "POST",
-    "endpoint": "/api/apps/install",
+    "endpoint": "/api/apps/upgrade",
     "request": {
       "appId": "moonsleep-partner-desk",
+      "targetVersion": "0.3.2",
       "packageRef": "${HOST_EXTRACTED_PACKAGE_DIR}"
     },
     "preconditions": {
-      "app_absent": true,
+      "app_present": true,
+      "current_app_version": "0.3.1",
+      "current_release_retained": true,
       "runtime_health_ok": true,
       "canonical_deploy_lock_held": true,
       "pending_rollback_absent": true
@@ -51,11 +54,12 @@
   },
   "allowed_local_mutations": {
     "profile_registration_count": [
-      0,
-      8
+      0
     ],
-    "owned_job_count_after_install": 1,
-    "owned_subscription_count_after_install": 2,
+    "owned_job_count_before_upgrade": 1,
+    "owned_job_count_after_upgrade": 1,
+    "owned_subscription_count_before_upgrade": 2,
+    "owned_subscription_count_after_upgrade": 2,
     "lifecycle_receipts_append_only": true
   },
   "forbidden_effects": {
@@ -74,16 +78,21 @@
     "provider_call_count": 0
   },
   "rollback": {
-    "scope": "first_dormant_install_only",
+    "scope": "dormant_upgrade_0_3_2_to_0_3_1",
     "http_method": "POST",
-    "endpoint": "/api/apps/uninstall",
+    "endpoint": "/api/apps/upgrade",
     "request": {
-      "appId": "moonsleep-partner-desk"
+      "appId": "moonsleep-partner-desk",
+      "targetVersion": "0.3.1",
+      "packageRef": "/var/lib/nex/state/packages/installed/app/moonsleep-partner-desk/releases/0.3.1"
     },
-    "expected_app_absent": true,
-    "expected_owned_job_count": 0,
-    "expected_owned_subscription_count": 0,
-    "immutable_profile_registry_may_remain": true,
+    "expected_app_present": true,
+    "expected_app_version": "0.3.1",
+    "expected_owned_job_count": 1,
+    "expected_owned_job_status": "inactive",
+    "expected_owned_subscription_count": 2,
+    "expected_enabled_subscription_count": 0,
+    "immutable_profile_registry_unchanged": true,
     "forbidden_effects_unchanged": true
   },
   "authority": {

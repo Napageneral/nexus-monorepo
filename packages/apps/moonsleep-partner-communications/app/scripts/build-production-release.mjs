@@ -23,9 +23,9 @@ const RELEASE_CONTRACT_PATH = join(ROOT_DIR, "contracts/partner-production-relea
 const CANONICAL_CONTRACT_PATH = join(ROOT_DIR, "contracts/partner-canonical-profiles.v1.json");
 const APP_MANIFEST_PATH = join(ROOT_DIR, "app.nexus.json");
 const RELEASE_MANIFEST_PATH = join(ROOT_DIR, "dist/partner-production-release-manifest.v1.json");
-const DORMANT_INSTALL_INPUT_PATH = join(
+const DORMANT_UPGRADE_INPUT_PATH = join(
   ROOT_DIR,
-  "dist/moonsleep-partner-desk-0.3.1.dormant-install.json",
+  "dist/moonsleep-partner-desk-0.3.2.dormant-upgrade.json",
 );
 
 function fail(message) {
@@ -181,7 +181,7 @@ if (releaseContract.canonical_evidence_contract.sha256 !== canonicalContractSha2
 }
 
 rmSync(RELEASE_MANIFEST_PATH, { force: true });
-rmSync(DORMANT_INSTALL_INPUT_PATH, { force: true });
+rmSync(DORMANT_UPGRADE_INPUT_PATH, { force: true });
 command("npm", ["run", "build"], { cwd: ROOT_DIR, inherit: true });
 command("nexus", ["package", "validate", ROOT_DIR], { inherit: true });
 command("nexus", ["package", "release", ROOT_DIR], { inherit: true });
@@ -248,18 +248,18 @@ const manifest = {
     size_bytes: artifactStat.size,
     archive_entry_count: archiveEntries.length,
   },
-  dormant_install_input: {
-    relative_path: `dist/moonsleep-partner-desk-${appManifest.version}.dormant-install.json`,
+  dormant_upgrade_input: {
+    relative_path: `dist/moonsleep-partner-desk-${appManifest.version}.dormant-upgrade.json`,
   },
   authority: releaseContract.authority,
 };
 const releaseManifestSha256 = writeCanonicalJson(RELEASE_MANIFEST_PATH, manifest);
-const dormantInstallInputPath = join(ROOT_DIR, manifest.dormant_install_input.relative_path);
-if (dormantInstallInputPath !== DORMANT_INSTALL_INPUT_PATH) {
-  fail("dormant install input path differs from the release builder contract");
+const dormantUpgradeInputPath = join(ROOT_DIR, manifest.dormant_upgrade_input.relative_path);
+if (dormantUpgradeInputPath !== DORMANT_UPGRADE_INPUT_PATH) {
+  fail("dormant upgrade input path differs from the release builder contract");
 }
-const dormantInstallInput = {
-  contract_id: "moonsleep.partner.dormant-install-input.v1",
+const dormantUpgradeInput = {
+  contract_id: "moonsleep.partner.dormant-upgrade-input.v1",
   contract_version: 1,
   release_manifest: {
     relative_path: relative(ROOT_DIR, RELEASE_MANIFEST_PATH),
@@ -275,22 +275,23 @@ const dormantInstallInput = {
     artifact_mode: releaseContract.staging.artifact_mode,
     package_directory_mode: releaseContract.staging.package_directory_mode,
   },
-  install: {
-    http_method: releaseContract.dormant_install.http_method,
-    endpoint: releaseContract.dormant_install.endpoint,
+  upgrade: {
+    http_method: releaseContract.dormant_upgrade.http_method,
+    endpoint: releaseContract.dormant_upgrade.endpoint,
     request: {
       appId: appManifest.id,
+      targetVersion: appManifest.version,
       packageRef: packageDirectory,
     },
   },
   rollback: releaseContract.rollback,
-  expected_postflight: releaseContract.dormant_install,
+  expected_postflight: releaseContract.dormant_upgrade,
   authority: releaseContract.authority,
 };
-assertNoProhibitedSchemaField(dormantInstallInput);
-const dormantInstallInputSha256 = writeCanonicalJson(
-  dormantInstallInputPath,
-  dormantInstallInput,
+assertNoProhibitedSchemaField(dormantUpgradeInput);
+const dormantUpgradeInputSha256 = writeCanonicalJson(
+  dormantUpgradeInputPath,
+  dormantUpgradeInput,
 );
 
 process.stdout.write(
@@ -306,8 +307,8 @@ process.stdout.write(
       artifact_size_bytes: artifactStat.size,
       release_manifest_path: RELEASE_MANIFEST_PATH,
       release_manifest_sha256: releaseManifestSha256,
-      dormant_install_input_path: dormantInstallInputPath,
-      dormant_install_input_sha256: dormantInstallInputSha256,
+      dormant_upgrade_input_path: dormantUpgradeInputPath,
+      dormant_upgrade_input_sha256: dormantUpgradeInputSha256,
       provider_calls: 0,
       production_action: false,
     }),

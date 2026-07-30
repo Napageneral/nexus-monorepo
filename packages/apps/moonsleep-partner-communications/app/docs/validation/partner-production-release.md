@@ -1,6 +1,6 @@
-# Partner Desk dormant production release
+# Partner Desk dormant production upgrade
 
-This source slice seals the first production-shaped Partner Desk package without
+This source slice seals the `0.3.2` production-shaped Partner Desk package without
 activating source ingestion, model work, live backfill, canonical promotion,
 provider writes, drafts, sends, payments, or other domain writes.
 
@@ -10,17 +10,18 @@ provider writes, drafts, sends, payments, or other domain writes.
   `nexus package release`.
 - Stage the exact hash-bound archive into a new runtime-owned release
   directory.
-- Install the extracted app through `POST /api/apps/install` with only
-  `appId` and `packageRef`.
+- Upgrade the extracted app through `POST /api/apps/upgrade` with `appId`,
+  `targetVersion`, and `packageRef`.
 - Read the package through `moonsleep-partner-desk.healthcheck`.
-- Roll back a failed first dormant install through `POST /api/apps/uninstall`.
+- Retain the installed `0.3.1` release and roll back through
+  `POST /api/apps/upgrade` using its exact package directory.
 
 The deleted predecessor full-PostgreSQL Alibaba installer is not part of this
 release and must not be restored.
 
 ## Expected installed state
 
-The app registry reports version `0.3.1` active because lifecycle installation
+The app registry reports version `0.3.2` active because the lifecycle upgrade
 completed. Domain processing remains dormant:
 
 - one Partner-owned job is inactive;
@@ -32,9 +33,9 @@ completed. Domain processing remains dormant:
   projections, runs, queue rows, adapter instances, or provider calls are
   created.
 
-Profile registrations are immutable definitions. A first-install rollback may
-leave the eight exact profile registrations while removing the app, owned job,
-and owned subscriptions. This is declared residue, not hidden live activation.
+Profile registrations are immutable definitions. The upgrade replays them
+idempotently with zero registry delta. Rollback restores the retained dormant
+`0.3.1` app, one inactive job, and two disabled subscriptions.
 
 ## Source-only proof
 
@@ -51,7 +52,8 @@ Nex submodule. It writes three ignored mode-0600 artifacts under `dist/`:
 
 1. the package archive;
 2. its canonical immutable release manifest;
-3. the exact dormant-install input bound to the manifest and archive digest.
+3. the exact dormant-upgrade input bound to the manifest, archive digest, and
+   retained `0.3.1` rollback.
 
 Postflight validation is read-only:
 

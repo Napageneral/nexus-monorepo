@@ -1,6 +1,6 @@
 {
   "name": "moonsleep-partner-desk-app",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "prepare:canonical-migration": "node --experimental-strip-types scripts/prepare-canonical-migration.mjs",
     "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts ui/src/*.test.ts",
     "test:canonical-prep": "./scripts/test-canonical-prep-cleanroom.sh",
-    "verify:production-postflight": "node scripts/verify-dormant-install-postflight.mjs"
+    "verify:production-postflight": "node scripts/verify-dormant-upgrade-postflight.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
