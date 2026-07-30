@@ -259,6 +259,41 @@ docker volume create "${credential_volume}" >/dev/null
 runtime_token="nex_rt_$(openssl rand -hex 24)"
 postgres_dsn="postgresql://${runtime_role}@postgres:5432/moonsleep_nex"
 
+state_volume_bootstrap="$(docker run --rm --platform linux/amd64 \
+  --network none --read-only --security-opt no-new-privileges \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE \
+  --mount "type=volume,src=${state_volume},dst=/target" \
+  --entrypoint sh "${NEX_IMAGE}" -c '
+    set -eu
+    runtime_uid="$1"
+    runtime_gid="$2"
+    test "$(id -u):$(id -g)" = "0:0"
+    test -d /target
+    test ! -L /target
+    test -z "$(find /target -mindepth 1 -maxdepth 1 -print -quit)"
+    install -d -m 0700 -o "$runtime_uid" -g "$runtime_gid" \
+      /target/state /target/state/data
+    chmod 0700 /target
+    chown "$runtime_uid:$runtime_gid" /target
+    test "$(stat -c "%u:%g:%a" /target)" = "$runtime_uid:$runtime_gid:700"
+    test "$(stat -c "%u:%g:%a" /target/state)" = "$runtime_uid:$runtime_gid:700"
+    test "$(stat -c "%u:%g:%a" /target/state/data)" = "$runtime_uid:$runtime_gid:700"
+    test ! -e /target/state/config.json
+    test ! -L /target/state/config.json
+    test "$(find /target -mindepth 1 -maxdepth 1 -printf "%f\n")" = "state"
+    test "$(find /target/state -mindepth 1 -maxdepth 1 -printf "%f\n")" = "data"
+    printf "{\"uid\":%s,\"gid\":%s,\"state\":\"/var/lib/nex/state\",\"data\":\"/var/lib/nex/state/data\",\"config_precreated\":false}\n" \
+      "$runtime_uid" "$runtime_gid"
+  ' sh "${runtime_uid}" "${runtime_gid}")"
+jq -e \
+  --argjson uid "${runtime_uid}" \
+  --argjson gid "${runtime_gid}" \
+  '.uid == $uid and .gid == $gid and
+   .state == "/var/lib/nex/state" and
+   .data == "/var/lib/nex/state/data" and
+   .config_precreated == false' \
+  <<<"${state_volume_bootstrap}" >/dev/null
+
 docker run --rm --platform linux/amd64 --network none --read-only --user 0:0 \
   --env "POSTGRES_DSN=${postgres_dsn}" --env "RUNTIME_TOKEN=${runtime_token}" \
   --mount "type=volume,src=${credential_volume},dst=/target" --entrypoint sh "${NEX_IMAGE}" -c '
@@ -545,6 +580,7 @@ jq -n \
   --arg runtime_user "${runtime_user}" \
   --argjson runtime_uid "${runtime_uid}" \
   --argjson runtime_gid "${runtime_gid}" \
+  --argjson state_volume_bootstrap "${state_volume_bootstrap}" \
   --arg postgres_image_id "${postgres_image_id}" \
   --arg postgres_version "${postgres_version}" \
   --arg app_version "${APP_VERSION}" \
@@ -571,7 +607,8 @@ jq -n \
       serving_identity:{user:$runtime_user,uid:$runtime_uid,gid:$runtime_gid},
       state_mount:"/var/lib/nex",
       state_dir:"/var/lib/nex/state",
-      data_dir:"/var/lib/nex/state/data"
+      data_dir:"/var/lib/nex/state/data",
+      state_volume_bootstrap:$state_volume_bootstrap
     },
     postgres:{version:$postgres_version,image_id:$postgres_image_id,platform:"linux/amd64"},
     package:{id:"moonsleep-partner-desk",version:$app_version,sha256:$app_sha256},
