@@ -1,0 +1,101 @@
+{
+  "contract_id": "moonsleep.partner.production-release.v1",
+  "contract_version": 1,
+  "app": {
+    "app_id": "moonsleep-partner-desk",
+    "app_version": "0.3.1",
+    "artifact_relative_path": "dist/moonsleep-partner-desk-0.3.1.tar.gz"
+  },
+  "governing_core": {
+    "commit": "f6ff4816befeba60a480e05597f2fa904b4144a3",
+    "tree": "75de9b1a5b813933187c2a685945760bf1737329"
+  },
+  "canonical_evidence_contract": {
+    "relative_path": "contracts/partner-canonical-profiles.v1.json",
+    "sha256": "bee876068500ed1d9b58fed970131a104bc6f190ca39e00f6cc7eeb6cf29fbdc"
+  },
+  "staging": {
+    "artifact_mode": "0600",
+    "package_directory_mode": "0700",
+    "package_directory_template": "/var/lib/nex/state/packages/moonsleep-partner-desk/releases/${ARTIFACT_SHA256}/app",
+    "required_checks": [
+      "artifact_sha256_exact",
+      "artifact_size_exact",
+      "archive_paths_relative",
+      "app_manifest_regular_file",
+      "app_id_exact",
+      "app_version_exact"
+    ]
+  },
+  "dormant_install": {
+    "http_method": "POST",
+    "endpoint": "/api/apps/install",
+    "request": {
+      "appId": "moonsleep-partner-desk",
+      "packageRef": "${HOST_EXTRACTED_PACKAGE_DIR}"
+    },
+    "preconditions": {
+      "app_absent": true,
+      "runtime_health_ok": true,
+      "canonical_deploy_lock_held": true,
+      "pending_rollback_absent": true
+    },
+    "expected_app_state": "active",
+    "expected_continuous_projection": "dormant_pending_backfill_parity_and_activation_receipt",
+    "expected_owned_job_status": "inactive",
+    "expected_owned_subscription_count": 2,
+    "expected_enabled_subscription_count": 0,
+    "expected_fact_profile_count": 5,
+    "expected_observation_profile_count": 3,
+    "expected_set_profile_count": 3
+  },
+  "allowed_local_mutations": {
+    "profile_registration_count": [
+      0,
+      8
+    ],
+    "owned_job_count_after_install": 1,
+    "owned_subscription_count_after_install": 2,
+    "lifecycle_receipts_append_only": true
+  },
+  "forbidden_effects": {
+    "source_record_delta": 0,
+    "source_revision_delta": 0,
+    "identity_delta": 0,
+    "fact_delta": 0,
+    "observation_delta": 0,
+    "sealed_set_delta": 0,
+    "promotion_delta": 0,
+    "projection_delta": 0,
+    "projection_outbox_delta": 0,
+    "job_run_delta": 0,
+    "queue_delta": 0,
+    "adapter_instance_delta": 0,
+    "provider_call_count": 0
+  },
+  "rollback": {
+    "scope": "first_dormant_install_only",
+    "http_method": "POST",
+    "endpoint": "/api/apps/uninstall",
+    "request": {
+      "appId": "moonsleep-partner-desk"
+    },
+    "expected_app_absent": true,
+    "expected_owned_job_count": 0,
+    "expected_owned_subscription_count": 0,
+    "immutable_profile_registry_may_remain": true,
+    "forbidden_effects_unchanged": true
+  },
+  "authority": {
+    "provider_read": false,
+    "provider_write": false,
+    "model_call": false,
+    "live_backfill": false,
+    "identity_merge": false,
+    "canonical_promotion": false,
+    "external_domain_write": false,
+    "draft_or_send": false,
+    "payment": false,
+    "production_activation": false
+  }
+}

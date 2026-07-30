@@ -40,6 +40,23 @@ against an exact Nex release image. The canonical runner uses the governed app
 installation API and keeps provider reads, adapter installation, live data,
 promotion, and production outside the synthetic proof.
 
+Build the immutable source-bound dormant production package after committing
+and verifying a clean worktree:
+
+```bash
+npm run build:production-release
+```
+
+This emits the hash-bound archive, release manifest, and dormant-install input
+under ignored `dist/`. It performs no install or production action. Validate a
+later runtime readback with:
+
+```bash
+npm run verify:production-postflight -- \
+  --input /path/to/readback.json \
+  --out /path/to/receipt.json
+```
+
 The focused suite also creates the exact 7,986-record production corpus shape
 in memory, commits one 50-record proposal batch, and proves:
 
