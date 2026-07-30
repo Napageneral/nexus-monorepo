@@ -176,8 +176,10 @@ const MISSING_VALUES = new Set([
   "withheld_by_authority",
 ]);
 
-function sourceManifestSha256(): string {
-  return sha256(readFileSync(DEFAULT_CANONICAL_MANIFEST_PATH));
+function sourceManifestSha256(
+  manifestPath = DEFAULT_CANONICAL_MANIFEST_PATH,
+): string {
+  return sha256(readFileSync(manifestPath));
 }
 
 function digest(value: unknown): string {
@@ -264,9 +266,12 @@ function parseAuthority(value: string): void {
   }
 }
 
-function registerProfiles(memoryDb: DatabaseSync): void {
-  const manifest = loadCanonicalPartnerManifest();
-  const manifestSha256 = sourceManifestSha256();
+function registerProfiles(
+  memoryDb: DatabaseSync,
+  manifestPath = DEFAULT_CANONICAL_MANIFEST_PATH,
+): void {
+  const manifest = loadCanonicalPartnerManifest(manifestPath);
+  const manifestSha256 = sourceManifestSha256(manifestPath);
   for (const profile of manifest.fact_profiles) {
     registerElementProfile(memoryDb, {
       profileId: profile.profile_id,
@@ -417,6 +422,7 @@ function runPass(
   members: SelectedPartnerShadowMember[],
   cohortId: string,
   targetDomain: string,
+  manifestSha256: string,
 ): PassReceipt {
   let factsCreated = 0;
   let factsReused = 0;
@@ -429,8 +435,6 @@ function runPass(
   let observationsCreated = 0;
   let observationsReused = 0;
   const observationIds: string[] = [];
-  const manifestSha256 = sourceManifestSha256();
-
   for (const [index, member] of members.entries()) {
     const fact = createProfiledFactFromVerifiedSourceRevisions(memoryDb, {
       profileId: COVERAGE_FACT_PROFILE,
@@ -601,9 +605,13 @@ export async function runPartnerBoundedHistoricalShadow(
     revisionStore: PartnerShadowRevisionStore;
     shadowMemoryDb: DatabaseSync;
     request: PartnerShadowCohortRequest;
+    canonicalManifestPath?: string;
   },
 ): Promise<PartnerShadowReceipt> {
-  registerProfiles(input.shadowMemoryDb);
+  const canonicalManifestPath =
+    input.canonicalManifestPath ?? DEFAULT_CANONICAL_MANIFEST_PATH;
+  const manifestSha256 = sourceManifestSha256(canonicalManifestPath);
+  registerProfiles(input.shadowMemoryDb, canonicalManifestPath);
   const members = await selectMembers(input.revisionStore, input.request);
   const comparison = comparisons(members);
   const targetDomain = `partner.shadow.pd10.${digest(input.request.cohort_id).slice(0, 24)}`;
@@ -612,6 +620,7 @@ export async function runPartnerBoundedHistoricalShadow(
     members,
     input.request.cohort_id,
     targetDomain,
+    manifestSha256,
   );
   const deliveries = deliverIsolatedOutbox(input.shadowMemoryDb, targetDomain);
   const firstPassWithDeliveredCount = {
@@ -623,6 +632,7 @@ export async function runPartnerBoundedHistoricalShadow(
     members,
     input.request.cohort_id,
     targetDomain,
+    manifestSha256,
   );
   if (
     secondPass.outbox_count !== firstPassWithDeliveredCount.outbox_count ||
@@ -643,7 +653,7 @@ export async function runPartnerBoundedHistoricalShadow(
     cohort_id: input.request.cohort_id,
     execution_mode: EXECUTION_MODE,
     source_mode: SOURCE_MODE,
-    source_manifest_sha256: sourceManifestSha256(),
+    source_manifest_sha256: manifestSha256,
     source_read_receipt_sha256: input.request.source_read_receipt_sha256,
     connection_ref_sha256: digest(input.request.connection_id),
     exact_revision_set_sha256: exactRevisionSetSha256,

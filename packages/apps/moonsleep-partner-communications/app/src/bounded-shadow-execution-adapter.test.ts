@@ -16,7 +16,8 @@ import {
   buildReadOnlyRevisionQuery,
   executePartnerShadowAdapter,
   resolveFreshShadowMemoryPath,
-  type PsqlInvocation,
+  type PgClientFactory,
+  type PgReadClient,
 } from "./bounded-shadow-execution-adapter.ts";
 
 function digest(value: string): string {
@@ -36,6 +37,7 @@ function fixture() {
   const uid = process.getuid!();
   const requestPath = join(root, "request.json");
   const postgresUrlFile = join(root, "postgres-url");
+  const canonicalManifestPath = join(root, "partner-canonical-profiles.v1.json");
   const shadowMemoryPath = join(root, "shadow-memory.db");
   const receiptPath = join(root, "terminal-receipt.json");
   const request = {
@@ -70,9 +72,17 @@ function fixture() {
     },
   };
   writeFileSync(requestPath, `${JSON.stringify(request)}\n`, { mode: 0o600 });
-  writeFileSync(postgresUrlFile, "postgresql://secret@localhost/nex\n", { mode: 0o600 });
+  writeFileSync(postgresUrlFile, "postgresql://secret@localhost/nex\n", { mode: 0o400 });
+  writeFileSync(
+    canonicalManifestPath,
+    readFileSync(
+      "packages/apps/moonsleep-partner-communications/app/contracts/partner-canonical-profiles.v1.json",
+    ),
+    { mode: 0o400 },
+  );
   chmodSync(requestPath, 0o600);
-  chmodSync(postgresUrlFile, 0o600);
+  chmodSync(postgresUrlFile, 0o400);
+  chmodSync(canonicalManifestPath, 0o400);
   const pgRow = {
     id: "revision-one",
     record_row_id: "record-one",
@@ -94,6 +104,7 @@ function fixture() {
     uid,
     requestPath,
     postgresUrlFile,
+    canonicalManifestPath,
     shadowMemoryPath,
     receiptPath,
     request,
@@ -101,24 +112,61 @@ function fixture() {
   };
 }
 
+function fakePg(
+  revisions: Array<Record<string, unknown>>,
+): {
+  factory: PgClientFactory;
+  trace: {
+    connected: boolean;
+    ended: boolean;
+    dsn: string | null;
+    runtimeModuleRoot: string | null;
+    queries: Array<{ text: string; values?: unknown[] }>;
+  };
+} {
+  const trace = {
+    connected: false,
+    ended: false,
+    dsn: null as string | null,
+    runtimeModuleRoot: null as string | null,
+    queries: [] as Array<{ text: string; values?: unknown[] }>,
+  };
+  return {
+    trace,
+    factory(dsn, runtimeModuleRoot) {
+      trace.dsn = dsn;
+      trace.runtimeModuleRoot = runtimeModuleRoot;
+      return {
+        async connect() {
+          trace.connected = true;
+        },
+        async query(text, values) {
+          trace.queries.push({ text, values });
+          return text.startsWith("SELECT json_build_object")
+            ? { rows: revisions.map((revision) => ({ revision })) }
+            : { rows: [] };
+        },
+        async end() {
+          trace.ended = true;
+        },
+      };
+    },
+  };
+}
+
 test("executes one read-only snapshot into a fresh isolated memory DB and sealed receipt", async () => {
   const input = fixture();
-  let invocation: PsqlInvocation | null = null;
+  const pg = fakePg([input.pgRow]);
   const receipt = await executePartnerShadowAdapter({
     requestPath: input.requestPath,
     postgresUrlFile: input.postgresUrlFile,
     postgresSchema: "nex_core",
+    canonicalManifestPath: input.canonicalManifestPath,
     shadowMemoryPath: input.shadowMemoryPath,
     receiptPath: input.receiptPath,
     expectedOwnerUid: input.uid,
-    psqlRunner(value) {
-      invocation = value;
-      return {
-        status: 0,
-        stdout: `${JSON.stringify(input.pgRow)}\n`,
-        stderr: "",
-      };
-    },
+    runtimeModuleRoot: input.root,
+    pgClientFactory: pg.factory,
   });
 
   assert.equal(receipt.member_count, 1);
@@ -131,13 +179,27 @@ test("executes one read-only snapshot into a fresh isolated memory DB and sealed
   assert.equal(lstatSync(input.shadowMemoryPath).mode & 0o777, 0o600);
   assert.equal(lstatSync(input.receiptPath).mode & 0o777, 0o400);
   assert.deepEqual(JSON.parse(readFileSync(input.receiptPath, "utf8")), receipt);
-  assert.ok(invocation);
-  assert.equal(invocation!.command, "psql");
-  assert.doesNotMatch(invocation!.args.join(" "), /secret|postgresql:/);
-  assert.equal(invocation!.env.PGDATABASE, "postgresql://secret@localhost/nex");
-  assert.match(invocation!.input, /REPEATABLE READ READ ONLY/);
-  assert.match(invocation!.input, /"nex_core"\."record_revisions"/);
-  assert.match(invocation!.input, /'revision-one'/);
+  assert.equal(pg.trace.connected, true);
+  assert.equal(pg.trace.ended, true);
+  assert.equal(pg.trace.dsn, "postgresql://secret@localhost/nex");
+  assert.equal(pg.trace.runtimeModuleRoot, input.root);
+  assert.deepEqual(
+    pg.trace.queries.map((query) => query.text.split("\n")[0]),
+    [
+      "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+      "SET LOCAL statement_timeout = '15s'",
+      "SELECT json_build_object(",
+      "COMMIT",
+    ],
+  );
+  const select = pg.trace.queries[2]!;
+  assert.match(select.text, /"nex_core"\."record_revisions"/);
+  assert.match(select.text, /id = ANY\(\$1::text\[\]\)/);
+  assert.deepEqual(select.values, [["revision-one"]]);
+  assert.doesNotMatch(
+    pg.trace.queries.map((query) => query.text).join("\n"),
+    /secret|postgresql:/,
+  );
 });
 
 test("hard-bans active memory, symlink custody, existing shadow state, and open receipt reuse", async () => {
@@ -165,10 +227,12 @@ test("hard-bans active memory, symlink custody, existing shadow state, and open 
       requestPath: input.requestPath,
       postgresUrlFile: input.postgresUrlFile,
       postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
       shadowMemoryPath: input.shadowMemoryPath,
       receiptPath: input.receiptPath,
       expectedOwnerUid: input.uid,
-      psqlRunner: () => ({ status: 0, stdout: "", stderr: "" }),
+      runtimeModuleRoot: input.root,
+      pgClientFactory: fakePg([]).factory,
     }),
     /regular non-symlink file/,
   );
@@ -182,37 +246,57 @@ test("rejects custody drift, unsafe schema or revision ids, and incomplete Postg
       requestPath: input.requestPath,
       postgresUrlFile: input.postgresUrlFile,
       postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
       shadowMemoryPath: input.shadowMemoryPath,
       receiptPath: input.receiptPath,
       expectedOwnerUid: input.uid,
-      psqlRunner: () => ({ status: 0, stdout: "", stderr: "" }),
+      runtimeModuleRoot: input.root,
+      pgClientFactory: fakePg([]).factory,
     }),
     /exact mode 600/,
   );
   chmodSync(input.requestPath, 0o600);
   assert.throws(
-    () => buildReadOnlyRevisionQuery("nex_core;DROP", ["revision-one"]),
+    () => buildReadOnlyRevisionQuery("nex_core;DROP"),
     /schema is invalid/,
   );
-  assert.throws(
-    () => buildReadOnlyRevisionQuery("nex_core", ["revision'one"]),
-    /safe exact revision id/,
-  );
+  input.request.request.members[0].revision_id = "revision'one";
+  writeFileSync(input.requestPath, `${JSON.stringify(input.request)}\n`);
+  chmodSync(input.requestPath, 0o600);
   await assert.rejects(
     executePartnerShadowAdapter({
       requestPath: input.requestPath,
       postgresUrlFile: input.postgresUrlFile,
       postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
       shadowMemoryPath: input.shadowMemoryPath,
       receiptPath: input.receiptPath,
       expectedOwnerUid: input.uid,
-      psqlRunner: () => ({ status: 0, stdout: "", stderr: "" }),
+      runtimeModuleRoot: input.root,
+      pgClientFactory: fakePg([]).factory,
+    }),
+    /safe exact revision id/,
+  );
+  input.request.request.members[0].revision_id = "revision-one";
+  writeFileSync(input.requestPath, `${JSON.stringify(input.request)}\n`);
+  chmodSync(input.requestPath, 0o600);
+  await assert.rejects(
+    executePartnerShadowAdapter({
+      requestPath: input.requestPath,
+      postgresUrlFile: input.postgresUrlFile,
+      postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
+      shadowMemoryPath: input.shadowMemoryPath,
+      receiptPath: input.receiptPath,
+      expectedOwnerUid: input.uid,
+      runtimeModuleRoot: input.root,
+      pgClientFactory: fakePg([]).factory,
     }),
     /does not exactly cover/,
   );
 });
 
-test("cleans isolated files after tuple or authority failure and never leaks DSN to argv", async () => {
+test("cleans isolated files after tuple or authority failure and never leaks DSN to query text", async () => {
   const input = fixture();
   const unsafe = {
     ...input.pgRow,
@@ -222,26 +306,71 @@ test("cleans isolated files after tuple or authority failure and never leaks DSN
       financial_mutation_authority: false,
     }),
   };
-  let captured: PsqlInvocation | null = null;
+  const pg = fakePg([unsafe]);
   await assert.rejects(
     executePartnerShadowAdapter({
       requestPath: input.requestPath,
       postgresUrlFile: input.postgresUrlFile,
       postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
       shadowMemoryPath: input.shadowMemoryPath,
       receiptPath: input.receiptPath,
       expectedOwnerUid: input.uid,
-      psqlRunner(value) {
-        captured = value;
-        return { status: 0, stdout: `${JSON.stringify(unsafe)}\n`, stderr: "" };
-      },
+      runtimeModuleRoot: input.root,
+      pgClientFactory: pg.factory,
     }),
     /provider_write_authority must remain false/,
   );
   assert.equal(exists(input.shadowMemoryPath), false);
   assert.equal(exists(input.receiptPath), false);
-  assert.ok(captured);
-  assert.doesNotMatch(captured!.args.join(" "), /postgresql:|secret/);
+  assert.equal(pg.trace.ended, true);
+  assert.doesNotMatch(
+    pg.trace.queries.map((query) => query.text).join("\n"),
+    /postgresql:|secret/,
+  );
+});
+
+test("rolls back and closes the native pg client when the exact read fails", async () => {
+  const input = fixture();
+  const queries: string[] = [];
+  let ended = false;
+  const client: PgReadClient = {
+    async connect() {},
+    async query(text) {
+      queries.push(text);
+      if (text.startsWith("SELECT json_build_object")) {
+        throw new Error("synthetic read failure containing postgresql://secret");
+      }
+      return { rows: [] };
+    },
+    async end() {
+      ended = true;
+    },
+  };
+  await assert.rejects(
+    executePartnerShadowAdapter({
+      requestPath: input.requestPath,
+      postgresUrlFile: input.postgresUrlFile,
+      postgresSchema: "nex_core",
+      canonicalManifestPath: input.canonicalManifestPath,
+      shadowMemoryPath: input.shadowMemoryPath,
+      receiptPath: input.receiptPath,
+      expectedOwnerUid: input.uid,
+      runtimeModuleRoot: input.root,
+      pgClientFactory: () => client,
+    }),
+    (error: unknown) => {
+      assert.equal(
+        error instanceof Error ? error.message : "",
+        "read-only PostgreSQL revision query failed",
+      );
+      return true;
+    },
+  );
+  assert.equal(queries.at(-1), "ROLLBACK");
+  assert.equal(ended, true);
+  assert.equal(exists(input.shadowMemoryPath), false);
+  assert.equal(exists(input.receiptPath), false);
 });
 
 function exists(path: string): boolean {
