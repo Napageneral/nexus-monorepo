@@ -16,6 +16,7 @@ mkdir -p \
   "$cleanroom/nex/src/storage/migrations/memory"
 
 cp "$app_dir/contracts/partner-canonical-profiles.v1.json" "$cleanroom/app/contracts/"
+cp "$app_dir/contracts/partner-production-release.v1.json" "$cleanroom/app/contracts/"
 cp "$app_dir/fixtures/canonical/surewal-cross-channel-golden.v1.json" "$cleanroom/app/fixtures/canonical/"
 cp "$app_dir/scripts/"*.mjs "$cleanroom/app/scripts/"
 cp "$app_dir/scripts/test-canonical-surewal-postgres-cleanroom.sh" \
