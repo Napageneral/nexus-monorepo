@@ -9,6 +9,7 @@
     "prepare:canonical-migration": "node --experimental-strip-types scripts/prepare-canonical-migration.mjs",
     "test": "node --test --experimental-strip-types src/*.test.ts && vitest run methods/*.test.ts hooks/*.test.ts ui/src/*.test.ts",
     "test:canonical-prep": "./scripts/test-canonical-prep-cleanroom.sh",
+    "test:semantic-calibration": "vitest run src/semantic-calibration.spec.ts",
     "verify:production-postflight": "node scripts/verify-dormant-upgrade-postflight.mjs"
   },
   "devDependencies": {
