@@ -36,6 +36,15 @@ import {
   loadMemoryRuns,
   runMemorySearch,
 } from "../ui/controllers/memory-review.ts";
+import {
+  completeSemanticReviewBatch,
+  loadSemanticReviewBatch,
+  loadSemanticReviewBatches,
+  loadSemanticReviewItem,
+  selectSemanticReviewCandidate,
+  setSemanticReviewRouteActive,
+  submitSemanticReviewDecision,
+} from "../ui/controllers/semantic-review.ts";
 import { renderAgentsPage } from "./pages/agents.ts";
 import { renderAgentCreateWizard, type AgentCreateStep, type AgentCreateForm } from "./pages/agent-create.ts";
 import { renderAgentDetail, type AgentDetailTab, type AgentDetailModal } from "./pages/agent-detail.ts";
@@ -154,17 +163,6 @@ function closeWizard(state: AppViewState) {
 // ─── Extended tab type (adds settings) ───────────────────────────────
 type ConsoleActiveView = ConsoleTab | "settings";
 
-function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h`;
-}
-
 const IDENTITY_SUBTABS = new Set<IdentityPageProps["subTab"]>([
   "entities",
   "contacts",
@@ -275,11 +273,10 @@ function ensureConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
     dirty = true;
   }
   if (tab !== "memory") {
-    for (const key of [...url.searchParams.keys()]) {
-      if (key.startsWith("memory_")) {
-        url.searchParams.delete(key);
-        dirty = true;
-      }
+    const memoryKeys = Array.from(url.searchParams.keys()).filter((key) => key.startsWith("memory_"));
+    for (const key of memoryKeys) {
+      url.searchParams.delete(key);
+      dirty = true;
     }
   }
   if (dirty) {
@@ -376,10 +373,9 @@ function syncIdentityRouteState(
   url.searchParams.delete("view");
   url.searchParams.delete("entity");
   url.searchParams.delete("group");
-  for (const key of [...url.searchParams.keys()]) {
-    if (key.startsWith("memory_")) {
-      url.searchParams.delete(key);
-    }
+  const memoryKeys = Array.from(url.searchParams.keys()).filter((key) => key.startsWith("memory_"));
+  for (const key of memoryKeys) {
+    url.searchParams.delete(key);
   }
 
   window.history.replaceState({}, "", url.toString());
@@ -535,7 +531,6 @@ function renderSettingsContent(sub: SettingsSubPage, state?: AppViewState) {
   const userRole = sessionInfo?.role ?? (state?.connected ? "Operator" : "Disconnected");
   const userInitial = userName.charAt(0).toUpperCase();
   const serverName = snapshot?.serverName ?? snapshot?.name ?? "Primary";
-  const uptime = snapshot?.uptimeMs ? formatUptime(snapshot.uptimeMs) : "n/a";
   const isConnected = state?.connected ?? false;
 
   switch (sub) {
@@ -1075,11 +1070,14 @@ export function renderConsoleApp(state: AppViewState) {
         } as IdentityPageProps) : nothing}
 
         ${activeTab === "memory" ? renderMemoryPage({
-          subTab: (state as any)._consoleMemorySubTab ?? "library",
+          subTab: state.memorySubTab,
           onSubTabChange: (sub) => {
-            (state as any)._consoleMemorySubTab = sub;
+            state.memorySubTab = sub;
+            setSemanticReviewRouteActive(sub === "review");
             if (sub === "quality") {
               void loadMemoryQualitySummary(state as any, { loadItems: true });
+            } else if (sub === "review") {
+              void loadSemanticReviewBatches(state as any, { keepSelection: true });
             } else if (
               sub === "search" &&
               !(state as any).memorySearchLoading &&
@@ -1157,8 +1155,63 @@ export function renderConsoleApp(state: AppViewState) {
           onObservationSelect: (id) => {
             void loadMemoryObservationDetail(state as any, id);
           },
+          semanticReview: {
+            loading: state.semanticReviewLoading,
+            error: state.semanticReviewError,
+            batches: state.semanticReviewBatches,
+            selectedBatchId: state.semanticReviewSelectedBatchId,
+            batchLoading: state.semanticReviewBatchLoading,
+            selectedBatch: state.semanticReviewSelectedBatch,
+            items: state.semanticReviewItems,
+            selectedItemId: state.semanticReviewSelectedItemId,
+            itemLoading: state.semanticReviewItemLoading,
+            selectedItem: state.semanticReviewSelectedItem,
+            evidenceLoading: state.semanticReviewEvidenceLoading,
+            evidenceError: state.semanticReviewEvidenceError,
+            evidenceSet: state.semanticReviewEvidenceSet,
+            evidenceMembers: state.semanticReviewEvidenceMembers,
+            decisionBusy: state.semanticReviewDecisionBusy,
+            decisionError: state.semanticReviewDecisionError,
+            decisionMessage: state.semanticReviewDecisionMessage,
+            selectedCandidateId: state.semanticReviewSelectedCandidateId,
+            decisionNotes: state.semanticReviewDecisionNotes,
+            correctedOutputText: state.semanticReviewCorrectedOutputText,
+            reviewerRef: state.semanticReviewReviewerRef,
+            onBatchSelect: (batchId) => {
+              void loadSemanticReviewBatch(state as any, batchId);
+            },
+            onItemSelect: (itemId) => {
+              void loadSemanticReviewItem(state as any, itemId);
+            },
+            onCandidateSelect: (candidateId) => {
+              selectSemanticReviewCandidate(state as any, candidateId);
+              state.requestUpdate();
+            },
+            onDecisionNotesChange: (value) => {
+              state.semanticReviewDecisionNotes = value;
+            },
+            onCorrectedOutputChange: (value) => {
+              state.semanticReviewCorrectedOutputText = value;
+            },
+            onReviewerRefChange: (value) => {
+              state.semanticReviewReviewerRef = value;
+            },
+            onDecide: (decision) => {
+              void submitSemanticReviewDecision(state as any, decision);
+            },
+            onCompleteBatch: () => {
+              void completeSemanticReviewBatch(state as any);
+            },
+            onRefresh: () => {
+              void loadSemanticReviewBatches(state as any, { keepSelection: true });
+            },
+          },
           onRefresh: () => {
-            void loadMemoryRuns(state as any);
+            if (state.memorySubTab === "review") {
+              void loadSemanticReviewBatches(state as any, { keepSelection: true });
+            } else {
+              void loadMemoryRuns(state as any);
+            }
           },
         } as MemoryPageProps) : nothing}
       </main>
