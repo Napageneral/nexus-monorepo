@@ -64,6 +64,7 @@ import type {
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, ScheduleFormState } from "./ui-types.ts";
+import type { SemanticReviewState } from "./semantic-review-types.ts";
 import type { AccessSubTab } from "./views/access-view.ts";
 import type { AdaptersSubTab } from "./views/adapters-view.ts";
 import type { AutomationsSubTab } from "./views/automations-view.ts";
@@ -73,7 +74,7 @@ import type { OperationsSubTab } from "./views/operations-view.ts";
 import type { SystemSubTab } from "./views/system-view.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
-export type AppViewState = {
+export type AppViewState = SemanticReviewState & {
   settings: UiSettings;
   password: string;
   tab: Tab;
@@ -249,7 +250,7 @@ export type AppViewState = {
   memorySearchType: MemoryReviewSearchType;
   memorySearchLoading: boolean;
   memorySearchResult: MemoryReviewSearchResult | null;
-  memorySubTab: "library" | "search" | "operations";
+  memorySubTab: "library" | "search" | "quality" | "review";
   memoryQualityScope: "run" | "global";
   memoryQualityLoading: boolean;
   memoryQualitySummary: MemoryReviewQualitySummary | null;

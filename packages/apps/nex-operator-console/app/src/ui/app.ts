@@ -109,6 +109,12 @@ import {
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ScheduleFormState } from "./ui-types.ts";
+import type {
+  SemanticEvidenceMember,
+  SemanticEvidenceSet,
+  SemanticReviewBatch,
+  SemanticReviewItem,
+} from "./semantic-review-types.ts";
 
 declare global {
   interface Window {
@@ -313,7 +319,7 @@ export class NexusApp extends LitElement {
   @state() memorySearchType: MemoryReviewSearchType = "all";
   @state() memorySearchLoading = false;
   @state() memorySearchResult: MemoryReviewSearchResult | null = null;
-  @state() memorySubTab: "library" | "search" | "operations" = "library";
+  @state() memorySubTab: "library" | "search" | "quality" | "review" = "library";
   @state() memoryQualityScope: "run" | "global" = "run";
   @state() memoryQualityLoading = false;
   @state() memoryQualitySummary: import("./types.js").MemoryReviewQualitySummary | null = null;
@@ -327,6 +333,28 @@ export class NexusApp extends LitElement {
   @state() memoryDetailEntity: MemoryReviewEntityDetail | null = null;
   @state() memoryDetailFact: MemoryReviewFactDetail | null = null;
   @state() memoryDetailObservation: MemoryReviewObservationDetail | null = null;
+
+  @state() semanticReviewLoading = false;
+  @state() semanticReviewError: string | null = null;
+  @state() semanticReviewBatches: SemanticReviewBatch[] = [];
+  @state() semanticReviewSelectedBatchId: string | null = null;
+  @state() semanticReviewBatchLoading = false;
+  @state() semanticReviewSelectedBatch: SemanticReviewBatch | null = null;
+  @state() semanticReviewItems: SemanticReviewItem[] = [];
+  @state() semanticReviewSelectedItemId: string | null = null;
+  @state() semanticReviewItemLoading = false;
+  @state() semanticReviewSelectedItem: SemanticReviewItem | null = null;
+  @state() semanticReviewEvidenceLoading = false;
+  @state() semanticReviewEvidenceError: string | null = null;
+  @state() semanticReviewEvidenceSet: SemanticEvidenceSet | null = null;
+  @state() semanticReviewEvidenceMembers: SemanticEvidenceMember[] = [];
+  @state() semanticReviewDecisionBusy = false;
+  @state() semanticReviewDecisionError: string | null = null;
+  @state() semanticReviewDecisionMessage: string | null = null;
+  @state() semanticReviewSelectedCandidateId: string | null = null;
+  @state() semanticReviewDecisionNotes = "";
+  @state() semanticReviewCorrectedOutputText = "";
+  @state() semanticReviewReviewerRef = "operator:console";
 
   @state() usageLoading = false;
   @state() usageResult: import("./types.js").SessionsUsageResult | null = null;
