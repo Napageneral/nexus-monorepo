@@ -29,7 +29,6 @@ import { loadPresence } from "./controllers/presence.ts";
 import { refreshRecordsSurface } from "./controllers/records.ts";
 import { loadAutomationMeeseeks, loadScheduleJobs } from "./controllers/schedules.ts";
 import { loadSessions } from "./controllers/sessions.ts";
-import { loadSkills } from "./controllers/skills.ts";
 import { loadUsage } from "./controllers/usage.ts";
 import {
   inferBasePathFromPathname,

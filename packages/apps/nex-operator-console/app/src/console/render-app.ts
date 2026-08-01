@@ -163,17 +163,6 @@ function closeWizard(state: AppViewState) {
 // ─── Extended tab type (adds settings) ───────────────────────────────
 type ConsoleActiveView = ConsoleTab | "settings";
 
-function formatUptime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h`;
-}
-
 const IDENTITY_SUBTABS = new Set<IdentityPageProps["subTab"]>([
   "entities",
   "contacts",
@@ -284,11 +273,10 @@ function ensureConsoleRoute(state: AppViewState, tab: ConsoleActiveView) {
     dirty = true;
   }
   if (tab !== "memory") {
-    for (const key of [...url.searchParams.keys()]) {
-      if (key.startsWith("memory_")) {
-        url.searchParams.delete(key);
-        dirty = true;
-      }
+    const memoryKeys = Array.from(url.searchParams.keys()).filter((key) => key.startsWith("memory_"));
+    for (const key of memoryKeys) {
+      url.searchParams.delete(key);
+      dirty = true;
     }
   }
   if (dirty) {
@@ -385,10 +373,9 @@ function syncIdentityRouteState(
   url.searchParams.delete("view");
   url.searchParams.delete("entity");
   url.searchParams.delete("group");
-  for (const key of [...url.searchParams.keys()]) {
-    if (key.startsWith("memory_")) {
-      url.searchParams.delete(key);
-    }
+  const memoryKeys = Array.from(url.searchParams.keys()).filter((key) => key.startsWith("memory_"));
+  for (const key of memoryKeys) {
+    url.searchParams.delete(key);
   }
 
   window.history.replaceState({}, "", url.toString());
@@ -544,7 +531,6 @@ function renderSettingsContent(sub: SettingsSubPage, state?: AppViewState) {
   const userRole = sessionInfo?.role ?? (state?.connected ? "Operator" : "Disconnected");
   const userInitial = userName.charAt(0).toUpperCase();
   const serverName = snapshot?.serverName ?? snapshot?.name ?? "Primary";
-  const uptime = snapshot?.uptimeMs ? formatUptime(snapshot.uptimeMs) : "n/a";
   const isConnected = state?.connected ?? false;
 
   switch (sub) {
