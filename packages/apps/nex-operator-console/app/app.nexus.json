@@ -1,6 +1,6 @@
 {
   "id": "console",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Operator Console",
   "description": "Operator-facing control panel for the core Nex runtime.",
   "icon": "./public/favicon.svg",
