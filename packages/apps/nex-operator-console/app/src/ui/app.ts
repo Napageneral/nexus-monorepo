@@ -110,6 +110,8 @@ import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type ScheduleFormState } from "./ui-types.ts";
 import type {
+  SemanticAttachmentPreview,
+  SemanticEvidenceBundle,
   SemanticEvidenceMember,
   SemanticEvidenceSet,
   SemanticReviewBatch,
@@ -348,6 +350,10 @@ export class NexusApp extends LitElement {
   @state() semanticReviewEvidenceError: string | null = null;
   @state() semanticReviewEvidenceSet: SemanticEvidenceSet | null = null;
   @state() semanticReviewEvidenceMembers: SemanticEvidenceMember[] = [];
+  @state() semanticReviewEvidenceBundle: SemanticEvidenceBundle | null = null;
+  @state() semanticReviewAttachmentLoading = false;
+  @state() semanticReviewAttachmentError: string | null = null;
+  @state() semanticReviewAttachmentPreview: SemanticAttachmentPreview | null = null;
   @state() semanticReviewDecisionBusy = false;
   @state() semanticReviewDecisionError: string | null = null;
   @state() semanticReviewDecisionMessage: string | null = null;

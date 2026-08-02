@@ -111,6 +111,85 @@ export type SemanticEvidenceMember = {
   addedAt: number;
 };
 
+export type SemanticSourceRevisionRef = {
+  revision_id: string;
+  payload_sha256: string;
+  fragment_refs: string[];
+};
+
+export type SemanticEvidenceElement = {
+  id: string;
+  type: string;
+  content: string;
+  as_of: number | null;
+  created_at: number;
+  profile_id: string | null;
+  profile_version: string | null;
+  payload_sha256: string | null;
+  subject_type: string | null;
+  subject_ref: string | null;
+  producer_id: string | null;
+  producer_version: string | null;
+  typed_payload: Record<string, unknown> | null;
+  source_revision_refs: SemanticSourceRevisionRef[];
+};
+
+export type SemanticSourceAttachment = {
+  id: string;
+  filename: string;
+  mime_type: string | null;
+  media_type: string | null;
+  size: number | null;
+  artifact_available: boolean;
+};
+
+export type SemanticSourceEvidence = {
+  revision_id: string;
+  revision_ordinal: number;
+  payload_sha256: string;
+  record_id: string;
+  platform: string;
+  source_record_type: string;
+  source_timestamp: number | null;
+  observed_at: number | null;
+  provider_account_ref: string | null;
+  provider_thread_id: string | null;
+  provider_message_id: string | null;
+  subject: string | null;
+  sender: string | null;
+  recipients: string[];
+  body_text: string | null;
+  direction: string | null;
+  attachments: SemanticSourceAttachment[];
+  fragment_refs: string[];
+  load_error: string | null;
+};
+
+export type SemanticObservationHistoryEntry = {
+  id: string;
+  parent_id: string | null;
+  created_at: number;
+  as_of: number | null;
+  content: string;
+  profile_id: string | null;
+  profile_version: string | null;
+  typed_payload: Record<string, unknown> | null;
+};
+
+export type SemanticEvidenceBundle = {
+  elements: SemanticEvidenceElement[];
+  sources: SemanticSourceEvidence[];
+  observation_history: SemanticObservationHistoryEntry[];
+};
+
+export type SemanticAttachmentPreview = {
+  record_id: string;
+  attachment_id: string;
+  filename: string;
+  mime_type: string;
+  object_url: string;
+};
+
 export type SemanticReviewState = {
   semanticReviewLoading: boolean;
   semanticReviewError: string | null;
@@ -126,6 +205,10 @@ export type SemanticReviewState = {
   semanticReviewEvidenceError: string | null;
   semanticReviewEvidenceSet: SemanticEvidenceSet | null;
   semanticReviewEvidenceMembers: SemanticEvidenceMember[];
+  semanticReviewEvidenceBundle: SemanticEvidenceBundle | null;
+  semanticReviewAttachmentLoading: boolean;
+  semanticReviewAttachmentError: string | null;
+  semanticReviewAttachmentPreview: SemanticAttachmentPreview | null;
   semanticReviewDecisionBusy: boolean;
   semanticReviewDecisionError: string | null;
   semanticReviewDecisionMessage: string | null;

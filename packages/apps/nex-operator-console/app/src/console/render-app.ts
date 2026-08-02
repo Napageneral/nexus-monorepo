@@ -41,6 +41,8 @@ import {
   loadSemanticReviewBatch,
   loadSemanticReviewBatches,
   loadSemanticReviewItem,
+  closeSemanticReviewAttachment,
+  openSemanticReviewAttachment,
   selectSemanticReviewCandidate,
   setSemanticReviewRouteActive,
   submitSemanticReviewDecision,
@@ -1170,6 +1172,10 @@ export function renderConsoleApp(state: AppViewState) {
             evidenceError: state.semanticReviewEvidenceError,
             evidenceSet: state.semanticReviewEvidenceSet,
             evidenceMembers: state.semanticReviewEvidenceMembers,
+            evidenceBundle: state.semanticReviewEvidenceBundle,
+            attachmentLoading: state.semanticReviewAttachmentLoading,
+            attachmentError: state.semanticReviewAttachmentError,
+            attachmentPreview: state.semanticReviewAttachmentPreview,
             decisionBusy: state.semanticReviewDecisionBusy,
             decisionError: state.semanticReviewDecisionError,
             decisionMessage: state.semanticReviewDecisionMessage,
@@ -1185,6 +1191,13 @@ export function renderConsoleApp(state: AppViewState) {
             },
             onCandidateSelect: (candidateId) => {
               selectSemanticReviewCandidate(state as any, candidateId);
+              state.requestUpdate();
+            },
+            onAttachmentOpen: (source, attachment) => {
+              void openSemanticReviewAttachment(state as any, source, attachment);
+            },
+            onAttachmentClose: () => {
+              closeSemanticReviewAttachment(state as any);
               state.requestUpdate();
             },
             onDecisionNotesChange: (value) => {
