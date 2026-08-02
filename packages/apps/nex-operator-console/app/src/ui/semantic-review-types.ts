@@ -136,6 +136,7 @@ export type SemanticEvidenceElement = {
 
 export type SemanticSourceAttachment = {
   id: string;
+  record_id: string;
   filename: string;
   mime_type: string | null;
   media_type: string | null;
@@ -143,6 +144,7 @@ export type SemanticSourceAttachment = {
   artifact_available: boolean;
   custody_state: string | null;
   custody_error: string | null;
+  custody_context: string | null;
 };
 
 export type SemanticSourceEvidence = {

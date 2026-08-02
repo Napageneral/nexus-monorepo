@@ -31,6 +31,7 @@ type MembersListResponse = { members?: SemanticEvidenceMember[] };
 type ElementGetResponse = { element?: Record<string, unknown> };
 type RevisionGetResponse = { revision?: Record<string, unknown> };
 type RecordGetResponse = { record?: Record<string, unknown> };
+type RecordListResponse = { records?: Record<string, unknown>[] };
 type AttachmentGetResponse = {
   attachment?: Record<string, unknown>;
   body_base64?: string;
@@ -169,13 +170,18 @@ function normalizeEvidenceElement(value: Record<string, unknown>): SemanticEvide
   };
 }
 
-function normalizeAttachment(value: unknown): SemanticSourceAttachment | null {
+function normalizeAttachment(
+  value: unknown,
+  recordId: string,
+  custodyContext: string | null = null,
+): SemanticSourceAttachment | null {
   const attachment = asObject(value);
   const id = asString(attachment.id);
   if (!id) return null;
   const metadata = asObject(attachment.metadata);
   return {
     id,
+    record_id: recordId,
     filename: asString(attachment.filename) || "Attachment",
     mime_type: asNullableString(attachment.mime_type),
     media_type: asNullableString(attachment.media_type),
@@ -183,6 +189,7 @@ function normalizeAttachment(value: unknown): SemanticSourceAttachment | null {
     artifact_available: Object.keys(asObject(metadata.artifact)).length > 0,
     custody_state: asNullableString(metadata.custody_state),
     custody_error: asNullableString(metadata.custody_error),
+    custody_context: custodyContext,
   };
 }
 
@@ -212,18 +219,19 @@ function normalizeSourceEvidence(
   const payload = asObject(revision.payload);
   const metadata = asObject(record.metadata);
   const payloadMetadata = asObject(payload.source_metadata);
+  const recordId = asString(revision.record_row_id) || asString(record.id);
   const attachments = (Array.isArray(record.attachments)
     ? record.attachments
     : Array.isArray(payload.attachments)
       ? payload.attachments
       : [])
-    .map(normalizeAttachment)
+    .map((attachment) => normalizeAttachment(attachment, recordId))
     .filter((entry): entry is SemanticSourceAttachment => entry !== null);
   return {
     revision_id: ref.revision_id,
     revision_ordinal: asNullableNumber(revision.revision_ordinal) ?? 0,
     payload_sha256: asString(revision.payload_sha256) || ref.payload_sha256,
-    record_id: asString(revision.record_row_id) || asString(record.id),
+    record_id: recordId,
     platform: asString(revision.platform) || asString(record.platform),
     source_record_type: asString(revision.source_record_type),
     source_timestamp: asNullableNumber(revision.source_timestamp) ?? asNullableNumber(record.timestamp),
@@ -244,6 +252,87 @@ function normalizeSourceEvidence(
     fragment_refs: ref.fragment_refs,
     load_error: loadError,
   };
+}
+
+function recordProviderMessageId(record: Record<string, unknown>): string | null {
+  const metadata = asObject(record.metadata);
+  const payload = asObject(record.payload);
+  return (
+    asNullableString(metadata.message_id) ??
+    asNullableString(metadata.provider_message_id) ??
+    asNullableString(payload.provider_message_id)
+  );
+}
+
+function enrichAttachmentsFromSameProviderMessage(
+  source: SemanticSourceEvidence,
+  records: Record<string, unknown>[],
+): SemanticSourceEvidence {
+  if (!source.provider_message_id) return source;
+  const captured = records
+    .filter((record) => recordProviderMessageId(record) === source.provider_message_id)
+    .flatMap((record) => {
+      const recordId = asString(record.id);
+      if (!recordId || !Array.isArray(record.attachments)) return [];
+      return record.attachments
+        .map((attachment) =>
+          normalizeAttachment(
+            attachment,
+            recordId,
+            recordId === source.record_id
+              ? null
+              : "Captured later from the same provider message; the reviewed source revision remains unchanged.",
+          ),
+        )
+        .filter(
+          (attachment): attachment is SemanticSourceAttachment =>
+            attachment !== null && attachment.artifact_available,
+        );
+    });
+  if (!captured.length) return source;
+
+  const attachments = [...source.attachments];
+  for (const candidate of captured) {
+    const index = attachments.findIndex(
+      (attachment) =>
+        attachment.id === candidate.id ||
+        (attachment.filename === candidate.filename && attachment.size === candidate.size),
+    );
+    if (index >= 0) {
+      if (!attachments[index].artifact_available) attachments[index] = candidate;
+    } else {
+      attachments.push(candidate);
+    }
+  }
+  return { ...source, attachments };
+}
+
+async function loadSameMessageAttachmentCustody(
+  client: RuntimeBrowserClient,
+  source: SemanticSourceEvidence,
+): Promise<SemanticSourceEvidence> {
+  if (
+    !source.provider_message_id ||
+    !source.provider_thread_id ||
+    (source.attachments.length > 0 &&
+      source.attachments.every((attachment) => attachment.artifact_available))
+  ) {
+    return source;
+  }
+  try {
+    const response = await client.request<RecordListResponse>("records.list", {
+      platform: source.platform || "gmail",
+      thread_id: source.provider_thread_id,
+      limit: 1000,
+    });
+    return enrichAttachmentsFromSameProviderMessage(
+      source,
+      Array.isArray(response?.records) ? response.records : [],
+    );
+  } catch {
+    // Optional later-custody lookup must never block review of the exact source.
+    return source;
+  }
 }
 
 function normalizeObservationHistoryEntry(value: Record<string, unknown>): SemanticObservationHistoryEntry {
@@ -317,7 +406,8 @@ async function loadEvidenceBundle(
         const recordResponse = recordId
           ? await client.request<RecordGetResponse>("records.get", { id: recordId })
           : undefined;
-        return normalizeSourceEvidence(ref, revision, recordResponse?.record ?? {}, null);
+        const source = normalizeSourceEvidence(ref, revision, recordResponse?.record ?? {}, null);
+        return loadSameMessageAttachmentCustody(client, source);
       } catch (error) {
         return normalizeSourceEvidence(ref, {}, {}, errorText(error));
       }
@@ -558,7 +648,7 @@ export async function openSemanticReviewAttachment(
     const response = await state.client.request<AttachmentGetResponse>(
       "records.attachments.get",
       {
-        record_id: source.record_id,
+        record_id: attachment.record_id,
         attachment_id: attachment.id,
         include_body: true,
       },
@@ -571,7 +661,7 @@ export async function openSemanticReviewAttachment(
     const bytes = decodeBase64(response.body_base64);
     const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
     state.semanticReviewAttachmentPreview = {
-      record_id: source.record_id,
+      record_id: attachment.record_id,
       attachment_id: attachment.id,
       filename: attachment.filename,
       mime_type: mimeType,

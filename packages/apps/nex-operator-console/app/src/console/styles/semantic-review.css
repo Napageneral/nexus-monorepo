@@ -770,6 +770,13 @@
   text-transform: uppercase;
 }
 
+.semantic-review-attachment-context {
+  margin: calc(var(--console-space-1) * -1) var(--console-space-2) var(--console-space-2);
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+  line-height: var(--console-leading-relaxed);
+}
+
 .semantic-review-attachment {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

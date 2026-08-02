@@ -183,6 +183,8 @@ describe("semantic review controller", () => {
             source_record_type: "message",
             source_timestamp: 1_722_499_100_000,
             observed_at: 1_722_499_200_000,
+            provider_thread_id: "thread-1",
+            provider_message_id: "message-1",
             payload: {},
           },
         };
@@ -210,6 +212,29 @@ describe("semantic review controller", () => {
           },
         };
       }
+      if (method === "records.list") {
+        return {
+          records: [
+            {
+              id: "record-custody-1",
+              platform: "gmail",
+              metadata: { message_id: "message-1" },
+              attachments: [
+                {
+                  id: "attachment-1",
+                  filename: "invoice.pdf",
+                  mime_type: "application/pdf",
+                  size: 482_104,
+                  metadata: {
+                    custody_state: "captured",
+                    artifact: { artifact_id: "artifact-1" },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+      }
       throw new Error(`unexpected method: ${method}`);
     });
     const state = createState(request);
@@ -233,6 +258,13 @@ describe("semantic review controller", () => {
       body_text: "Please see the attached invoice.",
       source_timestamp: 1_722_499_100_000,
       observed_at: 1_722_499_200_000,
+      attachments: [
+        expect.objectContaining({
+          record_id: "record-custody-1",
+          artifact_available: true,
+          custody_context: expect.stringContaining("same provider message"),
+        }),
+      ],
     });
     expect(new URL(window.location.href).searchParams.get("memory_item")).toBe("item-1");
     expect(request.mock.calls.map(([method]) => method)).toEqual([
@@ -244,6 +276,7 @@ describe("semantic review controller", () => {
       "memory.elements.get",
       "records.revisions.get",
       "records.get",
+      "records.list",
     ]);
   });
 
