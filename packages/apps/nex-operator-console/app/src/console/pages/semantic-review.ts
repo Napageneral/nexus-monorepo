@@ -164,14 +164,41 @@ function renderFieldTable(payload: Record<string, unknown> | null) {
 }
 
 function renderAttachment(props: SemanticReviewPageProps, source: SemanticSourceEvidence, attachment: SemanticSourceAttachment) {
+  const selected = props.attachmentPreview?.record_id === source.record_id &&
+    props.attachmentPreview.attachment_id === attachment.id;
+  const unavailableLabel = attachment.custody_state === "skipped_size_limit"
+    ? "Too large"
+    : attachment.custody_state === "failed"
+      ? "Capture failed"
+      : "Metadata only";
   return html`
-    <div class="semantic-review-attachment">
+    <div class="semantic-review-attachment ${selected ? "semantic-review-attachment--selected" : ""}">
       <span class="semantic-review-file-icon" aria-hidden="true">${attachment.mime_type?.includes("pdf") ? "PDF" : "FILE"}</span>
       <span class="semantic-review-attachment-copy"><strong>${attachment.filename}</strong><small>${formatBytes(attachment.size)} · ${attachment.mime_type ?? attachment.media_type ?? "Unknown format"}</small></span>
       ${attachment.artifact_available
-        ? html`<button class="console-btn console-btn--secondary" ?disabled=${props.attachmentLoading} @click=${() => props.onAttachmentOpen(source, attachment)}>Open</button>`
-        : html`<span class="console-badge console-badge--warning" title="The email retained attachment metadata, but its file body is not yet in Nex artifact custody.">File not stored</span>`}
+        ? html`<div class="semantic-review-attachment-action"><span class="console-badge console-badge--success">Verified</span><button class="console-btn console-btn--secondary" ?disabled=${props.attachmentLoading} @click=${() => props.onAttachmentOpen(source, attachment)}>${selected ? "Reload" : "Read"}</button></div>`
+        : html`<span class="console-badge console-badge--warning" title=${attachment.custody_error ?? "The source retained attachment metadata, but its bytes are not in Nex artifact custody."}>${unavailableLabel}</span>`}
     </div>
+  `;
+}
+
+function renderInlineAttachmentPreview(props: SemanticReviewPageProps, source: SemanticSourceEvidence) {
+  const preview = props.attachmentPreview;
+  if (!preview || preview.record_id !== source.record_id) return nothing;
+  const isPdf = preview.mime_type.includes("pdf");
+  const isImage = preview.mime_type.startsWith("image/");
+  return html`
+    <section class="semantic-review-document-preview" aria-label=${`Original attachment: ${preview.filename}`}>
+      <header>
+        <div><p class="console-eyebrow">Original document</p><h4>${preview.filename}</h4></div>
+        <div class="semantic-review-document-actions"><a class="console-btn console-btn--secondary" href=${preview.object_url} download=${preview.filename}>Download</a><button class="console-btn console-btn--ghost" @click=${props.onAttachmentClose}>Close</button></div>
+      </header>
+      ${isPdf
+        ? html`<iframe src=${preview.object_url} title=${preview.filename}></iframe>`
+        : isImage
+          ? html`<img src=${preview.object_url} alt=${preview.filename} />`
+          : html`<div class="semantic-review-document-fallback"><p>This file is preserved and available to download, but cannot be previewed inline.</p></div>`}
+    </section>
   `;
 }
 
@@ -193,6 +220,7 @@ function renderSourceCard(props: SemanticReviewPageProps, source: SemanticSource
       ${source.attachments.length
         ? html`<div class="semantic-review-attachments"><h4>Attachments</h4>${source.attachments.map((attachment) => renderAttachment(props, source, attachment))}</div>`
         : nothing}
+      ${renderInlineAttachmentPreview(props, source)}
       ${source.fragment_refs.length
         ? html`<div class="semantic-review-grounding"><span>Evidence used</span>${source.fragment_refs.map((fragment) => html`<code>${fragment}</code>`)}</div>`
         : nothing}
@@ -308,14 +336,6 @@ function renderDecisionPanel(props: SemanticReviewPageProps, item: SemanticRevie
   `;
 }
 
-function renderAttachmentPreview(props: SemanticReviewPageProps) {
-  const preview = props.attachmentPreview;
-  if (!preview) return nothing;
-  const isPdf = preview.mime_type.includes("pdf");
-  const isImage = preview.mime_type.startsWith("image/");
-  return html`<div class="semantic-review-preview-backdrop" role="dialog" aria-modal="true" aria-label=${preview.filename}><section class="semantic-review-preview"><header><div><p class="console-eyebrow">Original attachment</p><h3>${preview.filename}</h3></div><button class="console-btn console-btn--secondary" @click=${props.onAttachmentClose}>Close</button></header>${isPdf ? html`<iframe src=${preview.object_url} title=${preview.filename}></iframe>` : isImage ? html`<img src=${preview.object_url} alt=${preview.filename} />` : html`<p class="console-muted">This file type is available for download but cannot be previewed inline.</p>`}</section></div>`;
-}
-
 function renderSelectedItem(props: SemanticReviewPageProps) {
   if (props.itemLoading) return renderLoading("Loading review item");
   const item = props.selectedItem;
@@ -326,7 +346,6 @@ function renderSelectedItem(props: SemanticReviewPageProps) {
       ${renderEvidence(props, item)}
       <div class="semantic-review-candidate-workspace"><section class="semantic-review-proposals"><div class="semantic-review-section-title"><div><p class="console-eyebrow">Proposed understanding</p><h3>What Nex thinks this means</h3><p>Model identities stay hidden until your decision is recorded.</p></div></div>${renderCandidates(props, item)}</section><section class="semantic-review-comparison-section"><div class="semantic-review-panel-heading"><div><h3>Meaningful differences</h3><p>Only fields on which the analyses disagree.</p></div></div>${renderComparisons(item)}</section>${renderDecisionPanel(props, item)}</div>
     </div>
-    ${renderAttachmentPreview(props)}
   `;
 }
 
