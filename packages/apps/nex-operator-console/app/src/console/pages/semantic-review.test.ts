@@ -267,6 +267,7 @@ describe("semantic review page", () => {
                 attachments: [
                   {
                     id: "attachment-1",
+                    record_id: "record-1",
                     filename: "invoice-27968.pdf",
                     mime_type: "application/pdf",
                     media_type: "document",
@@ -274,6 +275,7 @@ describe("semantic review page", () => {
                     artifact_available: true,
                     custody_state: "captured",
                     custody_error: null,
+                    custody_context: null,
                   },
                 ],
               },

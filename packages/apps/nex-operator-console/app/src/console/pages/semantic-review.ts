@@ -164,7 +164,7 @@ function renderFieldTable(payload: Record<string, unknown> | null) {
 }
 
 function renderAttachment(props: SemanticReviewPageProps, source: SemanticSourceEvidence, attachment: SemanticSourceAttachment) {
-  const selected = props.attachmentPreview?.record_id === source.record_id &&
+  const selected = props.attachmentPreview?.record_id === attachment.record_id &&
     props.attachmentPreview.attachment_id === attachment.id;
   const unavailableLabel = attachment.custody_state === "skipped_size_limit"
     ? "Too large"
@@ -179,12 +179,21 @@ function renderAttachment(props: SemanticReviewPageProps, source: SemanticSource
         ? html`<div class="semantic-review-attachment-action"><span class="console-badge console-badge--success">Verified</span><button class="console-btn console-btn--secondary" ?disabled=${props.attachmentLoading} @click=${() => props.onAttachmentOpen(source, attachment)}>${selected ? "Reload" : "Read"}</button></div>`
         : html`<span class="console-badge console-badge--warning" title=${attachment.custody_error ?? "The source retained attachment metadata, but its bytes are not in Nex artifact custody."}>${unavailableLabel}</span>`}
     </div>
+    ${attachment.custody_context
+      ? html`<p class="semantic-review-attachment-context">${attachment.custody_context}</p>`
+      : nothing}
   `;
 }
 
 function renderInlineAttachmentPreview(props: SemanticReviewPageProps, source: SemanticSourceEvidence) {
   const preview = props.attachmentPreview;
-  if (!preview || preview.record_id !== source.record_id) return nothing;
+  if (
+    !preview ||
+    !source.attachments.some(
+      (attachment) =>
+        attachment.record_id === preview.record_id && attachment.id === preview.attachment_id,
+    )
+  ) return nothing;
   const isPdf = preview.mime_type.includes("pdf");
   const isImage = preview.mime_type.startsWith("image/");
   return html`
