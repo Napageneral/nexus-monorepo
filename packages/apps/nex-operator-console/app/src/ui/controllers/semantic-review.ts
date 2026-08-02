@@ -181,6 +181,8 @@ function normalizeAttachment(value: unknown): SemanticSourceAttachment | null {
     media_type: asNullableString(attachment.media_type),
     size: asNullableNumber(attachment.size),
     artifact_available: Object.keys(asObject(metadata.artifact)).length > 0,
+    custody_state: asNullableString(metadata.custody_state),
+    custody_error: asNullableString(metadata.custody_error),
   };
 }
 

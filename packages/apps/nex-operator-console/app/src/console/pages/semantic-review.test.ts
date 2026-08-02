@@ -117,6 +117,10 @@ function props(overrides: Partial<SemanticReviewPageProps> = {}): SemanticReview
         addedAt: 1_722_499_205_000,
       },
     ],
+    evidenceBundle: null,
+    attachmentLoading: false,
+    attachmentError: null,
+    attachmentPreview: null,
     decisionBusy: false,
     decisionError: null,
     decisionMessage: null,
@@ -127,6 +131,8 @@ function props(overrides: Partial<SemanticReviewPageProps> = {}): SemanticReview
     onBatchSelect: vi.fn(),
     onItemSelect: vi.fn(),
     onCandidateSelect: vi.fn(),
+    onAttachmentOpen: vi.fn(),
+    onAttachmentClose: vi.fn(),
     onDecisionNotesChange: vi.fn(),
     onCorrectedOutputChange: vi.fn(),
     onReviewerRefChange: vi.fn(),
@@ -225,5 +231,98 @@ describe("semantic review page", () => {
       button?.click();
       expect(onDecide).toHaveBeenLastCalledWith(decision);
     }
+  });
+
+  it("keeps a verified source document inline with its source record and extracted facts", () => {
+    const onAttachmentOpen = vi.fn();
+    const onAttachmentClose = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    render(
+      renderSemanticReviewPage(
+        props({
+          onAttachmentOpen,
+          onAttachmentClose,
+          evidenceBundle: {
+            sources: [
+              {
+                revision_id: "revision-1",
+                revision_ordinal: 1,
+                payload_sha256: "a".repeat(64),
+                record_id: "record-1",
+                platform: "gmail",
+                source_record_type: "gmail_message",
+                source_timestamp: 1_722_499_000_000,
+                observed_at: 1_722_499_100_000,
+                provider_account_ref: "finance@example.invalid",
+                provider_thread_id: "thread-1",
+                provider_message_id: "message-1",
+                subject: "Invoice 27968",
+                sender: "Borden Textile",
+                recipients: ["MoonSleep"],
+                body_text: "Please find the invoice attached.",
+                direction: "inbound",
+                fragment_refs: ["attachment:invoice.pdf"],
+                load_error: null,
+                attachments: [
+                  {
+                    id: "attachment-1",
+                    filename: "invoice-27968.pdf",
+                    mime_type: "application/pdf",
+                    media_type: "document",
+                    size: 668_514,
+                    artifact_available: true,
+                    custody_state: "captured",
+                    custody_error: null,
+                  },
+                ],
+              },
+            ],
+            elements: [
+              {
+                id: "fact-1",
+                type: "fact",
+                content: "Invoice total is $22,834.95",
+                as_of: 1_722_499_000_000,
+                created_at: 1_722_499_100_000,
+                profile_id: "finance.supplier_invoice.v1",
+                profile_version: "1.0.0",
+                payload_sha256: "b".repeat(64),
+                subject_type: "supplier_invoice",
+                subject_ref: "supplier-invoice:borden:27968",
+                producer_id: "fixture",
+                producer_version: "1",
+                typed_payload: { invoice_total_minor_units: 2_283_495 },
+                source_revision_refs: [],
+              },
+            ],
+            observation_history: [],
+          },
+          attachmentPreview: {
+            record_id: "record-1",
+            attachment_id: "attachment-1",
+            filename: "invoice-27968.pdf",
+            mime_type: "application/pdf",
+            object_url: "blob:invoice-27968",
+          },
+        }),
+      ),
+      container,
+    );
+
+    expect(container.textContent).toContain("Please find the invoice attached.");
+    expect(container.textContent).toContain("Invoice total is $22,834.95");
+    expect(container.textContent).toContain("Verified");
+    expect(container.querySelector('.semantic-review-document-preview iframe')).not.toBeNull();
+    const readButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (entry) => entry.textContent?.trim() === "Reload",
+    );
+    readButton?.click();
+    expect(onAttachmentOpen).toHaveBeenCalled();
+    const closeButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (entry) => entry.textContent?.trim() === "Close",
+    );
+    closeButton?.click();
+    expect(onAttachmentClose).toHaveBeenCalledOnce();
   });
 });

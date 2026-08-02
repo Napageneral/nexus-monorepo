@@ -781,6 +781,18 @@
   background: var(--console-bg-raised);
 }
 
+.semantic-review-attachment--selected {
+  border-color: var(--console-gold);
+  box-shadow: inset 3px 0 0 var(--console-gold);
+}
+
+.semantic-review-attachment-action,
+.semantic-review-document-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+}
+
 .semantic-review-file-icon {
   display: inline-grid;
   place-items: center;
@@ -804,6 +816,45 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.semantic-review-document-preview {
+  margin: 0 var(--console-space-3) var(--console-space-3);
+  overflow: hidden;
+  border: 1px solid var(--console-border-strong);
+  border-radius: var(--console-radius-md);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-document-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-document-preview h4 {
+  margin: 0;
+  color: var(--console-text-strong);
+  font-size: var(--console-text-sm);
+}
+
+.semantic-review-document-preview iframe,
+.semantic-review-document-preview img {
+  display: block;
+  width: 100%;
+  height: min(660px, 68vh);
+  border: 0;
+  object-fit: contain;
+  background: #ededeb;
+}
+
+.semantic-review-document-fallback {
+  padding: var(--console-space-5);
+  color: var(--console-text-muted);
+  text-align: center;
 }
 
 .semantic-review-attachment-copy strong {
@@ -1133,13 +1184,25 @@
     flex-direction: column;
   }
 
-  .semantic-review-preview-backdrop {
-    padding: 0;
+  .semantic-review-attachment {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .semantic-review-preview {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
+  .semantic-review-attachment-action {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .semantic-review-document-preview > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .semantic-review-document-actions {
+    width: 100%;
+  }
+
+  .semantic-review-document-actions .console-btn {
+    flex: 1;
   }
 }

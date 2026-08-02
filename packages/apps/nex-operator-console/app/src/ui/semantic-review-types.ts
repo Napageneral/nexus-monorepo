@@ -141,6 +141,8 @@ export type SemanticSourceAttachment = {
   media_type: string | null;
   size: number | null;
   artifact_available: boolean;
+  custody_state: string | null;
+  custody_error: string | null;
 };
 
 export type SemanticSourceEvidence = {
