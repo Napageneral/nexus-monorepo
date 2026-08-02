@@ -81,6 +81,10 @@ function createState(
     semanticReviewEvidenceError: null,
     semanticReviewEvidenceSet: null,
     semanticReviewEvidenceMembers: [],
+    semanticReviewEvidenceBundle: null,
+    semanticReviewAttachmentLoading: false,
+    semanticReviewAttachmentError: null,
+    semanticReviewAttachmentPreview: null,
     semanticReviewDecisionBusy: false,
     semanticReviewDecisionError: null,
     semanticReviewDecisionMessage: null,
@@ -141,6 +145,71 @@ describe("semantic review controller", () => {
           ],
         };
       }
+      if (method === "memory.elements.get") {
+        return {
+          element: {
+            id: "fact-1",
+            type: "fact",
+            content: "Invoice 27968 is due for $15,569.51.",
+            as_of: 1_722_499_100_000,
+            created_at: 1_722_499_220_000,
+            profile_id: "finance.supplier_invoice.v1",
+            profile_version: "1.0.0",
+            payload_sha256: "5".repeat(64),
+            metadata: {
+              typed_payload: {
+                invoice_ref: "27968",
+                amount_due_minor_units: 1_556_951,
+              },
+              source_revision_refs: [
+                {
+                  revision_id: "revision-1",
+                  payload_sha256: "6".repeat(64),
+                  fragment_refs: ["attachment:invoice.pdf:page:1"],
+                },
+              ],
+            },
+          },
+        };
+      }
+      if (method === "records.revisions.get") {
+        return {
+          revision: {
+            revision_id: "revision-1",
+            revision_ordinal: 1,
+            payload_sha256: "6".repeat(64),
+            record_row_id: "record-1",
+            platform: "gmail",
+            source_record_type: "message",
+            source_timestamp: 1_722_499_100_000,
+            observed_at: 1_722_499_200_000,
+            payload: {},
+          },
+        };
+      }
+      if (method === "records.get") {
+        return {
+          record: {
+            id: "record-1",
+            platform: "gmail",
+            metadata: {
+              subject: "Inv # 27968",
+              from: "Jim at Borden",
+              to: "MoonSleep",
+              body_text: "Please see the attached invoice.",
+            },
+            attachments: [
+              {
+                id: "attachment-1",
+                filename: "invoice.pdf",
+                mime_type: "application/pdf",
+                size: 482_104,
+                metadata: {},
+              },
+            ],
+          },
+        };
+      }
       throw new Error(`unexpected method: ${method}`);
     });
     const state = createState(request);
@@ -154,6 +223,17 @@ describe("semantic review controller", () => {
     expect(state.semanticReviewSelectedItem?.input_set_digest).toBe("2".repeat(64));
     expect(state.semanticReviewEvidenceSet?.sealedAt).toBe(1_722_499_210_000);
     expect(state.semanticReviewEvidenceMembers.map((entry) => entry.memberId)).toEqual(["fact-1"]);
+    expect(state.semanticReviewEvidenceBundle?.elements[0]?.typed_payload).toMatchObject({
+      invoice_ref: "27968",
+      amount_due_minor_units: 1_556_951,
+    });
+    expect(state.semanticReviewEvidenceBundle?.sources[0]).toMatchObject({
+      subject: "Inv # 27968",
+      sender: "Jim at Borden",
+      body_text: "Please see the attached invoice.",
+      source_timestamp: 1_722_499_100_000,
+      observed_at: 1_722_499_200_000,
+    });
     expect(new URL(window.location.href).searchParams.get("memory_item")).toBe("item-1");
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "memory.calibration.batches.list",
@@ -161,6 +241,9 @@ describe("semantic review controller", () => {
       "memory.calibration.items.get",
       "memory.sets.get",
       "memory.sets.members.list",
+      "memory.elements.get",
+      "records.revisions.get",
+      "records.get",
     ]);
   });
 
