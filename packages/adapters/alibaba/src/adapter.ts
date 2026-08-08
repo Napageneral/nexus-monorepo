@@ -18,6 +18,7 @@ import {
   type AdapterInboundRecord,
   defineAdapter,
 } from "@nexus-project/adapter-sdk-ts";
+import { normalizeAlibabaAttachmentMime } from "./attachment-mime.ts";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -605,25 +606,6 @@ function pathWithin(root: string, candidate: string): boolean {
   return value === "" || (!value.startsWith("..") && !isAbsolute(value));
 }
 
-function sha256File(path: string | undefined, maxBytes: number): string | undefined {
-  if (!path || !existsSync(path)) return undefined;
-  return sha256Bytes(readBoundFile(path, maxBytes));
-}
-
-function mimeType(attachment: AlibabaAttachment): string {
-  const explicit = textValue(attachment.contentType);
-  if (explicit && explicit !== "application/octet-stream") return explicit;
-  const name = String(attachment.fileName ?? "").toLowerCase();
-  if (name.includes(".pdf")) return "application/pdf";
-  if (/\.png(-|$)/.test(name)) return "image/png";
-  if (/\.jpe?g(-|$)/.test(name)) return "image/jpeg";
-  if (/\.webp(-|$)/.test(name)) return "image/webp";
-  if (/\.gif(-|$)/.test(name)) return "image/gif";
-  if (/\.(xlsx?)(-|$)/.test(name)) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  if (/\.(docx?)(-|$)/.test(name)) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  return "application/octet-stream";
-}
-
 function readAttachmentText(
   attachment: AlibabaAttachment,
   snapshot: LoadedSnapshot,
@@ -690,21 +672,31 @@ function normalizeAttachment(
 ) {
   const localPath = resolveAttachmentPath(attachment, config, snapshot.ref);
   const fileName = textValue(attachment.fileName) ?? `attachment-${index + 1}`;
-  const contentHash = sha256File(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
   const sealedContentHash = textValue(attachment.contentHash);
-  if (sealedContentHash && (!SHA256.test(sealedContentHash) || sealedContentHash !== contentHash)) {
+  if (!localPath) {
+    throw new Error(`Alibaba attachment evidence is missing: ${fileName}`);
+  }
+  if (!sealedContentHash || !SHA256.test(sealedContentHash)) {
+    throw new Error(`Alibaba attachment sealed digest is invalid: ${fileName}`);
+  }
+  const evidenceBytes = readBoundFile(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
+  const contentHash = sha256Bytes(evidenceBytes);
+  if (sealedContentHash !== contentHash) {
     throw new Error(`Alibaba attachment digest mismatch: ${fileName}`);
   }
+  const sealedBytes = Number(attachment.bytes);
+  if (!Number.isSafeInteger(sealedBytes) || sealedBytes < 0 || sealedBytes !== evidenceBytes.length) {
+    throw new Error(`Alibaba attachment sealed byte count mismatch: ${fileName}`);
+  }
+  const normalizedMime = normalizeAlibabaAttachmentMime(evidenceBytes, attachment.contentType);
   return {
     id: `alibaba:attachment:${attachmentLogicalIdentity(attachment)}`,
     filename: fileName,
-    mime_type: mimeType(attachment),
+    mime_type: normalizedMime,
     ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
-    ...(Number.isFinite(Number(attachment.bytes)) && Number(attachment.bytes) >= 0
-      ? { size: Math.floor(Number(attachment.bytes)) }
-      : {}),
-    ...(localPath && existsSync(localPath) ? { local_path: localPath } : {}),
-    ...(contentHash ? { content_hash: contentHash } : {}),
+    size: evidenceBytes.length,
+    local_path: localPath,
+    content_hash: contentHash,
     metadata: {
       evidence_status: textValue(attachment.status) ?? "unknown",
       snapshot_id: snapshot.ref.id,

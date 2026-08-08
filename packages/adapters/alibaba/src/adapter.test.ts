@@ -14,6 +14,12 @@ import test from "node:test";
 import { AdapterInboundRecordSchema } from "@nexus-project/adapter-sdk-ts";
 import { __test__ } from "./adapter.ts";
 
+const PDF_BYTES = Buffer.from("%PDF-1.7\nimmutable pdf fixture\n%%EOF\n", "ascii");
+const PNG_BYTES = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZlJ8AAAAASUVORK5CYII=",
+  "base64",
+);
+
 function writeJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value)}\n`);
 }
@@ -71,9 +77,9 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
   const attachmentTextPath = join(attachmentTextDir, "shipping-schedule.pdf.txt");
   const orphanAttachmentPath = join(attachmentDir, "orphan-sample.png");
   const orphanAttachmentTextPath = join(attachmentTextDir, "orphan-sample.png.txt");
-  writeFileSync(attachmentPath, "immutable pdf bytes");
+  writeFileSync(attachmentPath, PDF_BYTES);
   writeFileSync(attachmentTextPath, "Vessel booking and ETA are still pending.");
-  writeFileSync(orphanAttachmentPath, "immutable image bytes");
+  writeFileSync(orphanAttachmentPath, PNG_BYTES);
   writeFileSync(orphanAttachmentTextPath, "Unlinked sample evidence.");
   writeJson(join(snapshotPath, "summary.json"), {
     generatedAt: "2026-07-17T16:00:00.000Z",
@@ -117,7 +123,7 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
     {
       fileName: "shipping-schedule.pdf",
       category: "document",
-      bytes: 19,
+      bytes: PDF_BYTES.length,
       contentType: "application/pdf",
       contentHash: sha256(attachmentPath),
       messageId: "m-1",
@@ -132,7 +138,7 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
     {
       fileName: "orphan-sample.png",
       category: "image",
-      bytes: 21,
+      bytes: PNG_BYTES.length,
       contentType: "image/png",
       contentHash: sha256(orphanAttachmentPath),
       messageId: "provider-message-not-in-export",
@@ -268,6 +274,7 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     "conn-alibaba",
   );
   assert.equal(attachmentRecord.payload.attachments?.[0]?.local_path, attachmentPath);
+  assert.equal(attachmentRecord.payload.attachments?.[0]?.mime_type, "application/pdf");
   assert.match(attachmentRecord.payload.attachments?.[0]?.content_hash ?? "", /^[a-f0-9]{64}$/);
   assert.match(attachmentRecord.payload.content, /Vessel booking and ETA/);
   const sourceAttachment = String(attachmentRecord.payload.payload?.provider_attachment_json ?? "");
@@ -279,6 +286,56 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   assert.doesNotThrow(() => AdapterInboundRecordSchema.parse(record));
   assert.doesNotMatch(JSON.stringify(record), /must-not-leak|chatToken|encryptedAccount/);
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
+});
+
+test("byte-derived MIME normalization preserves attachment identity and revision custody", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  const explicit = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  attachment.contentType = "application/octet-stream";
+  const generic = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(generic.payload.attachments?.[0]?.mime_type, "application/pdf");
+  assert.equal(generic.payload.external_record_id, explicit.payload.external_record_id);
+  assert.equal(generic.payload.metadata?.logical_record_id, explicit.payload.metadata?.logical_record_id);
+  assert.equal(generic.payload.metadata?.revision_hash, explicit.payload.metadata?.revision_hash);
+});
+
+test("attachment custody fails on byte-count, digest, or provider-MIME contradictions", () => {
+  const { root, attachmentPath } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  const sealedBytes = attachment.bytes;
+  const sealedDigest = attachment.contentHash;
+
+  attachment.bytes = Number(sealedBytes) + 1;
+  assert.throws(
+    () => __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba"),
+    /sealed byte count mismatch/,
+  );
+  attachment.bytes = sealedBytes;
+  attachment.contentHash = "f".repeat(64);
+  assert.throws(
+    () => __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba"),
+    /attachment digest mismatch/,
+  );
+  attachment.contentHash = sealedDigest;
+  attachment.contentType = "image/png";
+  assert.equal(sha256(attachmentPath), sealedDigest);
+  assert.throws(
+    () => __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba"),
+    /provider content type contradicts sealed bytes/,
+  );
 });
 
 test("capture-level provenance cannot change immutable message identity or payload", () => {
@@ -423,7 +480,7 @@ test("changed attachment bytes create a new revision without changing the parent
     config(root),
     "conn-alibaba",
   );
-  const revisedBytes = Buffer.from("revised immutable attachment bytes");
+  const revisedBytes = Buffer.from("%PDF-1.7\nrevised immutable attachment fixture\n%%EOF\n", "ascii");
   writeFileSync(attachmentPath, revisedBytes);
   attachment.bytes = revisedBytes.length;
   attachment.contentHash = createHash("sha256").update(revisedBytes).digest("hex");
@@ -518,6 +575,6 @@ test("attachment paths outside the sealed snapshot boundary are not read", () =>
   };
   assert.throws(
     () => __test__.buildAttachmentRecord(snapshot.attachments[0]!, snapshot, config(root), "conn-alibaba"),
-    /attachment digest mismatch/,
+    /attachment evidence is missing/,
   );
 });
