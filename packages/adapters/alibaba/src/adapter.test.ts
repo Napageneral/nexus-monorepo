@@ -123,6 +123,9 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
       messageId: "m-1",
       cid: "surewal-thread",
       parentMessageCaptured: true,
+      parentMessageDirection: "incoming",
+      parentMessageSpeaker: "Rebecca Liu",
+      parentMessageTimestamp: 1784300000000,
       localPath: attachmentPath,
       status: "downloaded",
     },
@@ -381,6 +384,27 @@ test("every linked and unlinked attachment is a standalone immutable record", ()
     1,
   );
   assert.equal(rows.find((row) => row.payload.metadata?.message_id === "m-1")?.payload.attachments, undefined);
+});
+
+test("attachment-only deltas retain exact parent direction, speaker, timestamp, and recipient", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  snapshot.messagesById.delete("m-1");
+  attachment.parentMessageDirection = "outgoing";
+  attachment.parentMessageSpeaker = "MoonSleep";
+  attachment.parentMessageTimestamp = "2026-07-17T14:58:20.000Z";
+  const record = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(record.routing.sender_id, "moonsleep-alibaba");
+  assert.equal(record.routing.sender_name, "MoonSleep Alibaba");
+  assert.deepEqual(record.payload.recipients, ["supplier-ali"]);
+  assert.equal(record.payload.timestamp, Date.parse("2026-07-17T14:58:20.000Z"));
+  assert.equal(record.payload.metadata?.timestamp_basis, "provider_message_timestamp");
 });
 
 test("changed attachment bytes create a new revision without changing the parent message", () => {
