@@ -26,20 +26,29 @@ Matching root and adapter completion receipts bind projection digests, counts, c
 
 ## Record model
 
-One Alibaba Messenger message maps to one canonical Nex record.
+Each Alibaba Messenger message maps to one canonical message record. Each
+attachment row, linked or unlinked, maps to a separate canonical attachment
+record. An attachment-byte or extraction revision therefore never mutates or
+re-identifies its parent message.
 
 - platform: `alibaba`
 - external record id: connection, message identity, and exact revision hash
 - space: the authenticated MoonSleep Alibaba buyer account
 - container and thread: the supplier conversation id
 - sender and receiver: derived from message direction and sanitized conversation identity
-- content: message body plus bounded extracted attachment text
-- opaque payload: exact sanitized provider JSON line, its SHA-256, and exact snapshot/projection receipt references
-- attachments: bounded local evidence path, MIME type, size, and verified SHA-256 when available
+- message content: exact normalized message body
+- attachment content: a bounded human-readable extraction excerpt
+- opaque payload: exact sanitized provider JSON line and its SHA-256
+- attachment descriptor: bounded local evidence path, MIME type, size, and verified SHA-256 when available
 
 The normalized record must not contain raw capture objects, chat tokens, signed attachment URLs, cookies, or encrypted session identifiers. The sanitized provider JSON line is authoritative source evidence and is not merged into Nex metadata.
 
-If the provider attachment index references a message absent from the normalized message export, the adapter emits a separate `orphan_attachment` evidence record in the same native conversation. It preserves the exact sanitized attachment row, digest, bytes, extracted text, unresolved attribution, and an explicit `orphan_attachment_evidence` coverage disposition. It must never silently drop the row or guess its sender.
+The capture projection explicitly records whether the provider message was
+present in the complete source snapshot. Linked attachment records carry a
+`linked_attachment_evidence` disposition even when a delta publication omits
+the unchanged parent message. Truly unlinked rows carry
+`orphan_attachment_evidence`, preserve unresolved attribution, and never guess
+their sender. No attachment row may be silently dropped.
 
 ## Delivery and deduplication
 
