@@ -241,7 +241,7 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     config(root),
     "conn-alibaba",
   );
-  assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message-v2:m-1:[a-f0-9]{64}$/);
+  assert.equal(record.payload.external_record_id, "alibaba:conn-alibaba:message-v3:m-1");
   assert.equal(record.routing.container_id, "surewal-thread");
   assert.equal(record.routing.receiver_id, "conn-alibaba");
   assert.equal(record.payload.recipients, undefined);
@@ -424,7 +424,11 @@ test("changed attachment bytes create a new revision without changing the parent
     config(root),
     "conn-alibaba",
   );
-  assert.notEqual(attachmentAfter.payload.external_record_id, attachmentBefore.payload.external_record_id);
+  assert.equal(attachmentAfter.payload.external_record_id, attachmentBefore.payload.external_record_id);
+  assert.notEqual(
+    attachmentAfter.payload.metadata?.revision_hash,
+    attachmentBefore.payload.metadata?.revision_hash,
+  );
   assert.equal(
     attachmentAfter.payload.metadata?.logical_record_id,
     attachmentBefore.payload.metadata?.logical_record_id,

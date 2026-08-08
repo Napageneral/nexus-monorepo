@@ -768,7 +768,10 @@ function buildRecord(
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v2:${safeIdToken(message.messageId)}:${revisionHash}`,
+      // Nex keys the canonical record by external_record_id and derives immutable
+      // revisions from later payload changes. Keep the provider message identity
+      // stable here; the exact provider/payload digest remains in revision_hash.
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v3:${safeIdToken(message.messageId)}`,
       timestamp,
       content,
       content_type: "text",
@@ -865,7 +868,10 @@ function buildAttachmentRecord(
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-v3:${sourceIdentity}:${revisionHash}`,
+      // Attachment content and extraction changes belong to the same canonical
+      // record. The logical provider identity is stable while revision_hash binds
+      // the exact bytes/extraction state for Nex revision custody.
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-v3:${sourceIdentity}`,
       timestamp,
       content,
       content_type: "text",
