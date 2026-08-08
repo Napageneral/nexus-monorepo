@@ -108,6 +108,7 @@ type AlibabaAttachment = {
   objectPath?: string | null;
   contentHash?: string | null;
   status?: string | null;
+  parentMessageCaptured?: boolean | null;
   provider_object_json: string;
   provider_object_sha256: string;
 };
@@ -124,6 +125,8 @@ type LoadedSnapshot = {
   ref: SnapshotRef;
   conversations: Map<string, AlibabaConversation>;
   messages: AlibabaMessage[];
+  messagesById: Map<string, AlibabaMessage>;
+  attachments: AlibabaAttachment[];
   attachmentsByMessage: Map<string, AlibabaAttachment[]>;
   orphanAttachments: AlibabaAttachment[];
   textByFile: Map<string, AttachmentText>;
@@ -519,13 +522,25 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     .sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
   const attachmentsByMessage = new Map<string, AlibabaAttachment[]>();
   const attachments = parseAttachmentJsonl(attachmentBytes);
+  const messagesById = new Map(messages.map((message) => [message.messageId, message]));
   const messageIds = new Set(messages.map((message) => message.messageId));
   const orphanAttachments: AlibabaAttachment[] = [];
+  const attachmentIdentities = new Set<string>();
   for (const attachment of attachments) {
+    const identity = attachmentLogicalIdentity(attachment);
+    if (attachmentIdentities.has(identity)) {
+      throw new Error(`Alibaba attachment identity is duplicated: ${identity}`);
+    }
+    attachmentIdentities.add(identity);
     const messageId = textValue(attachment.messageId);
-    if (!messageId || !messageIds.has(messageId)) {
+    const parentCaptured = attachment.parentMessageCaptured === true
+      || (attachment.parentMessageCaptured == null && Boolean(messageId && messageIds.has(messageId)));
+    if (!parentCaptured) {
       orphanAttachments.push(attachment);
       continue;
+    }
+    if (!messageId) {
+      throw new Error("Alibaba linked attachment has no provider message id");
     }
     const rows = attachmentsByMessage.get(messageId) ?? [];
     rows.push(attachment);
@@ -546,7 +561,16 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
   ) {
     throw new Error(`Alibaba snapshot receipt counts do not match projection: ${ref.id}`);
   }
-  return { ref, conversations, messages, attachmentsByMessage, orphanAttachments, textByFile };
+  return {
+    ref,
+    conversations,
+    messages,
+    messagesById,
+    attachments,
+    attachmentsByMessage,
+    orphanAttachments,
+    textByFile,
+  };
 }
 
 function messageTimestamp(message: AlibabaMessage): number {
@@ -669,7 +693,7 @@ function normalizeAttachment(
     throw new Error(`Alibaba attachment digest mismatch: ${fileName}`);
   }
   return {
-    id: `alibaba:${textValue(attachment.messageId) ?? "unlinked"}:${index + 1}`,
+    id: `alibaba:attachment:${attachmentLogicalIdentity(attachment)}`,
     filename: fileName,
     mime_type: mimeType(attachment),
     ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
@@ -687,30 +711,6 @@ function normalizeAttachment(
   };
 }
 
-function buildContent(
-  message: AlibabaMessage,
-  attachments: AlibabaAttachment[],
-  snapshot: LoadedSnapshot,
-  config: AlibabaRuntimeConfig,
-): string {
-  const sections: string[] = [];
-  const body = textValue(message.text);
-  if (body) sections.push(body);
-  let remaining = config.attachment_text_limit;
-  for (const attachment of attachments) {
-    const fileName = textValue(attachment.fileName) ?? "attachment";
-    const extracted = readAttachmentText(attachment, snapshot, config);
-    if (extracted && remaining > 0) {
-      const excerpt = extracted.slice(0, remaining);
-      sections.push(`[Attachment: ${fileName}]\n${excerpt}`);
-      remaining -= excerpt.length;
-    } else {
-      sections.push(`[Attachment: ${fileName}]`);
-    }
-  }
-  return sections.join("\n\n") || "[Alibaba message without a text body]";
-}
-
 function buildRecord(
   message: AlibabaMessage,
   snapshot: LoadedSnapshot,
@@ -718,7 +718,6 @@ function buildRecord(
   connectionId: string,
 ): AdapterInboundRecord {
   const conversation = snapshot.conversations.get(message.cid);
-  const attachments = snapshot.attachmentsByMessage.get(message.messageId) ?? [];
   const incoming = message.direction !== "outgoing";
   const supplierId = textValue(conversation?.aliId) ?? `conversation:${message.cid}`;
   const supplierName =
@@ -730,21 +729,10 @@ function buildRecord(
   const timestamp = messageTimestamp(message);
   if (!timestamp) throw new Error(`Alibaba message ${message.messageId} has no timestamp`);
 
-  const normalizedAttachments = attachments.map((attachment, index) =>
-    normalizeAttachment(attachment, index, snapshot, config)
-  );
-
-  const content = buildContent(message, attachments, snapshot, config);
+  const content = textValue(message.text) ?? "[Alibaba message without a text body]";
   const revisionHash = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: message.provider_object_sha256,
     content,
-    attachments: normalizedAttachments.map((attachment) => ({
-      id: attachment.id,
-      filename: attachment.filename,
-      size: attachment.size ?? null,
-      content_hash: attachment.content_hash ?? null,
-      evidence_status: attachment.metadata.evidence_status,
-    })),
   }), "utf8"));
   const logicalMessageId = `message:${message.messageId}`;
 
@@ -780,7 +768,10 @@ function buildRecord(
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v2:${safeIdToken(message.messageId)}:${revisionHash}`,
+      // Nex keys the canonical record by external_record_id and derives immutable
+      // revisions from later payload changes. Keep the provider message identity
+      // stable here; the exact provider/payload digest remains in revision_hash.
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v3:${safeIdToken(message.messageId)}`,
       timestamp,
       content,
       content_type: "text",
@@ -788,14 +779,9 @@ function buildRecord(
       payload: {
         provider_object_json: message.provider_object_json,
         provider_object_sha256: message.provider_object_sha256,
-        source_attachments: attachments.map((attachment) => ({
-          provider_object_json: attachment.provider_object_json,
-          provider_object_sha256: attachment.provider_object_sha256,
-        })),
         source_message_id: message.messageId,
         source_conversation_id: message.cid,
       },
-      ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       metadata: {
         source_system: "alibaba_messenger",
         source_connection_id: connectionId,
@@ -815,7 +801,7 @@ function buildRecord(
   };
 }
 
-function buildOrphanAttachmentRecord(
+function buildAttachmentRecord(
   attachment: AlibabaAttachment,
   snapshot: LoadedSnapshot,
   config: AlibabaRuntimeConfig,
@@ -823,6 +809,12 @@ function buildOrphanAttachmentRecord(
 ): AdapterInboundRecord {
   const conversationId = textValue(attachment.cid) ?? "unresolved-conversation";
   const conversation = snapshot.conversations.get(conversationId);
+  const parentMessage = textValue(attachment.messageId)
+    ? snapshot.messagesById.get(String(attachment.messageId))
+    : undefined;
+  const linkedToProviderMessage = attachment.parentMessageCaptured === true || Boolean(parentMessage);
+  const incoming = parentMessage ? parentMessage.direction !== "outgoing" : true;
+  const supplierId = textValue(conversation?.aliId) ?? `conversation:${conversationId}`;
   const supplierName =
     textValue(conversation?.name) ??
     textValue(conversation?.companyName) ??
@@ -832,17 +824,20 @@ function buildOrphanAttachmentRecord(
   const fileName = normalized.filename;
   const body = textValue(attachment.messageText);
   const content = [
-    `[Unlinked Alibaba attachment evidence: ${fileName}]`,
+    `[Alibaba attachment: ${fileName}]`,
     ...(body ? [body] : []),
-    ...(extracted ? [extracted] : []),
+    ...(extracted ? [extracted.slice(0, config.attachment_text_limit)] : []),
   ].join("\n\n");
-  const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+  const timestamp = attachmentTimestamp(attachment, snapshot);
   const revisionHash = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: attachment.provider_object_sha256,
     content_hash: normalized.content_hash ?? null,
-    content,
+    extraction_sha256: extracted ? sha256Bytes(Buffer.from(extracted, "utf8")) : null,
   }), "utf8"));
-  const sourceIdentity = textValue(attachment.messageId) ?? attachment.provider_object_sha256;
+  const sourceIdentity = attachmentLogicalIdentity(attachment);
+  const sourceCoverageDisposition = linkedToProviderMessage
+    ? "linked_attachment_evidence"
+    : "orphan_attachment_evidence";
 
   return {
     operation: "record.ingest",
@@ -850,9 +845,13 @@ function buildOrphanAttachmentRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
-      sender_id: `${config.account_id}:evidence-capture`,
-      sender_name: `${config.account_label} evidence capture`,
-      receiver_id: config.account_id,
+      sender_id: linkedToProviderMessage
+        ? incoming ? supplierId : config.account_id
+        : `${config.account_id}:evidence-capture`,
+      sender_name: linkedToProviderMessage
+        ? incoming ? textValue(parentMessage?.speaker) ?? supplierName : config.account_label
+        : `${config.account_label} evidence capture`,
+      receiver_id: connectionId,
       receiver_name: config.account_label,
       space_id: config.account_id,
       space_name: config.account_label,
@@ -863,13 +862,16 @@ function buildOrphanAttachmentRecord(
       thread_name: supplierName,
       metadata: {
         source_system: "alibaba_messenger",
-        source_attribution: "unresolved_attachment_evidence",
+        source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
         supplier_ali_id: textValue(conversation?.aliId) ?? null,
         supplier_account_id: textValue(conversation?.accountId) ?? null,
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-orphan-v2:${safeIdToken(sourceIdentity)}:${revisionHash}`,
+      // Attachment content and extraction changes belong to the same canonical
+      // record. The logical provider identity is stable while revision_hash binds
+      // the exact bytes/extraction state for Nex revision custody.
+      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-v3:${sourceIdentity}`,
       timestamp,
       content,
       content_type: "text",
@@ -878,24 +880,47 @@ function buildOrphanAttachmentRecord(
         provider_attachment_sha256: attachment.provider_object_sha256,
         source_message_id: textValue(attachment.messageId) ?? null,
         source_conversation_id: textValue(attachment.cid) ?? null,
-        source_coverage_disposition: "orphan_attachment_evidence",
+        source_coverage_disposition: sourceCoverageDisposition,
+        extraction_status: textValue(snapshot.textByFile.get(fileName)?.status) ?? "not_available",
+        extraction_sha256: extracted ? sha256Bytes(Buffer.from(extracted, "utf8")) : null,
       },
       attachments: [normalized],
       metadata: {
         source_system: "alibaba_messenger",
         source_connection_id: connectionId,
-        family: "orphan_attachment",
-        logical_record_id: `orphan-attachment:${attachment.provider_object_sha256}`,
+        family: "attachment",
+        source_record_type: "alibaba_attachment",
+        logical_record_id: `attachment:${sourceIdentity}`,
         revision_hash: revisionHash,
         snapshot_id: snapshot.ref.id,
         snapshot_receipt_sha256: snapshot.ref.complete_sha256,
         snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
-        source_attribution: "unresolved_attachment_evidence",
-        timestamp_basis: parseTimestamp(attachment.sentAt) ? "provider_attachment_sent_at" : "snapshot_capture_time",
+        source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
+        timestamp_basis: parentMessage
+          ? "provider_message_timestamp"
+          : parseTimestamp(attachment.sentAt)
+            ? "provider_attachment_sent_at"
+            : "snapshot_capture_time",
       },
     },
   };
+}
+
+function attachmentLogicalIdentity(attachment: AlibabaAttachment): string {
+  return sha256Bytes(Buffer.from(stableJson({
+    conversation_id: textValue(attachment.cid) ?? null,
+    file_name: textValue(attachment.fileName) ?? null,
+    provider_message_id: textValue(attachment.messageId) ?? null,
+  }), "utf8"));
+}
+
+function attachmentTimestamp(attachment: AlibabaAttachment, snapshot: LoadedSnapshot): number {
+  const messageId = textValue(attachment.messageId);
+  const parentMessage = messageId ? snapshot.messagesById.get(messageId) : undefined;
+  return parentMessage
+    ? messageTimestamp(parentMessage)
+    : parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
 }
 
 function safeIdToken(value: string): string {
@@ -936,15 +961,15 @@ function recordsForWindow(
     .filter((message) => messageTimestamp(message) >= sinceMs)
     .filter((message) => toMs === undefined || messageTimestamp(message) <= toMs)
     .map((message) => buildRecord(message, snapshot, config, connectionId));
-  const orphanRecords = snapshot.orphanAttachments
+  const attachmentRecords = snapshot.attachments
     .filter((attachment) => {
-      const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+      const timestamp = attachmentTimestamp(attachment, snapshot);
       return timestamp >= sinceMs && (toMs === undefined || timestamp <= toMs);
     })
     .map((attachment) =>
-      buildOrphanAttachmentRecord(attachment, snapshot, config, connectionId)
+      buildAttachmentRecord(attachment, snapshot, config, connectionId)
     );
-  return [...messageRecords, ...orphanRecords].sort(
+  return [...messageRecords, ...attachmentRecords].sort(
     (left, right) => left.payload.timestamp - right.payload.timestamp
       || left.payload.external_record_id.localeCompare(right.payload.external_record_id),
   );
@@ -1029,6 +1054,7 @@ async function monitor(
 }
 
 export const __test__ = {
+  buildAttachmentRecord,
   buildRecord,
   latestSnapshot,
   listSnapshots,
@@ -1040,7 +1066,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.6",
+  version: "0.3.0",
   multi_account: true,
   auth: {
     methods: [

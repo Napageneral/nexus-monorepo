@@ -24,7 +24,11 @@ The monitor intentionally re-emits a rolling overlap window. Nex owns canonical 
 
 Alibaba's Open Platform is not part of this release. The known-complete source is the existing authenticated browser capture. Capture produces immutable raw evidence and a separate sanitized projection; only the projection crosses into Nex.
 
-Each emitted record preserves the exact sanitized provider JSON line plus its SHA-256 inside the adapter-defined payload. Nex metadata contains only provenance and revision fields. Attachment bytes are read only from the sealed snapshot/object roots and must match their recorded digest.
+Each message and each attachment is emitted as its own canonical record. Every
+record preserves the exact sanitized provider JSON line plus its SHA-256 inside
+the adapter-defined payload. Message identity is independent from attachment
+bytes and extraction changes. Attachment bytes are read only from the sealed
+snapshot/object roots and must match their recorded digest.
 
 ## Development
 

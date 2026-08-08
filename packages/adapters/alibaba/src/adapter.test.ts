@@ -122,6 +122,7 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
       contentHash: sha256(attachmentPath),
       messageId: "m-1",
       cid: "surewal-thread",
+      parentMessageCaptured: true,
       localPath: attachmentPath,
       status: "downloaded",
     },
@@ -133,6 +134,7 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
       contentHash: sha256(orphanAttachmentPath),
       messageId: "provider-message-not-in-export",
       cid: "surewal-thread",
+      parentMessageCaptured: false,
       sentAt: "2026-07-17T15:00:00.000Z",
       speaker: "Rebecca Liu",
       messageText: "Here is the updated sample.",
@@ -206,8 +208,8 @@ test("relocated snapshots resolve attachments by sealed object digest", () => {
   writeCompletionReceipt(snapshotPath);
 
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
-  const record = __test__.buildRecord(
-    snapshot.messages[0]!,
+  const record = __test__.buildAttachmentRecord(
+    snapshot.attachments[0]!,
     snapshot,
     config(root, objectRoot),
     "conn-alibaba",
@@ -239,14 +241,13 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     config(root),
     "conn-alibaba",
   );
-  assert.match(record.payload.external_record_id, /^alibaba:conn-alibaba:message-v2:m-1:[a-f0-9]{64}$/);
+  assert.equal(record.payload.external_record_id, "alibaba:conn-alibaba:message-v3:m-1");
   assert.equal(record.routing.container_id, "surewal-thread");
   assert.equal(record.routing.receiver_id, "conn-alibaba");
   assert.equal(record.payload.recipients, undefined);
   assert.equal(record.payload.metadata?.source_connection_id, "conn-alibaba");
-  assert.match(record.payload.content, /Vessel booking and ETA/);
-  assert.equal(record.payload.attachments?.[0]?.local_path, attachmentPath);
-  assert.match(record.payload.attachments?.[0]?.content_hash ?? "", /^[a-f0-9]{64}$/);
+  assert.equal(record.payload.content, "Here is the latest shipping schedule.");
+  assert.equal(record.payload.attachments, undefined);
   assert.equal(record.payload.payload?.provider_object_json, sourceLine);
   assert.equal(
     record.payload.payload?.provider_object_sha256,
@@ -257,18 +258,22 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   assert.equal(record.payload.payload?.source_projection_messages_sha256, undefined);
   assert.equal(record.payload.metadata?.snapshot_id, snapshot.ref.id);
   assert.equal(record.payload.metadata?.snapshot_receipt_sha256, snapshot.ref.complete_sha256);
-  const sourceAttachments = record.payload.payload?.source_attachments as Array<{
-    provider_object_json: string;
-    provider_object_sha256: string;
-  }>;
-  assert.equal(sourceAttachments.length, 1);
-  assert.equal(
-    createHash("sha256").update(sourceAttachments[0]!.provider_object_json).digest("hex"),
-    sourceAttachments[0]!.provider_object_sha256,
+  const attachmentRecord = __test__.buildAttachmentRecord(
+    snapshot.attachments[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
   );
-  assert.doesNotMatch(sourceAttachments[0]!.provider_object_json, /localPath|objectPath/);
-  assert.doesNotMatch(sourceAttachments[0]!.provider_object_json, /retired-capture-root/);
-  assert.equal(AdapterInboundRecordSchema.parse(record).payload.payload?.provider_object_json, sourceLine);
+  assert.equal(attachmentRecord.payload.attachments?.[0]?.local_path, attachmentPath);
+  assert.match(attachmentRecord.payload.attachments?.[0]?.content_hash ?? "", /^[a-f0-9]{64}$/);
+  assert.match(attachmentRecord.payload.content, /Vessel booking and ETA/);
+  const sourceAttachment = String(attachmentRecord.payload.payload?.provider_attachment_json ?? "");
+  assert.equal(
+    createHash("sha256").update(sourceAttachment).digest("hex"),
+    attachmentRecord.payload.payload?.provider_attachment_sha256,
+  );
+  assert.doesNotMatch(sourceAttachment, /localPath|objectPath|retired-capture-root/);
+  assert.doesNotThrow(() => AdapterInboundRecordSchema.parse(record));
   assert.doesNotMatch(JSON.stringify(record), /must-not-leak|chatToken|encryptedAccount/);
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
 });
@@ -342,7 +347,9 @@ test("bounded projection keeps temporal window, directionality, and replay ident
   const replay = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 1784300200000);
   assert.equal(rows.length, 2);
   const message = rows.find((row) => row.payload.metadata?.family === "message");
-  const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
+  const orphan = rows.find(
+    (row) => row.payload.payload?.source_coverage_disposition === "orphan_attachment_evidence",
+  );
   assert.equal(message?.routing.sender_id, "moonsleep-alibaba");
   assert.equal(message?.routing.receiver_id, "conn-alibaba");
   assert.deepEqual(message?.payload.recipients, ["supplier-ali"]);
@@ -354,14 +361,92 @@ test("bounded projection keeps temporal window, directionality, and replay ident
   assert.deepEqual(replay.map((row) => row.payload.payload), rows.map((row) => row.payload.payload));
 });
 
+test("every linked and unlinked attachment is a standalone immutable record", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
+  assert.equal(rows.length, snapshot.messages.length + snapshot.attachments.length);
+  const attachments = rows.filter((row) => row.payload.metadata?.family === "attachment");
+  assert.equal(attachments.length, 2);
+  assert.equal(
+    attachments.filter(
+      (row) => row.payload.payload?.source_coverage_disposition === "linked_attachment_evidence",
+    ).length,
+    1,
+  );
+  assert.equal(
+    attachments.filter(
+      (row) => row.payload.payload?.source_coverage_disposition === "orphan_attachment_evidence",
+    ).length,
+    1,
+  );
+  assert.equal(rows.find((row) => row.payload.metadata?.message_id === "m-1")?.payload.attachments, undefined);
+});
+
+test("changed attachment bytes create a new revision without changing the parent message", () => {
+  const { root, attachmentPath } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const messageBefore = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const attachment = snapshot.attachments[0]!;
+  const attachmentBefore = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const revisedBytes = Buffer.from("revised immutable attachment bytes");
+  writeFileSync(attachmentPath, revisedBytes);
+  attachment.bytes = revisedBytes.length;
+  attachment.contentHash = createHash("sha256").update(revisedBytes).digest("hex");
+  attachment.provider_object_json = JSON.stringify({
+    cid: attachment.cid,
+    contentHash: attachment.contentHash,
+    fileName: attachment.fileName,
+    messageId: attachment.messageId,
+  });
+  attachment.provider_object_sha256 = createHash("sha256")
+    .update(attachment.provider_object_json)
+    .digest("hex");
+  const attachmentAfter = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const messageAfter = __test__.buildRecord(
+    snapshot.messages[0]!,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(attachmentAfter.payload.external_record_id, attachmentBefore.payload.external_record_id);
+  assert.notEqual(
+    attachmentAfter.payload.metadata?.revision_hash,
+    attachmentBefore.payload.metadata?.revision_hash,
+  );
+  assert.equal(
+    attachmentAfter.payload.metadata?.logical_record_id,
+    attachmentBefore.payload.metadata?.logical_record_id,
+  );
+  assert.equal(messageAfter.payload.external_record_id, messageBefore.payload.external_record_id);
+  assert.deepEqual(messageAfter.payload.payload, messageBefore.payload.payload);
+});
+
 test("provider attachment rows without a captured parent message remain explicit evidence", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
   assert.equal(snapshot.orphanAttachments.length, 1);
   const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
-  const orphan = rows.find((row) => row.payload.metadata?.family === "orphan_attachment");
+  const orphan = rows.find(
+    (row) => row.payload.payload?.source_coverage_disposition === "orphan_attachment_evidence",
+  );
   assert.ok(orphan);
-  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-orphan-v2:/);
+  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-v3:/);
   assert.equal(orphan.payload.payload?.source_snapshot_id, undefined);
   assert.equal(orphan.payload.payload?.source_snapshot_receipt_sha256, undefined);
   assert.equal(orphan.payload.payload?.source_projection_attachments_sha256, undefined);
@@ -397,7 +482,7 @@ test("symlinked governed snapshot files fail closed", () => {
 test("attachment paths outside the sealed snapshot boundary are not read", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
-  snapshot.attachmentsByMessage.set("m-1", [{
+  snapshot.attachments[0] = {
     fileName: "outside.pdf",
     contentHash: "b".repeat(64),
     messageId: "m-1",
@@ -406,9 +491,9 @@ test("attachment paths outside the sealed snapshot boundary are not read", () =>
     status: "downloaded",
     provider_object_json: "{}",
     provider_object_sha256: createHash("sha256").update("{}").digest("hex"),
-  }]);
+  };
   assert.throws(
-    () => __test__.buildRecord(snapshot.messages[0]!, snapshot, config(root), "conn-alibaba"),
+    () => __test__.buildAttachmentRecord(snapshot.attachments[0]!, snapshot, config(root), "conn-alibaba"),
     /attachment digest mismatch/,
   );
 });
