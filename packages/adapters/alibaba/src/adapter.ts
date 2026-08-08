@@ -109,6 +109,9 @@ type AlibabaAttachment = {
   contentHash?: string | null;
   status?: string | null;
   parentMessageCaptured?: boolean | null;
+  parentMessageDirection?: string | null;
+  parentMessageSpeaker?: string | null;
+  parentMessageTimestamp?: number | string | null;
   provider_object_json: string;
   provider_object_sha256: string;
 };
@@ -813,7 +816,9 @@ function buildAttachmentRecord(
     ? snapshot.messagesById.get(String(attachment.messageId))
     : undefined;
   const linkedToProviderMessage = attachment.parentMessageCaptured === true || Boolean(parentMessage);
-  const incoming = parentMessage ? parentMessage.direction !== "outgoing" : true;
+  const parentDirection = textValue(parentMessage?.direction)
+    ?? textValue(attachment.parentMessageDirection);
+  const incoming = parentDirection !== "outgoing";
   const supplierId = textValue(conversation?.aliId) ?? `conversation:${conversationId}`;
   const supplierName =
     textValue(conversation?.name) ??
@@ -849,7 +854,12 @@ function buildAttachmentRecord(
         ? incoming ? supplierId : config.account_id
         : `${config.account_id}:evidence-capture`,
       sender_name: linkedToProviderMessage
-        ? incoming ? textValue(parentMessage?.speaker) ?? supplierName : config.account_label
+        ? incoming
+          ? textValue(parentMessage?.speaker)
+            ?? textValue(attachment.parentMessageSpeaker)
+            ?? textValue(attachment.speaker)
+            ?? supplierName
+          : config.account_label
         : `${config.account_label} evidence capture`,
       receiver_id: connectionId,
       receiver_name: config.account_label,
@@ -875,6 +885,7 @@ function buildAttachmentRecord(
       timestamp,
       content,
       content_type: "text",
+      ...(!incoming && linkedToProviderMessage ? { recipients: [supplierId] } : {}),
       payload: {
         provider_attachment_json: attachment.provider_object_json,
         provider_attachment_sha256: attachment.provider_object_sha256,
@@ -897,7 +908,7 @@ function buildAttachmentRecord(
         snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
         source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
-        timestamp_basis: parentMessage
+        timestamp_basis: parentMessage || parseTimestamp(attachment.parentMessageTimestamp)
           ? "provider_message_timestamp"
           : parseTimestamp(attachment.sentAt)
             ? "provider_attachment_sent_at"
@@ -920,7 +931,9 @@ function attachmentTimestamp(attachment: AlibabaAttachment, snapshot: LoadedSnap
   const parentMessage = messageId ? snapshot.messagesById.get(messageId) : undefined;
   return parentMessage
     ? messageTimestamp(parentMessage)
-    : parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+    : parseTimestamp(attachment.parentMessageTimestamp)
+      || parseTimestamp(attachment.sentAt)
+      || snapshot.ref.captured_at;
 }
 
 function safeIdToken(value: string): string {
