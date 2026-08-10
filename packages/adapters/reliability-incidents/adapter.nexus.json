@@ -1,0 +1,9 @@
+{
+  "id": "reliability-incidents",
+  "version": "0.1.0",
+  "displayName": "Reliability Incidents",
+  "description": "Portable first-party reliability incident source adapter for Nex.",
+  "platform": "reliability-incidents",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}
