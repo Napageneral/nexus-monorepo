@@ -161,6 +161,8 @@ const MAX_ATTACHMENTS_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_INDEX_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_EVIDENCE_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_BYTES = 16 * 1024 * 1024;
+const MAX_BACKFILL_SELECTION_BYTES = 1 * 1024 * 1024;
+const BACKFILL_SELECTION_FILE = "backfill-selection.json";
 const SETUP_CONFIRMATION = "ATTACH_SANITIZED_ALIBABA_CAPTURE";
 const CONNECTION_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 
@@ -338,6 +340,109 @@ function readBoundFile(path: string, maxBytes: number): Buffer {
   } finally {
     closeSync(fd);
   }
+}
+
+function selectedBackfillRows(
+  rows: AdapterInboundRecord[],
+  snapshot: SnapshotRef,
+  connection: string,
+  adapterStateDir?: string,
+): AdapterInboundRecord[] {
+  if (!adapterStateDir) return rows;
+  const stateRoot = realpathSync(adapterStateDir);
+  const selectionPath = join(stateRoot, BACKFILL_SELECTION_FILE);
+  if (!existsSync(selectionPath)) return rows;
+  const named = lstatSync(selectionPath);
+  const expectedUid = process.geteuid?.();
+  const expectedGid = process.getegid?.();
+  if (
+    !named.isFile()
+    || named.isSymbolicLink()
+    || named.nlink !== 1
+    || (named.mode & 0o777) !== 0o400
+    || (expectedUid !== undefined && named.uid !== expectedUid)
+    || (expectedGid !== undefined && named.gid !== expectedGid)
+  ) {
+    throw new Error("Alibaba backfill selection custody is unsafe");
+  }
+  const bytes = readBoundFile(selectionPath, MAX_BACKFILL_SELECTION_BYTES);
+  const afterRead = lstatSync(selectionPath);
+  if (
+    !sameIdentity(named, afterRead)
+    || !afterRead.isFile()
+    || afterRead.isSymbolicLink()
+    || afterRead.nlink !== 1
+    || (afterRead.mode & 0o777) !== 0o400
+    || (expectedUid !== undefined && afterRead.uid !== expectedUid)
+    || (expectedGid !== undefined && afterRead.gid !== expectedGid)
+  ) {
+    throw new Error("Alibaba backfill selection changed during read");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error("Alibaba backfill selection is invalid JSON");
+  }
+  const selection = asRecord(parsed);
+  const allowedKeys = new Set([
+    "schemaVersion",
+    "purpose",
+    "snapshotId",
+    "snapshotReceiptSha256",
+    "connectionIdSha256",
+    "recordFamily",
+    "externalRecordIds",
+    "externalRecordIdsSha256",
+    "expectedRecordCount",
+    "authority",
+  ]);
+  if (Object.keys(selection).some((key) => !allowedKeys.has(key))) {
+    throw new Error("Alibaba backfill selection contains unexpected fields");
+  }
+  const externalRecordIds = selection.externalRecordIds;
+  const expectedRecordCount = selection.expectedRecordCount;
+  const expectedPrefix = `alibaba:${safeIdToken(connection)}:attachment-v3:`;
+  if (
+    selection.schemaVersion !== "nexus.alibaba_backfill_selection.v1"
+    || selection.purpose !== "recover_partial_attachment_ingestion"
+    || selection.snapshotId !== snapshot.id
+    || selection.snapshotReceiptSha256 !== snapshot.complete_sha256
+    || selection.connectionIdSha256 !== sha256Bytes(Buffer.from(connection, "utf8"))
+    || selection.recordFamily !== "attachment"
+    || !Array.isArray(externalRecordIds)
+    || externalRecordIds.length < 1
+    || externalRecordIds.length > 1_000
+    || !Number.isSafeInteger(expectedRecordCount)
+    || expectedRecordCount !== externalRecordIds.length
+    || asRecord(selection.authority).providerReadOnly !== true
+    || asRecord(selection.authority).remoteMutationEnabled !== false
+    || asRecord(selection.authority).businessMutationEnabled !== false
+  ) {
+    throw new Error("Alibaba backfill selection contract is invalid");
+  }
+  const identities = externalRecordIds.map((value) => textValue(value));
+  if (
+    identities.some((value) => !value || !value.startsWith(expectedPrefix))
+    || new Set(identities).size !== identities.length
+  ) {
+    throw new Error("Alibaba backfill selection identities are invalid");
+  }
+  const ordered = [...(identities as string[])].sort();
+  const digest = sha256Bytes(Buffer.from(`${ordered.join("\n")}\n`, "utf8"));
+  if (!SHA256.test(String(selection.externalRecordIdsSha256 ?? ""))
+      || selection.externalRecordIdsSha256 !== digest) {
+    throw new Error("Alibaba backfill selection identity digest differs");
+  }
+  const allowed = new Set(ordered);
+  const selected = rows.filter((row) => allowed.has(row.payload.external_record_id));
+  if (
+    selected.length !== allowed.size
+    || selected.some((row) => row.payload.metadata?.family !== "attachment")
+  ) {
+    throw new Error("Alibaba backfill selection does not match the sealed snapshot");
+  }
+  return selected;
 }
 
 function readJson(path: string, maxBytes: number): UnknownRecord {
@@ -1127,7 +1232,12 @@ async function backfill(
     args.since.getTime(),
     args.to?.getTime(),
   );
-  for (const row of rows) emit(row);
+  for (const row of selectedBackfillRows(
+    rows,
+    snapshot.ref,
+    connectionId(ctx),
+    config.adapter_state_dir,
+  )) emit(row);
 }
 
 async function monitor(
@@ -1151,6 +1261,7 @@ async function monitor(
 }
 
 export const __test__ = {
+  backfill,
   buildAttachmentRecord,
   buildRecord,
   latestSnapshot,
@@ -1158,12 +1269,13 @@ export const __test__ = {
   loadSnapshot,
   readRuntimeConfig,
   recordsForWindow,
+  selectedBackfillRows,
 };
 
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.3.2",
+  version: "0.3.3",
   multi_account: true,
   auth: {
     methods: [
