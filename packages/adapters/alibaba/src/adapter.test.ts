@@ -575,6 +575,91 @@ test("backfill selection fails closed on an unselected or altered snapshot ident
   );
 });
 
+test("exact v2 state authorization selects a mixed missing revision set", () => {
+  const { root } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const rows = __test__.recordsForWindow(
+    snapshot,
+    config(root, undefined, stateDir),
+    "conn-alibaba",
+    0,
+  );
+  const selectedRows = [
+    rows.find((row) => row.payload.metadata?.family === "attachment")!,
+    rows.find((row) => row.payload.metadata?.family === "message")!,
+  ];
+  const selectedIds = selectedRows
+    .map((row) => row.payload.external_record_id)
+    .sort();
+  writeJson(join(stateDir, "backfill-selection.json"), {
+    schemaVersion: "nexus.alibaba_backfill_selection.v2",
+    purpose: "recover_partial_snapshot_ingestion",
+    snapshotId: snapshot.ref.id,
+    snapshotReceiptSha256: snapshot.ref.complete_sha256,
+    connectionIdSha256: sha256Text("conn-alibaba"),
+    recordFamilies: ["attachment", "message"],
+    externalRecordIds: selectedIds,
+    externalRecordIdsSha256: sha256Text(`${selectedIds.join("\n")}\n`),
+    expectedRecordCount: selectedIds.length,
+    authority: {
+      providerReadOnly: true,
+      remoteMutationEnabled: false,
+      businessMutationEnabled: false,
+    },
+  });
+  chmodSync(join(stateDir, "backfill-selection.json"), 0o400);
+  const selected = __test__.selectedBackfillRows(
+    rows,
+    snapshot.ref,
+    "conn-alibaba",
+    stateDir,
+  );
+  assert.deepEqual(
+    selected.map((row) => row.payload.external_record_id).sort(),
+    selectedIds,
+  );
+  assert.deepEqual(
+    [...new Set(selected.map((row) => row.payload.metadata?.family))].sort(),
+    ["attachment", "message"],
+  );
+});
+
+test("v2 selection fails closed when the declared families omit a selected identity", () => {
+  const { root } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const rows = __test__.recordsForWindow(
+    snapshot,
+    config(root, undefined, stateDir),
+    "conn-alibaba",
+    0,
+  );
+  const messageId = rows.find((row) => row.payload.metadata?.family === "message")!
+    .payload.external_record_id;
+  writeJson(join(stateDir, "backfill-selection.json"), {
+    schemaVersion: "nexus.alibaba_backfill_selection.v2",
+    purpose: "recover_partial_snapshot_ingestion",
+    snapshotId: snapshot.ref.id,
+    snapshotReceiptSha256: snapshot.ref.complete_sha256,
+    connectionIdSha256: sha256Text("conn-alibaba"),
+    recordFamilies: ["attachment"],
+    externalRecordIds: [messageId],
+    externalRecordIdsSha256: sha256Text(`${messageId}\n`),
+    expectedRecordCount: 1,
+    authority: {
+      providerReadOnly: true,
+      remoteMutationEnabled: false,
+      businessMutationEnabled: false,
+    },
+  });
+  chmodSync(join(stateDir, "backfill-selection.json"), 0o400);
+  assert.throws(
+    () => __test__.selectedBackfillRows(rows, snapshot.ref, "conn-alibaba", stateDir),
+    /identities are invalid/,
+  );
+});
+
 test("every linked and unlinked attachment is a standalone immutable record", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
