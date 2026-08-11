@@ -385,31 +385,50 @@ function selectedBackfillRows(
     throw new Error("Alibaba backfill selection is invalid JSON");
   }
   const selection = asRecord(parsed);
-  const allowedKeys = new Set([
+  const commonKeys = [
     "schemaVersion",
     "purpose",
     "snapshotId",
     "snapshotReceiptSha256",
     "connectionIdSha256",
-    "recordFamily",
     "externalRecordIds",
     "externalRecordIdsSha256",
     "expectedRecordCount",
     "authority",
+  ];
+  const legacySelection = selection.schemaVersion === "nexus.alibaba_backfill_selection.v1";
+  const exactSelection = selection.schemaVersion === "nexus.alibaba_backfill_selection.v2";
+  const allowedKeys = new Set([
+    ...commonKeys,
+    ...(legacySelection ? ["recordFamily"] : exactSelection ? ["recordFamilies"] : []),
   ]);
   if (Object.keys(selection).some((key) => !allowedKeys.has(key))) {
     throw new Error("Alibaba backfill selection contains unexpected fields");
   }
   const externalRecordIds = selection.externalRecordIds;
   const expectedRecordCount = selection.expectedRecordCount;
-  const expectedPrefix = `alibaba:${safeIdToken(connection)}:attachment-v3:`;
+  const identityRoot = `alibaba:${safeIdToken(connection)}:`;
+  const selectedFamilies = legacySelection
+    ? ["attachment"]
+    : Array.isArray(selection.recordFamilies)
+      ? selection.recordFamilies.map((value) => textValue(value))
+      : [];
   if (
-    selection.schemaVersion !== "nexus.alibaba_backfill_selection.v1"
-    || selection.purpose !== "recover_partial_attachment_ingestion"
+    (!legacySelection && !exactSelection)
+    || (
+      legacySelection
+        ? selection.purpose !== "recover_partial_attachment_ingestion"
+          || selection.recordFamily !== "attachment"
+        : selection.purpose !== "recover_partial_snapshot_ingestion"
+          || selectedFamilies.length < 1
+          || selectedFamilies.length > 2
+          || selectedFamilies.some((value) => value !== "message" && value !== "attachment")
+          || new Set(selectedFamilies).size !== selectedFamilies.length
+          || selectedFamilies.join("\n") !== [...selectedFamilies].sort().join("\n")
+    )
     || selection.snapshotId !== snapshot.id
     || selection.snapshotReceiptSha256 !== snapshot.complete_sha256
     || selection.connectionIdSha256 !== sha256Bytes(Buffer.from(connection, "utf8"))
-    || selection.recordFamily !== "attachment"
     || !Array.isArray(externalRecordIds)
     || externalRecordIds.length < 1
     || externalRecordIds.length > 1_000
@@ -422,8 +441,17 @@ function selectedBackfillRows(
     throw new Error("Alibaba backfill selection contract is invalid");
   }
   const identities = externalRecordIds.map((value) => textValue(value));
+  const familyForIdentity = (value: string): string | null => {
+    if (value.startsWith(`${identityRoot}message-v3:`)) return "message";
+    if (value.startsWith(`${identityRoot}attachment-v3:`)) return "attachment";
+    return null;
+  };
   if (
-    identities.some((value) => !value || !value.startsWith(expectedPrefix))
+    identities.some((value) => {
+      if (!value) return true;
+      const family = familyForIdentity(value);
+      return family === null || !selectedFamilies.includes(family);
+    })
     || new Set(identities).size !== identities.length
   ) {
     throw new Error("Alibaba backfill selection identities are invalid");
@@ -436,9 +464,12 @@ function selectedBackfillRows(
   }
   const allowed = new Set(ordered);
   const selected = rows.filter((row) => allowed.has(row.payload.external_record_id));
+  const actualFamilies = [...new Set(selected.map((row) => textValue(row.payload.metadata?.family)))]
+    .sort();
   if (
     selected.length !== allowed.size
-    || selected.some((row) => row.payload.metadata?.family !== "attachment")
+    || actualFamilies.some((value) => value !== "message" && value !== "attachment")
+    || actualFamilies.join("\n") !== [...selectedFamilies].sort().join("\n")
   ) {
     throw new Error("Alibaba backfill selection does not match the sealed snapshot");
   }
@@ -1275,7 +1306,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.3.4",
+  version: "0.3.5",
   multi_account: true,
   auth: {
     methods: [
