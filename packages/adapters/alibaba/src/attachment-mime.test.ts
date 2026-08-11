@@ -133,10 +133,10 @@ test("recognized attachment signatures deterministically normalize provider MIME
   }
 });
 
-test("contradictory provider MIME and malformed containers fail closed", () => {
-  assert.throws(
-    () => normalizeAlibabaAttachmentMime(FIXTURES[0].bytes, "image/png"),
-    /contradicts sealed bytes/,
+test("misleading provider MIME cannot veto sealed bytes; malformed bytes fail closed", () => {
+  assert.equal(
+    normalizeAlibabaAttachmentMime(FIXTURES[0].bytes, "image/png"),
+    "image/jpeg",
   );
   assert.throws(
     () => normalizeAlibabaAttachmentMime(Buffer.from("not an attachment"), "application/pdf"),

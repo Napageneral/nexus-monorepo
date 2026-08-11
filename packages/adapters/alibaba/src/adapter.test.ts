@@ -366,7 +366,7 @@ test("byte-derived MIME normalization preserves attachment identity and revision
   assert.equal(generic.payload.metadata?.revision_hash, explicit.payload.metadata?.revision_hash);
 });
 
-test("attachment custody fails on byte-count, digest, or provider-MIME contradictions", () => {
+test("attachment custody fails on byte-count or digest but ignores misleading provider MIME", () => {
   const { root, attachmentPath } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
   const attachment = snapshot.attachments[0]!;
@@ -387,10 +387,13 @@ test("attachment custody fails on byte-count, digest, or provider-MIME contradic
   attachment.contentHash = sealedDigest;
   attachment.contentType = "image/png";
   assert.equal(sha256(attachmentPath), sealedDigest);
-  assert.throws(
-    () => __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba"),
-    /provider content type contradicts sealed bytes/,
+  const record = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
   );
+  assert.equal(record.payload.attachments?.[0]?.mime_type, "application/pdf");
 });
 
 test("capture-level provenance cannot change immutable message identity or payload", () => {

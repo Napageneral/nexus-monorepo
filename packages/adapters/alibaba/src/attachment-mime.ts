@@ -19,28 +19,6 @@ export type AlibabaAttachmentMime =
   | typeof DOCX
   | typeof XLSX;
 
-const GENERIC_PROVIDER_MIME = new Set([
-  "application/octet-stream",
-  "application/binary",
-  "application/x-binary",
-  "binary/octet-stream",
-]);
-
-const COMPATIBLE_PROVIDER_MIME: Record<AlibabaAttachmentMime, ReadonlySet<string>> = {
-  [JPEG]: new Set([JPEG, "image/jpg", "image/pjpeg"]),
-  [PNG]: new Set([PNG]),
-  [WEBP]: new Set([WEBP]),
-  [HEIC]: new Set([HEIC, "image/heif", "image/heic-sequence", "image/heif-sequence"]),
-  [PDF]: new Set([PDF, "application/x-pdf"]),
-  [MP4]: new Set([MP4, "application/mp4"]),
-  // The reviewed Alibaba corpus labels one QuickTime ftyp container video/mp4.
-  // Treat that broad video-family label as compatible, then emit the exact
-  // byte-derived QuickTime type.
-  [QUICKTIME]: new Set([QUICKTIME, MP4, "application/quicktime"]),
-  [DOCX]: new Set([DOCX, "application/zip"]),
-  [XLSX]: new Set([XLSX, "application/zip"]),
-};
-
 const MP4_BRANDS = new Set([
   "avc1",
   "iso2",
@@ -58,19 +36,16 @@ const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1"]);
 
 export function normalizeAlibabaAttachmentMime(
   bytes: Buffer,
-  providerContentType: string | null | undefined,
+  _providerContentType: string | null | undefined,
 ): AlibabaAttachmentMime {
   const detected = detectAlibabaAttachmentMime(bytes);
   if (!detected) {
     throw new Error("Alibaba attachment has an unsupported sealed byte signature");
   }
-  const providerMime = normalizeProviderMime(providerContentType);
-  if (!providerMime || GENERIC_PROVIDER_MIME.has(providerMime)) return detected;
-  if (!COMPATIBLE_PROVIDER_MIME[detected].has(providerMime)) {
-    throw new Error(
-      `Alibaba attachment provider content type contradicts sealed bytes: ${providerMime} != ${detected}`,
-    );
-  }
+  // Alibaba download metadata is advisory and is known to mislabel valid
+  // sealed evidence.  The capture release already admits supported profiles
+  // from bounded byte validation, so the adapter emits the byte-derived MIME
+  // without letting transport metadata veto immutable evidence.
   return detected;
 }
 
@@ -97,14 +72,6 @@ export function detectAlibabaAttachmentMime(bytes: Buffer): AlibabaAttachmentMim
     return detectOfficeZipMime(bytes);
   }
   return undefined;
-}
-
-function normalizeProviderMime(value: string | null | undefined): string | undefined {
-  const normalized = String(value ?? "")
-    .split(";", 1)[0]
-    ?.trim()
-    .toLowerCase();
-  return normalized || undefined;
 }
 
 function hasPrefix(bytes: Buffer, prefix: Buffer): boolean {
