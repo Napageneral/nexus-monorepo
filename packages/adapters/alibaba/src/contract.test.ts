@@ -17,7 +17,7 @@ test("adapter reflection is read-only and exposes only ingest operations", async
     },
   });
   assert.equal(info.platform, "alibaba");
-  assert.equal(info.version, "0.3.1");
+  assert.equal(info.version, "0.3.2");
   assert.deepEqual(info.auth?.methods, [
     {
       id: "alibaba_browser_snapshot",
@@ -60,7 +60,10 @@ test("browser capture setup validates sealed evidence and returns a credential-f
     connection_id: "provisional",
   });
   assert.equal(started.status, "requires_input");
-  assert.equal(started.fields?.some((field) => field.type === "secret"), false);
+  assert.equal(
+    started.fields?.some((field: { type?: string }) => field.type === "secret"),
+    false,
+  );
 
   const snapshotRoot = new URL("../testdata/snapshots", import.meta.url).pathname;
   const objectRoot = snapshotRoot;

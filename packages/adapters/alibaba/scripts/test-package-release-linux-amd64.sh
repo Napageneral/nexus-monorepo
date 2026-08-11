@@ -51,4 +51,4 @@ docker run --rm \
       node /opt/nex/nexus.mjs package validate . &&
       node /opt/nex/nexus.mjs package release . &&
       mkdir -p /workspace/packages/adapters/alibaba/dist &&
-      cp dist/alibaba-0.3.1.tar.gz dist/alibaba-0.3.1.tar.gz.sha256 /workspace/packages/adapters/alibaba/dist/'
+      cp dist/alibaba-0.3.2.tar.gz dist/alibaba-0.3.2.tar.gz.sha256 /workspace/packages/adapters/alibaba/dist/'

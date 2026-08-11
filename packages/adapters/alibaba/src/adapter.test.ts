@@ -4,6 +4,9 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -171,7 +174,7 @@ function fixture(): { root: string; snapshotPath: string; attachmentPath: string
   return { root, snapshotPath, attachmentPath };
 }
 
-function config(root: string, objectRoot?: string) {
+function config(root: string, objectRoot?: string, adapterStateDir?: string) {
   return {
     snapshot_root: root,
     ...(objectRoot ? { object_root: objectRoot } : {}),
@@ -180,8 +183,55 @@ function config(root: string, objectRoot?: string) {
     poll_interval_ms: 1000,
     monitor_overlap_ms: 1000,
     attachment_text_limit: 30000,
+    ...(adapterStateDir ? { adapter_state_dir: adapterStateDir } : {}),
   };
 }
+
+test("materializes sealed evidence inside adapter state before Nex ingestion", () => {
+  const { root, attachmentPath } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const first = __test__.buildAttachmentRecord(
+    snapshot.attachments[0]!,
+    snapshot,
+    config(root, undefined, stateDir),
+    "conn-alibaba",
+  );
+  const replay = __test__.buildAttachmentRecord(
+    snapshot.attachments[0]!,
+    snapshot,
+    config(root, undefined, stateDir),
+    "conn-alibaba",
+  );
+  const localPath = first.payload.attachments?.[0]?.local_path;
+  assert.ok(localPath);
+  assert.match(
+    localPath.slice(realpathSync(stateDir).length),
+    /^\/attachment-custody\/sha256\/[0-9a-f]{2}\/[0-9a-f]{64}$/,
+  );
+  assert.notEqual(localPath, attachmentPath);
+  assert.deepEqual(readFileSync(localPath), PDF_BYTES);
+  assert.equal(statSync(localPath).mode & 0o777, 0o600);
+  assert.equal(replay.payload.attachments?.[0]?.local_path, localPath);
+});
+
+test("rejects a symlinked adapter custody directory without writing outside state", () => {
+  const { root } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const outside = mkdtempSync(join(tmpdir(), "nexus-alibaba-outside-"));
+  symlinkSync(outside, join(stateDir, "attachment-custody"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  assert.throws(
+    () => __test__.buildAttachmentRecord(
+      snapshot.attachments[0]!,
+      snapshot,
+      config(root, undefined, stateDir),
+      "conn-alibaba",
+    ),
+    /custody directory is unsafe/,
+  );
+  assert.deepEqual(readdirSync(outside), []);
+});
 
 test("relocated snapshots resolve attachments by sealed object digest", () => {
   const { root, snapshotPath, attachmentPath } = fixture();
