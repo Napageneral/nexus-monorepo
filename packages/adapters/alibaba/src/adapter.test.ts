@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -33,6 +34,10 @@ function writeJsonl(path: string, values: unknown[]): void {
 
 function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sha256Text(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function writeCompletionReceipt(snapshotPath: string): void {
@@ -469,6 +474,102 @@ test("bounded projection keeps temporal window, directionality, and replay ident
     rows.map((row) => row.payload.external_record_id),
   );
   assert.deepEqual(replay.map((row) => row.payload.payload), rows.map((row) => row.payload.payload));
+});
+
+test("exact state authorization limits backfill to the selected attachment identities", async () => {
+  const { root } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const connectionId = "conn-alibaba";
+  const allRows = __test__.recordsForWindow(
+    snapshot,
+    config(root, undefined, stateDir),
+    connectionId,
+    0,
+  );
+  const attachmentIds = allRows
+    .filter((row) => row.payload.metadata?.family === "attachment")
+    .map((row) => row.payload.external_record_id)
+    .sort();
+  writeJson(join(stateDir, "backfill-selection.json"), {
+    schemaVersion: "nexus.alibaba_backfill_selection.v1",
+    purpose: "recover_partial_attachment_ingestion",
+    snapshotId: snapshot.ref.id,
+    snapshotReceiptSha256: snapshot.ref.complete_sha256,
+    connectionIdSha256: sha256Text(connectionId),
+    recordFamily: "attachment",
+    externalRecordIds: attachmentIds,
+    externalRecordIdsSha256: sha256Text(`${attachmentIds.join("\n")}\n`),
+    expectedRecordCount: attachmentIds.length,
+    authority: {
+      providerReadOnly: true,
+      remoteMutationEnabled: false,
+      businessMutationEnabled: false,
+    },
+  });
+  chmodSync(join(stateDir, "backfill-selection.json"), 0o400);
+  const priorStateDir = process.env.NEXUS_ADAPTER_STATE_DIR;
+  process.env.NEXUS_ADAPTER_STATE_DIR = stateDir;
+  const emitted: typeof allRows = [];
+  try {
+    await __test__.backfill(
+      {
+        runtime: {
+          platform: "alibaba",
+          connection_id: connectionId,
+          config: config(root),
+        },
+        signal: new AbortController().signal,
+        log: { debug() {}, error() {}, info() {} },
+      },
+      { since: new Date(0) },
+      (row) => emitted.push(row),
+    );
+  } finally {
+    if (priorStateDir === undefined) delete process.env.NEXUS_ADAPTER_STATE_DIR;
+    else process.env.NEXUS_ADAPTER_STATE_DIR = priorStateDir;
+  }
+  assert.equal(emitted.length, 2);
+  assert.deepEqual(
+    emitted.map((row) => row.payload.external_record_id).sort(),
+    attachmentIds,
+  );
+  assert.ok(emitted.every((row) => row.payload.metadata?.family === "attachment"));
+});
+
+test("backfill selection fails closed on an unselected or altered snapshot identity", () => {
+  const { root } = fixture();
+  const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const rows = __test__.recordsForWindow(
+    snapshot,
+    config(root, undefined, stateDir),
+    "conn-alibaba",
+    0,
+  );
+  const messageId = rows.find((row) => row.payload.metadata?.family === "message")!
+    .payload.external_record_id;
+  writeJson(join(stateDir, "backfill-selection.json"), {
+    schemaVersion: "nexus.alibaba_backfill_selection.v1",
+    purpose: "recover_partial_attachment_ingestion",
+    snapshotId: snapshot.ref.id,
+    snapshotReceiptSha256: snapshot.ref.complete_sha256,
+    connectionIdSha256: sha256Text("conn-alibaba"),
+    recordFamily: "attachment",
+    externalRecordIds: [messageId],
+    externalRecordIdsSha256: sha256Text(`${messageId}\n`),
+    expectedRecordCount: 1,
+    authority: {
+      providerReadOnly: true,
+      remoteMutationEnabled: false,
+      businessMutationEnabled: false,
+    },
+  });
+  chmodSync(join(stateDir, "backfill-selection.json"), 0o400);
+  assert.throws(
+    () => __test__.selectedBackfillRows(rows, snapshot.ref, "conn-alibaba", stateDir),
+    /identities are invalid/,
+  );
 });
 
 test("every linked and unlinked attachment is a standalone immutable record", () => {
