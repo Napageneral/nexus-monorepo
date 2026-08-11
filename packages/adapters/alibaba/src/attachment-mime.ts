@@ -1,6 +1,7 @@
 const JPEG = "image/jpeg";
 const PNG = "image/png";
 const WEBP = "image/webp";
+const HEIC = "image/heic";
 const PDF = "application/pdf";
 const MP4 = "video/mp4";
 const QUICKTIME = "video/quicktime";
@@ -11,6 +12,7 @@ export type AlibabaAttachmentMime =
   | typeof JPEG
   | typeof PNG
   | typeof WEBP
+  | typeof HEIC
   | typeof PDF
   | typeof MP4
   | typeof QUICKTIME
@@ -28,6 +30,7 @@ const COMPATIBLE_PROVIDER_MIME: Record<AlibabaAttachmentMime, ReadonlySet<string
   [JPEG]: new Set([JPEG, "image/jpg", "image/pjpeg"]),
   [PNG]: new Set([PNG]),
   [WEBP]: new Set([WEBP]),
+  [HEIC]: new Set([HEIC, "image/heif", "image/heic-sequence", "image/heif-sequence"]),
   [PDF]: new Set([PDF, "application/x-pdf"]),
   [MP4]: new Set([MP4, "application/mp4"]),
   // The reviewed Alibaba corpus labels one QuickTime ftyp container video/mp4.
@@ -50,6 +53,8 @@ const MP4_BRANDS = new Set([
   "mp41",
   "mp42",
 ]);
+
+const HEIC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1"]);
 
 export function normalizeAlibabaAttachmentMime(
   bytes: Buffer,
@@ -117,6 +122,7 @@ function detectIsoBaseMediaMime(bytes: Buffer): AlibabaAttachmentMime {
   for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
     brands.add(bytes.subarray(offset, offset + 4).toString("ascii").toLowerCase());
   }
+  if ([...brands].some((brand) => HEIC_BRANDS.has(brand))) return HEIC;
   if (brands.has("qt  ")) return QUICKTIME;
   if ([...brands].some((brand) => MP4_BRANDS.has(brand))) return MP4;
   throw new Error("Alibaba attachment media container brand is unsupported");

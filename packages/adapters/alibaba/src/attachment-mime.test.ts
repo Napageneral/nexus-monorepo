@@ -75,6 +75,12 @@ const FIXTURES = [
     expected: "image/webp",
   },
   {
+    name: "HEIC",
+    bytes: isoBaseMedia("heic", "mif1"),
+    provider: "application/octet-stream",
+    expected: "image/heic",
+  },
+  {
     name: "PDF",
     bytes: Buffer.from("%PDF-1.7\n%%EOF\n", "ascii"),
     provider: "application/pdf",
@@ -136,22 +142,26 @@ test("contradictory provider MIME and malformed containers fail closed", () => {
     () => normalizeAlibabaAttachmentMime(Buffer.from("not an attachment"), "application/pdf"),
     /unsupported sealed byte signature/,
   );
-  const truncatedOffice = FIXTURES[6].bytes.subarray(0, FIXTURES[6].bytes.length - 1);
+  const truncatedOffice = FIXTURES[7].bytes.subarray(0, FIXTURES[7].bytes.length - 1);
   assert.throws(
     () => normalizeAlibabaAttachmentMime(truncatedOffice, "application/zip"),
     /ZIP container is truncated/,
   );
-  const contradictoryOffice = Buffer.from(FIXTURES[6].bytes);
+  const contradictoryOffice = Buffer.from(FIXTURES[7].bytes);
   contradictoryOffice[30] = "x".charCodeAt(0);
   assert.throws(
     () => normalizeAlibabaAttachmentMime(contradictoryOffice, "application/zip"),
     /local and central entry names disagree/,
   );
-  const malformedMedia = Buffer.from(FIXTURES[4].bytes);
+  const malformedMedia = Buffer.from(FIXTURES[5].bytes);
   malformedMedia.writeUInt32BE(malformedMedia.length + 4, 0);
   assert.throws(
     () => normalizeAlibabaAttachmentMime(malformedMedia, "video/mp4"),
     /media container is malformed/,
+  );
+  assert.throws(
+    () => normalizeAlibabaAttachmentMime(isoBaseMedia("zzzz", "zzzz"), "application/octet-stream"),
+    /media container brand is unsupported/,
   );
 });
 
