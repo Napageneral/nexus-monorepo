@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   constants,
   existsSync,
   fstatSync,
+  fsyncSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import type { Stats } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
@@ -30,6 +37,7 @@ type AlibabaRuntimeConfig = {
   poll_interval_ms: number;
   monitor_overlap_ms: number;
   attachment_text_limit: number;
+  adapter_state_dir?: string;
 };
 
 type SnapshotSummary = {
@@ -290,6 +298,9 @@ function readRuntimeConfig(ctx: RuntimeContextLike): AlibabaRuntimeConfig {
       config.attachment_text_limit,
       DEFAULT_ATTACHMENT_TEXT_LIMIT,
     ),
+    ...(textValue(process.env.NEXUS_ADAPTER_STATE_DIR)
+      ? { adapter_state_dir: resolve(String(process.env.NEXUS_ADAPTER_STATE_DIR)) }
+      : {}),
   };
 }
 
@@ -606,6 +617,84 @@ function pathWithin(root: string, candidate: string): boolean {
   return value === "" || (!value.startsWith("..") && !isAbsolute(value));
 }
 
+function requirePrivateDirectory(root: string, parent: string, name: string): string {
+  const candidate = join(parent, name);
+  if (!existsSync(candidate)) mkdirSync(candidate, { mode: 0o700 });
+  const metadata = lstatSync(candidate);
+  if (!metadata.isDirectory()) {
+    throw new Error(`Alibaba adapter attachment custody directory is unsafe: ${name}`);
+  }
+  chmodSync(candidate, 0o700);
+  const realCandidate = realpathSync(candidate);
+  if (!pathWithin(root, realCandidate)) {
+    throw new Error(`Alibaba adapter attachment custody directory escapes state: ${name}`);
+  }
+  return realCandidate;
+}
+
+function materializeAttachmentCustody(
+  evidenceBytes: Buffer,
+  contentHash: string,
+  stateDir: string,
+): string {
+  if (!isAbsolute(stateDir)) {
+    throw new Error("Alibaba adapter state directory must be absolute");
+  }
+  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  const rootMetadata = lstatSync(stateDir);
+  if (!rootMetadata.isDirectory()) {
+    throw new Error("Alibaba adapter state directory is unsafe");
+  }
+  const realRoot = realpathSync(stateDir);
+  const custodyRoot = requirePrivateDirectory(realRoot, realRoot, "attachment-custody");
+  const shaRoot = requirePrivateDirectory(realRoot, custodyRoot, "sha256");
+  const prefixRoot = requirePrivateDirectory(realRoot, shaRoot, contentHash.slice(0, 2));
+  const destination = join(prefixRoot, contentHash);
+
+  if (!existsSync(destination)) {
+    const temporary = join(prefixRoot, `.${contentHash}.${process.pid}.tmp`);
+    let fd: number | undefined;
+    try {
+      fd = openSync(
+        temporary,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o600,
+      );
+      writeFileSync(fd, evidenceBytes);
+      fsyncSync(fd);
+      const written = fstatSync(fd);
+      if (!written.isFile() || written.nlink !== 1 || written.size !== evidenceBytes.length) {
+        throw new Error("Alibaba adapter attachment custody write is incomplete");
+      }
+      closeSync(fd);
+      fd = undefined;
+      renameSync(temporary, destination);
+      chmodSync(destination, 0o600);
+    } catch (error) {
+      if (fd !== undefined) closeSync(fd);
+      try {
+        unlinkSync(temporary);
+      } catch {
+        // The temporary file may already have been atomically renamed.
+      }
+      throw error;
+    }
+  }
+
+  const realDestination = realpathSync(destination);
+  if (!pathWithin(realRoot, realDestination)) {
+    throw new Error("Alibaba adapter attachment custody path escapes state");
+  }
+  const materializedBytes = readBoundFile(realDestination, MAX_ATTACHMENT_EVIDENCE_BYTES);
+  if (
+    materializedBytes.length !== evidenceBytes.length ||
+    sha256Bytes(materializedBytes) !== contentHash
+  ) {
+    throw new Error("Alibaba adapter attachment custody digest mismatch");
+  }
+  return realDestination;
+}
+
 function readAttachmentText(
   attachment: AlibabaAttachment,
   snapshot: LoadedSnapshot,
@@ -689,13 +778,16 @@ function normalizeAttachment(
     throw new Error(`Alibaba attachment sealed byte count mismatch: ${fileName}`);
   }
   const normalizedMime = normalizeAlibabaAttachmentMime(evidenceBytes, attachment.contentType);
+  const custodyPath = config.adapter_state_dir
+    ? materializeAttachmentCustody(evidenceBytes, contentHash, config.adapter_state_dir)
+    : localPath;
   return {
     id: `alibaba:attachment:${attachmentLogicalIdentity(attachment)}`,
     filename: fileName,
     mime_type: normalizedMime,
     ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
     size: evidenceBytes.length,
-    local_path: localPath,
+    local_path: custodyPath,
     content_hash: contentHash,
     metadata: {
       evidence_status: textValue(attachment.status) ?? "unknown",
@@ -1071,7 +1163,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.3.1",
+  version: "0.3.2",
   multi_account: true,
   auth: {
     methods: [
