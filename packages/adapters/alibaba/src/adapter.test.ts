@@ -72,6 +72,69 @@ function writeCompletionReceipt(snapshotPath: string): void {
   writeJson(join(snapshotPath, "complete.json"), receipt);
 }
 
+function upgradeFixtureToIdentityV2(snapshotPath: string): void {
+  const adapterDir = join(snapshotPath, "adapter");
+  const messagesPath = join(adapterDir, "messages.jsonl");
+  const messages = readFileSync(messagesPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  messages[0]!.senderAliId = "supplier-ali";
+  messages[0]!.receiverAliId = "moonsleep-alibaba";
+  messages[0]!.senderName = "Rebecca Liu";
+  messages[1]!.senderAliId = "moonsleep-alibaba";
+  messages[1]!.receiverAliId = "supplier-ali";
+  messages[1]!.receiverName = "Rebecca Liu";
+  writeJsonl(messagesPath, messages);
+  const identityPath = join(adapterDir, "identity-directory.jsonl");
+  writeJsonl(identityPath, [
+    {
+      schema_version: 1,
+      identity_type: "person",
+      provider_identity_id: "alibaba:person:ali:supplier-ali",
+      ali_id: "supplier-ali",
+      account_ids: ["supplier-account"],
+      display_name: "Rebecca Liu",
+      name_history: ["Rebecca", "Rebecca Liu"],
+      aliases: ["Rebecca"],
+      conversation_ids: ["surewal-thread"],
+      source_provenance: [{ source_snapshot_id: "fixture", source_sha256: "a".repeat(64) }],
+    },
+    {
+      schema_version: 1,
+      identity_type: "conversation",
+      provider_identity_id: "alibaba:conversation:surewal-thread",
+      conversation_id: "surewal-thread",
+      conversation_type: "direct",
+      participant_provider_identity_ids: ["alibaba:person:ali:supplier-ali"],
+      source_provenance: [{ source_snapshot_id: "fixture", source_sha256: "b".repeat(64) }],
+    },
+    {
+      schema_version: 1,
+      identity_type: "organization",
+      provider_identity_id: "alibaba:organization-name:surewal",
+      display_name: "Surewal",
+      resolution_state: "name_only_review_required",
+      source_provenance: [{ source_snapshot_id: "fixture", source_sha256: "c".repeat(64) }],
+    },
+    {
+      schema_version: 1,
+      identity_type: "membership",
+      provider_identity_id: "alibaba:membership:rebecca-surewal",
+      person_provider_identity_id: "alibaba:person:ali:supplier-ali",
+      organization_provider_identity_id: "alibaba:organization-name:surewal",
+      review_state: "proposed",
+      automatic_promotion_allowed: false,
+      source_provenance: [{ source_snapshot_id: "fixture", source_sha256: "d".repeat(64) }],
+    },
+  ]);
+  const receipt = JSON.parse(readFileSync(join(adapterDir, "complete.json"), "utf8"));
+  receipt.schemaVersion = 2;
+  receipt.identityDirectoryCount = 4;
+  receipt.adapterProjection.messagesSha256 = sha256(messagesPath);
+  receipt.adapterProjection.identityDirectorySha256 = sha256(identityPath);
+  writeJson(join(adapterDir, "complete.json"), receipt);
+  writeJson(join(snapshotPath, "complete.json"), receipt);
+}
+
 function fixture(): { root: string; snapshotPath: string; attachmentPath: string } {
   const root = mkdtempSync(join(tmpdir(), "nexus-alibaba-adapter-"));
   const snapshotPath = join(root, "snapshot-2026-07-17");
@@ -218,6 +281,104 @@ test("materializes sealed evidence inside adapter state before Nex ingestion", (
   assert.deepEqual(readFileSync(localPath), PDF_BYTES);
   assert.equal(statSync(localPath).mode & 0o777, 0o600);
   assert.equal(replay.payload.attachments?.[0]?.local_path, localPath);
+});
+
+test("identity v1 routes inbound and outbound people without collapsing the conversation", () => {
+  const { root, snapshotPath } = fixture();
+  upgradeFixtureToIdentityV2(snapshotPath);
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const incoming = __test__.buildRecord(snapshot.messages[0]!, snapshot, config(root), "conn-alibaba");
+  const outgoing = __test__.buildRecord(snapshot.messages[1]!, snapshot, config(root), "conn-alibaba");
+
+  assert.equal(incoming.routing.sender_id, "supplier-ali");
+  assert.deepEqual(incoming.payload.recipients, ["moonsleep-alibaba"]);
+  assert.equal(incoming.routing.connection_id, "conn-alibaba");
+  assert.equal(incoming.routing.container_id, "surewal-thread");
+  assert.equal(incoming.routing.container_kind, "direct");
+  assert.equal(outgoing.routing.sender_id, "moonsleep-alibaba");
+  assert.deepEqual(outgoing.payload.recipients, ["supplier-ali"]);
+  assert.equal(outgoing.payload.metadata?.identity_contract, "alibaba.identity-directory.v1");
+  assert.deepEqual(outgoing.payload.metadata?.adapter_contacts, [
+    {
+      platform: "alibaba",
+      sender_id: "supplier-ali",
+      sender_name: "Rebecca Liu",
+      aliases: ["Rebecca"],
+      connection_id: "conn-alibaba",
+      space_id: "moonsleep-alibaba",
+      container_kind: "direct",
+      container_id: "surewal-thread",
+      thread_id: "surewal-thread",
+    },
+  ]);
+  assert.notEqual(outgoing.routing.container_id, outgoing.payload.recipients?.[0]);
+});
+
+test("identity v1 infers an older outbound recipient from the direct conversation contact", () => {
+  const { root, snapshotPath } = fixture();
+  upgradeFixtureToIdentityV2(snapshotPath);
+  const adapterDir = join(snapshotPath, "adapter");
+  const messagesPath = join(adapterDir, "messages.jsonl");
+  const messages = readFileSync(messagesPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  delete messages[1]!.receiverAliId;
+  writeJsonl(messagesPath, messages);
+  const identityPath = join(adapterDir, "identity-directory.jsonl");
+  const directory = readFileSync(identityPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  directory.push({
+    schema_version: 1,
+    identity_type: "person",
+    provider_identity_id: "alibaba:person:ali:provider-self-id",
+    ali_id: "provider-self-id",
+    display_name: "MoonSleep",
+    name_history: ["MoonSleep"],
+    aliases: [],
+    conversation_ids: ["surewal-thread"],
+    source_provenance: [{ source_snapshot_id: "fixture", source_sha256: "e".repeat(64) }],
+  });
+  const conversation = directory.find((row) => row.identity_type === "conversation");
+  assert.ok(conversation && Array.isArray(conversation.participant_provider_identity_ids));
+  conversation.participant_provider_identity_ids.push("alibaba:person:ali:provider-self-id");
+  writeJsonl(identityPath, directory);
+  const receipt = JSON.parse(readFileSync(join(adapterDir, "complete.json"), "utf8"));
+  receipt.identityDirectoryCount = directory.length;
+  receipt.adapterProjection.messagesSha256 = sha256(messagesPath);
+  receipt.adapterProjection.identityDirectorySha256 = sha256(identityPath);
+  writeJson(join(adapterDir, "complete.json"), receipt);
+  writeJson(join(snapshotPath, "complete.json"), receipt);
+
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const outgoing = __test__.buildRecord(snapshot.messages[1]!, snapshot, config(root), "conn-alibaba");
+  assert.deepEqual(outgoing.payload.recipients, ["supplier-ali"]);
+  assert.equal(outgoing.payload.metadata?.message_receiver_id, "supplier-ali");
+});
+
+test("identity v1 refuses a direct message whose person identity is absent", () => {
+  const { root, snapshotPath } = fixture();
+  upgradeFixtureToIdentityV2(snapshotPath);
+  const messagesPath = join(snapshotPath, "adapter", "messages.jsonl");
+  const messages = readFileSync(messagesPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  delete messages[0]!.senderAliId;
+  writeJsonl(messagesPath, messages);
+  const identityPath = join(snapshotPath, "adapter", "identity-directory.jsonl");
+  const directory = readFileSync(identityPath, "utf8").trim().split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((row) => row.identity_type !== "person");
+  writeJsonl(identityPath, directory);
+  const receiptPath = join(snapshotPath, "adapter", "complete.json");
+  const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
+  receipt.identityDirectoryCount = directory.length;
+  receipt.adapterProjection.messagesSha256 = sha256(messagesPath);
+  receipt.adapterProjection.identityDirectorySha256 = sha256(identityPath);
+  writeJson(receiptPath, receipt);
+  writeJson(join(snapshotPath, "complete.json"), receipt);
+  const loaded = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  assert.throws(
+    () => __test__.buildRecord(loaded.messages[0]!, loaded, config(root), "conn-alibaba"),
+    /unresolved participant identity/,
+  );
 });
 
 test("rejects a symlinked adapter custody directory without writing outside state", () => {
