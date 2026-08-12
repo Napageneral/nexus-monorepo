@@ -51,6 +51,14 @@ describe("Shopify source schedule configuration", () => {
       timezone: "UTC",
       enabled: 0,
     }));
+    schedules.push({
+      id: "foreign-schedule",
+      job_definition_id: "foreign-job",
+      name: "another-app.critical-schedule",
+      expression: "7 * * * * *",
+      timezone: "UTC",
+      enabled: 1,
+    });
     let failingJobId = "";
     const jobsUpdate = vi.fn(async (input: Record<string, unknown>) => {
       if (input.id === failingJobId) {
@@ -119,9 +127,13 @@ describe("Shopify source schedule configuration", () => {
     expect(applied).toMatchObject({ state: "applied", plan_sha256: planned.plan_sha256 });
     expect(jobsUpdate).toHaveBeenCalledTimes(12);
     expect(schedulesUpdate).toHaveBeenCalledTimes(27);
+    expect(schedulesUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "foreign-schedule" }),
+    );
+    expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
     expect(
       schedules
-        .filter((row) => row.enabled === 1)
+        .filter((row) => row.enabled === 1 && row.id !== "foreign-schedule")
         .map((row) => row.name)
         .sort(),
     ).toEqual(enabledFamilies.map(sourceJobName).sort());
@@ -142,7 +154,12 @@ describe("Shopify source schedule configuration", () => {
         nex,
       } as never),
     ).rejects.toThrow("injected job update failure");
-    expect(schedules.every((row) => row.enabled === 0)).toBe(true);
+    expect(
+      schedules
+        .filter((row) => row.id !== "foreign-schedule")
+        .every((row) => row.enabled === 0),
+    ).toBe(true);
+    expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
   });
 });
 
