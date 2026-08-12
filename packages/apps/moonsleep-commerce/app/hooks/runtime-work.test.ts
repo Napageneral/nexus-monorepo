@@ -206,6 +206,12 @@ describe("MoonSleep commerce runtime work", () => {
       sourceScheduleIds: Array.from({ length: 12 }, (_, index) => `schedule-${index + 1}`),
     });
     expect(fixture.runtime.jobs.create).toHaveBeenCalledTimes(14);
+    for (const call of fixture.runtime.jobs.create.mock.calls.slice(2)) {
+      expect(call[0]).toMatchObject({ lane_id: "adapter_io" });
+    }
+    for (const call of fixture.runtime.jobs.create.mock.calls.slice(0, 2)) {
+      expect(call[0]).not.toHaveProperty("lane_id");
+    }
     expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
     for (const call of fixture.runtime.schedules.create.mock.calls) {
       expect(call[0]).toMatchObject({ enabled: false, timezone: "UTC" });
@@ -267,6 +273,7 @@ describe("MoonSleep commerce runtime work", () => {
           script_path: expectedSourceScript,
           config_json: JSON.stringify({ family }),
           status: "active",
+          lane_id: "adapter_io",
         })),
         {
           id: "job-2",
@@ -318,6 +325,32 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.events.subscriptions.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+  });
+
+  it("repairs source jobs that were defaulted into the workflow lane", async () => {
+    const expectedSourceScript = new URL("../jobs/shopify-source-observation.ts", import.meta.url)
+      .pathname;
+    const fixture = runtimeFixture({
+      jobs: SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
+        id: `job-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        description,
+        script_path: expectedSourceScript,
+        config_json: JSON.stringify({ family }),
+        status: "active",
+        lane_id: "workflow",
+      })),
+    });
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.update).toHaveBeenCalledTimes(SOURCE_FIXTURES.length);
+    for (const call of fixture.runtime.jobs.update.mock.calls) {
+      expect(call[0]).toMatchObject({ lane_id: "adapter_io" });
+    }
   });
 
   it("replaces only the disabled legacy broad subscriptions", async () => {
