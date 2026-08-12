@@ -188,6 +188,7 @@ const JOB_SPECS = Object.freeze([
   },
 ]);
 const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
+const SOURCE_CONNECTION_ID_RE = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
@@ -213,6 +214,34 @@ function unwrapPayload(value: unknown): RuntimeRow {
   const row = asRecord(value);
   const payload = asRecord(row.payload);
   return Object.keys(payload).length > 0 ? payload : row;
+}
+
+function sourceJobHasConfiguredConnection(
+  existing: RuntimeRow,
+  expectedFamily: string,
+): boolean {
+  let config: RuntimeRow;
+  try {
+    config = asRecord(JSON.parse(asString(existing.config_json)));
+  } catch {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has invalid config JSON`);
+  }
+  const keys = Object.keys(config).sort();
+  if (asString(config.family) !== expectedFamily) {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has an unexpected family`);
+  }
+  if (keys.length === 1 && keys[0] === "family") {
+    return false;
+  }
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "connection_id" ||
+    keys[1] !== "family" ||
+    !SOURCE_CONNECTION_ID_RE.test(asString(config.connection_id))
+  ) {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has unexpected config`);
+  }
+  return true;
 }
 
 async function listJobs(runtime: NexClient): Promise<RuntimeRow[]> {
@@ -247,10 +276,18 @@ async function ensureJob(
   const laneId = "config" in spec ? SOURCE_JOB_LANE_ID : "";
   if (existing) {
     const id = asString(existing.id);
+    let configNeedsUpdate = false;
+    if (configJson !== "") {
+      if ("schedule" in spec) {
+        sourceJobHasConfiguredConnection(existing, spec.config.family);
+      } else {
+        configNeedsUpdate = asString(existing.config_json) !== configJson;
+      }
+    }
     const needsUpdate =
       asString(existing.description) !== spec.description ||
       asString(existing.script_path) !== spec.scriptPath ||
-      (configJson !== "" && asString(existing.config_json) !== configJson) ||
+      configNeedsUpdate ||
       (laneId !== "" && asString(existing.lane_id) !== laneId) ||
       asString(existing.status) !== spec.status;
     if (!needsUpdate) {
@@ -261,7 +298,7 @@ async function ensureJob(
         id,
         description: spec.description,
         script_path: spec.scriptPath,
-        ...(configJson ? { config_json: configJson } : {}),
+        ...(configNeedsUpdate ? { config_json: configJson } : {}),
         ...(laneId ? { lane_id: laneId } : {}),
         status: spec.status,
         created_by: appId,
@@ -288,10 +325,11 @@ async function ensureJob(
   return id;
 }
 
-async function ensureDisabledSchedule(
+async function ensureSourceSchedule(
   runtime: NexClient,
   jobDefinitionId: string,
   scheduleSpec: { name: string; expression: string },
+  preserveEnabled: boolean,
 ): Promise<string> {
   const matches = (await listSchedules(runtime)).filter(
     (row) => asString(row.name) === scheduleSpec.name,
@@ -305,17 +343,22 @@ async function ensureDisabledSchedule(
       throw new Error("MoonSleep commerce source schedule is bound to a different job");
     }
     const id = asString(existing.id);
+    const existingEnabled = asInteger(existing.enabled);
+    if (existingEnabled !== 0 && existingEnabled !== 1) {
+      throw new Error("MoonSleep commerce source schedule has an invalid enabled state");
+    }
+    const enabled = preserveEnabled && existingEnabled === 1;
     if (
       asString(existing.expression) !== scheduleSpec.expression ||
       asString(existing.timezone) !== "UTC" ||
-      asInteger(existing.enabled) !== 0
+      existingEnabled !== (enabled ? 1 : 0)
     ) {
       const updated = unwrapPayload(
         await runtime.schedules.update({
           id,
           expression: scheduleSpec.expression,
           timezone: "UTC",
-          enabled: false,
+          enabled,
         }),
       );
       return asString(asRecord(updated.schedule).id) || id;
@@ -423,10 +466,18 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   const sourceJobDefinitionIds: string[] = [];
   const sourceScheduleIds: string[] = [];
   for (const spec of JOB_SPECS.slice(2)) {
+    const existing = (await listJobs(params.runtime)).find(
+      (row) => asString(row.name) === spec.name,
+    );
+    const preserveEnabled = existing
+      ? sourceJobHasConfiguredConnection(existing, spec.config.family)
+      : false;
     const jobId = await ensureJob(params.runtime, params.appId, spec);
     sourceJobDefinitionIds.push(jobId);
     if ("schedule" in spec) {
-      sourceScheduleIds.push(await ensureDisabledSchedule(params.runtime, jobId, spec.schedule));
+      sourceScheduleIds.push(
+        await ensureSourceSchedule(params.runtime, jobId, spec.schedule, preserveEnabled),
+      );
     }
   }
   return {

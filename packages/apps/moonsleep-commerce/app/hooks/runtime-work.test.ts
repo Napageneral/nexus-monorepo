@@ -327,6 +327,117 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
   });
 
+  it("preserves configured source bindings and enabled schedules during rehydration", async () => {
+    const expectedSourceScript = new URL("../jobs/shopify-source-observation.ts", import.meta.url)
+      .pathname;
+    const fixture = runtimeFixture({
+      jobs: SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
+        id: `job-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        description,
+        script_path: expectedSourceScript,
+        config_json: JSON.stringify({ family, connection_id: "shopify-production" }),
+        status: "active",
+        lane_id: "adapter_io",
+      })),
+      schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
+        id: `schedule-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        job_definition_id: `job-${index + 1}`,
+        expression,
+        timezone: "UTC",
+        enabled: index < 2 ? 1 : 0,
+      })),
+    });
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.update).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+    expect(fixture.jobs[0]?.config_json).toBe(
+      JSON.stringify({ family: "orders.delta", connection_id: "shopify-production" }),
+    );
+    expect(fixture.schedules.slice(0, 2).map((schedule) => schedule.enabled)).toEqual([1, 1]);
+  });
+
+  it("preserves a configured binding when repairing other source job metadata", async () => {
+    const fixture = runtimeFixture({
+      jobs: [
+        {
+          id: "job-1",
+          name: "moonsleep-commerce.shopify-source.inventory-hot",
+          description: "stale description",
+          script_path: new URL("../jobs/shopify-source-observation.ts", import.meta.url).pathname,
+          config_json: JSON.stringify({
+            family: "inventory.hot",
+            connection_id: "shopify-production",
+          }),
+          status: "active",
+          lane_id: "workflow",
+        },
+      ],
+      schedules: [
+        {
+          id: "schedule-1",
+          name: "moonsleep-commerce.shopify-source.inventory-hot",
+          job_definition_id: "job-1",
+          expression: "40 * * * * *",
+          timezone: "UTC",
+          enabled: 1,
+        },
+      ],
+    });
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "job-1", lane_id: "adapter_io" }),
+    );
+    expect(fixture.runtime.jobs.update.mock.calls[0]?.[0]).not.toHaveProperty("config_json");
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "schedule-1", enabled: false }),
+    );
+    expect(fixture.jobs[0]?.config_json).toBe(
+      JSON.stringify({ family: "inventory.hot", connection_id: "shopify-production" }),
+    );
+    expect(fixture.schedules[0]?.enabled).toBe(1);
+  });
+
+  it("fails closed on an unexpected configured source payload", async () => {
+    const fixture = runtimeFixture({
+      jobs: [
+        {
+          id: "job-1",
+          name: "moonsleep-commerce.shopify-source.inventory-hot",
+          description: "Capture bounded current Shopify inventory observations",
+          script_path: new URL("../jobs/shopify-source-observation.ts", import.meta.url).pathname,
+          config_json: JSON.stringify({
+            family: "inventory.hot",
+            connection_id: "shopify-production",
+            unexpected: true,
+          }),
+          status: "active",
+          lane_id: "adapter_io",
+        },
+      ],
+    });
+
+    await expect(
+      ensureMoonSleepCommerceRuntimeWork({
+        runtime: fixture.runtime,
+        appId: "moonsleep-commerce",
+      }),
+    ).rejects.toThrow(/unexpected config/);
+    expect(fixture.runtime.jobs.update).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+  });
+
   it("repairs source jobs that were defaulted into the workflow lane", async () => {
     const expectedSourceScript = new URL("../jobs/shopify-source-observation.ts", import.meta.url)
       .pathname;
