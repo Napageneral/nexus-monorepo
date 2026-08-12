@@ -748,11 +748,15 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
       throw new Error(`Shopify source schedule ${target.family} is bound to another job`);
     }
   }
+  const sourceSchedules = plan.schedules.map(
+    (target) => schedules.find((schedule) => asString(schedule.name) === target.schedule_name)!,
+  );
 
   try {
-    // Disable every schedule first. A failed reconfiguration can leave updated
-    // job metadata, but it can never leave a partially activated family set.
-    for (const schedule of schedules) {
+    // Disable only this app's exact source schedules first. A failed
+    // reconfiguration can leave updated job metadata, but it can never leave a
+    // partially activated family set or mutate another package's schedule.
+    for (const schedule of sourceSchedules) {
       await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
     }
     for (const target of plan.schedules) {
@@ -775,7 +779,7 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     }
   } catch (error) {
     const rollbackErrors: string[] = [];
-    for (const schedule of schedules) {
+    for (const schedule of sourceSchedules) {
       try {
         await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
       } catch (rollbackError) {
