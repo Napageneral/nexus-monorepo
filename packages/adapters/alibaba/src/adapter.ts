@@ -56,11 +56,13 @@ type SnapshotComplete = {
   conversationCount?: number;
   attachmentCount?: number;
   attachmentTextCount?: number;
+  identityDirectoryCount?: number;
   adapterProjection?: {
     messagesSha256?: string;
     conversationsSha256?: string;
     attachmentsSha256?: string;
     attachmentTextSha256?: string;
+    identityDirectorySha256?: string;
   };
   authority?: {
     capture?: string;
@@ -86,6 +88,7 @@ type AlibabaConversation = {
   companyName?: string | null;
   accountId?: string | null;
   aliId?: string | null;
+  conversationType?: "direct" | "group" | null;
 };
 
 type AlibabaMessage = {
@@ -97,10 +100,33 @@ type AlibabaMessage = {
   sentAt?: string | null;
   speaker?: string | null;
   direction?: string | null;
+  senderAliId?: string | null;
+  receiverAliId?: string | null;
+  senderName?: string | null;
+  receiverName?: string | null;
   msgType?: string | null;
   text?: string | null;
   provider_object_json: string;
   provider_object_sha256: string;
+};
+
+type AlibabaIdentityDirectoryRow = {
+  schema_version: number;
+  identity_type: "person" | "organization" | "conversation" | "participation" | "membership";
+  provider_identity_id: string;
+  ali_id?: string | null;
+  account_ids?: string[];
+  display_name?: string | null;
+  name_history?: string[];
+  aliases?: string[];
+  conversation_id?: string;
+  conversation_type?: "direct" | "group";
+  participant_provider_identity_ids?: string[];
+  person_provider_identity_id?: string;
+  organization_provider_identity_id?: string;
+  review_state?: string;
+  automatic_promotion_allowed?: boolean;
+  source_provenance?: UnknownRecord[];
 };
 
 type AlibabaAttachment = {
@@ -142,6 +168,10 @@ type LoadedSnapshot = {
   attachmentsByMessage: Map<string, AlibabaAttachment[]>;
   orphanAttachments: AlibabaAttachment[];
   textByFile: Map<string, AttachmentText>;
+  identityDirectory: AlibabaIdentityDirectoryRow[];
+  peopleByAliId: Map<string, AlibabaIdentityDirectoryRow>;
+  peopleByProviderIdentityId: Map<string, AlibabaIdentityDirectoryRow>;
+  channelIdentityByConversationId: Map<string, AlibabaIdentityDirectoryRow>;
 };
 
 type RuntimeContextLike = Pick<AdapterContext, "runtime" | "signal" | "log"> & {
@@ -159,6 +189,7 @@ const MAX_CONVERSATIONS_BYTES = 64 * 1024 * 1024;
 const MAX_MESSAGES_BYTES = 512 * 1024 * 1024;
 const MAX_ATTACHMENTS_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_INDEX_BYTES = 256 * 1024 * 1024;
+const MAX_IDENTITY_DIRECTORY_BYTES = 128 * 1024 * 1024;
 const MAX_ATTACHMENT_EVIDENCE_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_BYTES = 16 * 1024 * 1024;
 const MAX_BACKFILL_SELECTION_BYTES = 1 * 1024 * 1024;
@@ -563,6 +594,9 @@ function listSnapshots(snapshotRoot: string): SnapshotRef[] {
       join(path, "adapter", "conversations.jsonl"),
       join(path, "adapter", "attachments.jsonl"),
       join(path, "adapter", "attachment-text.jsonl"),
+      ...(completeReceiptVersion(rootCompletePath) === 2
+        ? [join(path, "adapter", "identity-directory.jsonl")]
+        : []),
     ];
     if (
       !existsSync(summaryPath) ||
@@ -599,7 +633,7 @@ function listSnapshots(snapshotRoot: string): SnapshotRef[] {
 }
 
 function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string): void {
-  if (complete.schemaVersion !== 1) {
+  if (complete.schemaVersion !== 1 && complete.schemaVersion !== 2) {
     throw new Error(`Alibaba snapshot receipt version is unsupported: ${snapshotId}`);
   }
   for (const [field, value] of Object.entries({
@@ -607,6 +641,9 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     conversationCount: complete.conversationCount,
     attachmentCount: complete.attachmentCount,
     attachmentTextCount: complete.attachmentTextCount,
+    ...(complete.schemaVersion === 2
+      ? { identityDirectoryCount: complete.identityDirectoryCount }
+      : {}),
   })) {
     if (!Number.isSafeInteger(value) || Number(value) < 0) {
       throw new Error(`Alibaba snapshot receipt ${field} is invalid: ${snapshotId}`);
@@ -619,6 +656,8 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     !SHA256.test(String(projection.conversationsSha256 ?? "")) ||
     !SHA256.test(String(projection.attachmentsSha256 ?? "")) ||
     !SHA256.test(String(projection.attachmentTextSha256 ?? ""))
+    || (complete.schemaVersion === 2
+      && !SHA256.test(String(projection.identityDirectorySha256 ?? "")))
   ) {
     throw new Error(`Alibaba snapshot projection digests are invalid: ${snapshotId}`);
   }
@@ -629,6 +668,15 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     complete.authority?.businessMutation !== false
   ) {
     throw new Error(`Alibaba snapshot authority receipt is unsafe: ${snapshotId}`);
+  }
+}
+
+function completeReceiptVersion(path: string): number | undefined {
+  try {
+    return (JSON.parse(readBoundFile(path, MAX_COMPLETE_BYTES).toString("utf8")) as SnapshotComplete)
+      .schemaVersion;
+  } catch {
+    return undefined;
   }
 }
 
@@ -645,6 +693,7 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
   const messagePath = join(adapterDir, "messages.jsonl");
   const attachmentPath = join(adapterDir, "attachments.jsonl");
   const attachmentTextPath = join(adapterDir, "attachment-text.jsonl");
+  const identityDirectoryPath = join(adapterDir, "identity-directory.jsonl");
   const projection = ref.complete.adapterProjection!;
   const messageBytes = readBoundFile(messagePath, MAX_MESSAGES_BYTES);
   const conversationBytes = readBoundFile(conversationPath, MAX_CONVERSATIONS_BYTES);
@@ -653,11 +702,17 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     attachmentTextPath,
     MAX_ATTACHMENT_TEXT_INDEX_BYTES,
   );
+  const identityDirectoryBytes = ref.complete.schemaVersion === 2
+    ? readBoundFile(identityDirectoryPath, MAX_IDENTITY_DIRECTORY_BYTES)
+    : Buffer.from("");
   for (const [path, bytes, expected] of [
     [messagePath, messageBytes, projection.messagesSha256],
     [conversationPath, conversationBytes, projection.conversationsSha256],
     [attachmentPath, attachmentBytes, projection.attachmentsSha256],
     [attachmentTextPath, attachmentTextBytes, projection.attachmentTextSha256],
+    ...(ref.complete.schemaVersion === 2
+      ? [[identityDirectoryPath, identityDirectoryBytes, projection.identityDirectorySha256] as const]
+      : []),
   ] as const) {
     if (sha256Bytes(bytes) !== expected) {
       throw new Error(`Alibaba snapshot projection digest mismatch: ${basename(path)}`);
@@ -703,12 +758,33 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
       .filter((row) => textValue(row.fileName))
       .map((row) => [String(row.fileName), row]),
   );
+  const identityDirectory = ref.complete.schemaVersion === 2
+    ? parseJsonl<AlibabaIdentityDirectoryRow>(identityDirectoryBytes)
+    : [];
+  validateIdentityDirectory(identityDirectory, ref);
+  const peopleByAliId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "person" && textValue(row.ali_id))
+      .map((row) => [String(row.ali_id), row]),
+  );
+  const peopleByProviderIdentityId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "person")
+      .map((row) => [row.provider_identity_id, row]),
+  );
+  const channelIdentityByConversationId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "conversation" && textValue(row.conversation_id))
+      .map((row) => [String(row.conversation_id), row]),
+  );
   if (
     conversations.size !== ref.complete.conversationCount ||
     messages.length !== ref.complete.messageCount ||
     attachments.length !== ref.complete.attachmentCount ||
     attachmentTextRows.filter((row) => row.status === "extracted").length !==
       ref.complete.attachmentTextCount
+    || (ref.complete.schemaVersion === 2
+      && identityDirectory.length !== ref.complete.identityDirectoryCount)
   ) {
     throw new Error(`Alibaba snapshot receipt counts do not match projection: ${ref.id}`);
   }
@@ -721,7 +797,33 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     attachmentsByMessage,
     orphanAttachments,
     textByFile,
+    identityDirectory,
+    peopleByAliId,
+    peopleByProviderIdentityId,
+    channelIdentityByConversationId,
   };
+}
+
+function validateIdentityDirectory(rows: AlibabaIdentityDirectoryRow[], ref: SnapshotRef): void {
+  const identities = new Set<string>();
+  for (const row of rows) {
+    if (row.schema_version !== 1 || !textValue(row.provider_identity_id)) {
+      throw new Error(`Alibaba identity directory row is invalid: ${ref.id}`);
+    }
+    if (!["person", "organization", "conversation", "participation", "membership"].includes(
+      row.identity_type,
+    )) {
+      throw new Error(`Alibaba identity directory type is unsupported: ${ref.id}`);
+    }
+    if (identities.has(row.provider_identity_id)) {
+      throw new Error(`Alibaba identity directory id is duplicated: ${row.provider_identity_id}`);
+    }
+    identities.add(row.provider_identity_id);
+    if (row.identity_type === "membership"
+      && (row.review_state !== "proposed" || row.automatic_promotion_allowed !== false)) {
+      throw new Error(`Alibaba identity membership is not review-only: ${row.provider_identity_id}`);
+    }
+  }
 }
 
 function messageTimestamp(message: AlibabaMessage): number {
@@ -941,8 +1043,45 @@ function buildRecord(
   connectionId: string,
 ): AdapterInboundRecord {
   const conversation = snapshot.conversations.get(message.cid);
-  const incoming = message.direction !== "outgoing";
-  const supplierId = textValue(conversation?.aliId) ?? `conversation:${message.cid}`;
+  const incoming = !isOutgoingDirection(message.direction);
+  const channelIdentity = snapshot.channelIdentityByConversationId.get(message.cid);
+  const containerKind = channelIdentity?.conversation_type
+    ?? conversation?.conversationType
+    ?? "direct";
+  const directoryParticipants = (channelIdentity?.participant_provider_identity_ids ?? [])
+    .map((id) => snapshot.peopleByProviderIdentityId.get(id))
+    .filter((row): row is AlibabaIdentityDirectoryRow => Boolean(row));
+  const legacySupplierId = textValue(conversation?.aliId) ?? `conversation:${message.cid}`;
+  // The sealed history legitimately observes MoonSleep's provider person id as
+  // well as the supplier in a direct conversation. The conversation contact is
+  // the provider's authoritative counterparty; counting all observed people
+  // would make older outbound messages with no explicit receiver ambiguous.
+  const directSupplier = containerKind === "direct"
+    ? snapshot.peopleByAliId.get(legacySupplierId)
+      ?? (directoryParticipants.length === 1 ? directoryParticipants[0] : undefined)
+    : undefined;
+  const senderAliId = textValue(message.senderAliId);
+  const receiverAliId = textValue(message.receiverAliId);
+  const senderPerson = senderAliId ? snapshot.peopleByAliId.get(senderAliId) : undefined;
+  const receiverPerson = receiverAliId ? snapshot.peopleByAliId.get(receiverAliId) : undefined;
+  const actualSenderId = incoming
+    ? senderAliId ?? textValue(directSupplier?.ali_id) ?? legacySupplierId
+    : config.account_id;
+  const actualReceiverId = incoming
+    ? receiverAliId ?? config.account_id
+    : receiverAliId
+      ?? (containerKind === "direct" ? textValue(directSupplier?.ali_id) : undefined)
+      ?? (snapshot.ref.complete.schemaVersion === 1 ? legacySupplierId : `conversation:${message.cid}`);
+  if (snapshot.ref.complete.schemaVersion === 2
+    && (
+      !actualSenderId
+      || !actualReceiverId
+      || (incoming && !senderAliId && !directSupplier)
+      || (!incoming && containerKind === "direct" && !receiverAliId && !directSupplier)
+    )) {
+    throw new Error(`Alibaba message ${message.messageId} has unresolved participant identity`);
+  }
+  const supplierId = incoming ? actualSenderId : actualReceiverId;
   const supplierName =
     textValue(message.conversationName) ??
     textValue(conversation?.name) ??
@@ -965,8 +1104,11 @@ function buildRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
-      sender_id: incoming ? supplierId : config.account_id,
-      sender_name: incoming ? textValue(message.speaker) ?? supplierName : config.account_label,
+      sender_id: actualSenderId,
+      sender_name: incoming
+        ? textValue(message.senderName) ?? textValue(senderPerson?.display_name)
+          ?? textValue(message.speaker) ?? supplierName
+        : config.account_label,
       // Nex reserves the canonical receiver for the configured adapter account so
       // inbound integrity can bind every emitted record to this exact connection.
       // For outbound provider messages the supplier remains the actual recipient
@@ -977,7 +1119,7 @@ function buildRecord(
       receiver_name: config.account_label,
       space_id: config.account_id,
       space_name: config.account_label,
-      container_kind: "direct",
+      container_kind: containerKind,
       container_id: message.cid,
       container_name: supplierName,
       thread_id: message.cid,
@@ -988,6 +1130,11 @@ function buildRecord(
         supplier_account_id: textValue(conversation?.accountId) ?? null,
         company_name: textValue(message.companyName) ?? textValue(conversation?.companyName) ?? null,
         direction: incoming ? "incoming" : "outgoing",
+        message_receiver_id: actualReceiverId,
+        message_receiver_name: incoming
+          ? textValue(message.receiverName) ?? config.account_label
+          : textValue(message.receiverName) ?? textValue(receiverPerson?.display_name)
+            ?? textValue(directSupplier?.display_name) ?? supplierName,
       },
     },
     payload: {
@@ -998,7 +1145,9 @@ function buildRecord(
       timestamp,
       content,
       content_type: "text",
-      ...(!incoming ? { recipients: [supplierId] } : {}),
+      ...(snapshot.ref.complete.schemaVersion === 2 || !incoming
+        ? { recipients: [actualReceiverId] }
+        : {}),
       payload: {
         provider_object_json: message.provider_object_json,
         provider_object_sha256: message.provider_object_sha256,
@@ -1019,9 +1168,50 @@ function buildRecord(
         snapshot_receipt_sha256: snapshot.ref.complete_sha256,
         snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
+        identity_contract: snapshot.ref.complete.schemaVersion === 2
+          ? "alibaba.identity-directory.v1"
+          : "alibaba.legacy-conversation-identity.v1",
+        message_receiver_id: actualReceiverId,
+        adapter_contacts: adapterContactSeedsForConversation(
+          snapshot,
+          message.cid,
+          connectionId,
+          config.account_id,
+          containerKind,
+        ),
       },
     },
   };
+}
+
+function isOutgoingDirection(value: unknown): boolean {
+  const normalized = textValue(value)?.toLowerCase();
+  return normalized === "outgoing" || normalized === "outbound" || normalized === "sent";
+}
+
+function adapterContactSeedsForConversation(
+  snapshot: LoadedSnapshot,
+  conversationId: string,
+  connectionId: string,
+  spaceId: string,
+  containerKind: "direct" | "group",
+): UnknownRecord[] {
+  const channel = snapshot.channelIdentityByConversationId.get(conversationId);
+  if (!channel) return [];
+  return (channel.participant_provider_identity_ids ?? [])
+    .map((id) => snapshot.peopleByProviderIdentityId.get(id))
+    .filter((row): row is AlibabaIdentityDirectoryRow => Boolean(row && textValue(row.ali_id)))
+    .map((row) => ({
+      platform: PLATFORM,
+      sender_id: row.ali_id,
+      sender_name: textValue(row.display_name),
+      aliases: row.aliases ?? [],
+      connection_id: connectionId,
+      space_id: spaceId,
+      container_kind: containerKind,
+      container_id: conversationId,
+      thread_id: conversationId,
+    }));
 }
 
 function buildAttachmentRecord(
@@ -1038,7 +1228,7 @@ function buildAttachmentRecord(
   const linkedToProviderMessage = attachment.parentMessageCaptured === true || Boolean(parentMessage);
   const parentDirection = textValue(parentMessage?.direction)
     ?? textValue(attachment.parentMessageDirection);
-  const incoming = parentDirection !== "outgoing";
+  const incoming = !isOutgoingDirection(parentDirection);
   const supplierId = textValue(conversation?.aliId) ?? `conversation:${conversationId}`;
   const supplierName =
     textValue(conversation?.name) ??
@@ -1306,7 +1496,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.3.5",
+  version: "0.4.0",
   multi_account: true,
   auth: {
     methods: [
