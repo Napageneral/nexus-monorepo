@@ -21,8 +21,10 @@ job ignores non-customer records. For a customer record it:
 5. Calls `entities.tags.list` and requires `Customer` and `Shopify`.
 6. Returns exact projection identifiers for the durable job receipt.
 
-The app also installs twelve independent Shopify source-observation jobs. Their
-recurring schedules are disabled on install and upgrade. Use
+The app also installs twelve independent Shopify source-observation jobs. New
+or unconfigured recurring schedules are disabled on install and upgrade. An
+exact connection-bound schedule configuration survives app rehydration and
+package upgrades; malformed or broadened job configuration fails closed. Use
 `moonsleep-commerce.shopify-source.trigger` for one force-now family run, or
 plan and hash-confirm an explicit connection-bound family set through
 `moonsleep-commerce.shopify-source.configure-schedules`. Never enable a
