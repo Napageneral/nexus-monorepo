@@ -21,6 +21,7 @@ const COMMERCE_JOB_SCRIPT_PATH = fileURLToPath(
 const SOURCE_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-source-observation.ts", import.meta.url),
 );
+const SOURCE_JOB_LANE_ID = "adapter_io";
 const JOB_SPECS = Object.freeze([
   {
     name: CUSTOMER_JOB_NAME,
@@ -243,12 +244,14 @@ async function ensureJob(
 ): Promise<string> {
   const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
+  const laneId = "config" in spec ? SOURCE_JOB_LANE_ID : "";
   if (existing) {
     const id = asString(existing.id);
     const needsUpdate =
       asString(existing.description) !== spec.description ||
       asString(existing.script_path) !== spec.scriptPath ||
       (configJson !== "" && asString(existing.config_json) !== configJson) ||
+      (laneId !== "" && asString(existing.lane_id) !== laneId) ||
       asString(existing.status) !== spec.status;
     if (!needsUpdate) {
       return id;
@@ -259,6 +262,7 @@ async function ensureJob(
         description: spec.description,
         script_path: spec.scriptPath,
         ...(configJson ? { config_json: configJson } : {}),
+        ...(laneId ? { lane_id: laneId } : {}),
         status: spec.status,
         created_by: appId,
       }),
@@ -272,6 +276,7 @@ async function ensureJob(
       description: spec.description,
       script_path: spec.scriptPath,
       ...(configJson ? { config_json: configJson } : {}),
+      ...(laneId ? { lane_id: laneId } : {}),
       status: spec.status,
       created_by: appId,
     }),
