@@ -283,7 +283,7 @@ test("materializes sealed evidence inside adapter state before Nex ingestion", (
   assert.equal(replay.payload.attachments?.[0]?.local_path, localPath);
 });
 
-test("identity v1 routes inbound and outbound people without collapsing the conversation", () => {
+test("identity v2 routes inbound and outbound people without collapsing the conversation", () => {
   const { root, snapshotPath } = fixture();
   upgradeFixtureToIdentityV2(snapshotPath);
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
@@ -297,7 +297,14 @@ test("identity v1 routes inbound and outbound people without collapsing the conv
   assert.equal(incoming.routing.container_kind, "direct");
   assert.equal(outgoing.routing.sender_id, "moonsleep-alibaba");
   assert.deepEqual(outgoing.payload.recipients, ["supplier-ali"]);
-  assert.equal(outgoing.payload.metadata?.identity_contract, "alibaba.identity-directory.v1");
+  assert.equal(outgoing.payload.metadata?.identity_contract, "alibaba.identity-directory.v2");
+  assert.equal(incoming.routing.metadata?.sender_contact_space_id, "moonsleep-alibaba:person");
+  assert.equal(incoming.routing.metadata?.message_receiver_contact_space_id, "moonsleep-alibaba");
+  assert.equal(outgoing.routing.metadata?.sender_contact_space_id, "moonsleep-alibaba");
+  assert.equal(
+    outgoing.routing.metadata?.message_receiver_contact_space_id,
+    "moonsleep-alibaba:person",
+  );
   assert.deepEqual(outgoing.payload.metadata?.adapter_contacts, [
     {
       platform: "alibaba",
@@ -305,7 +312,7 @@ test("identity v1 routes inbound and outbound people without collapsing the conv
       sender_name: "Rebecca Liu",
       aliases: ["Rebecca"],
       connection_id: "conn-alibaba",
-      space_id: "moonsleep-alibaba",
+      space_id: "moonsleep-alibaba:person",
       container_kind: "direct",
       container_id: "surewal-thread",
       thread_id: "surewal-thread",
@@ -314,7 +321,7 @@ test("identity v1 routes inbound and outbound people without collapsing the conv
   assert.notEqual(outgoing.routing.container_id, outgoing.payload.recipients?.[0]);
 });
 
-test("identity v1 infers an older outbound recipient from the direct conversation contact", () => {
+test("identity v2 infers an older outbound recipient from the direct conversation contact", () => {
   const { root, snapshotPath } = fixture();
   upgradeFixtureToIdentityV2(snapshotPath);
   const adapterDir = join(snapshotPath, "adapter");
@@ -354,7 +361,7 @@ test("identity v1 infers an older outbound recipient from the direct conversatio
   assert.equal(outgoing.payload.metadata?.message_receiver_id, "supplier-ali");
 });
 
-test("identity v1 refuses a direct message whose person identity is absent", () => {
+test("identity v2 refuses a direct message whose person identity is absent", () => {
   const { root, snapshotPath } = fixture();
   upgradeFixtureToIdentityV2(snapshotPath);
   const messagesPath = join(snapshotPath, "adapter", "messages.jsonl");
