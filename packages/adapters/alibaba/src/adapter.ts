@@ -179,6 +179,9 @@ type RuntimeContextLike = Pick<AdapterContext, "runtime" | "signal" | "log"> & {
 };
 
 const PLATFORM = "alibaba";
+const PERSON_CONTACT_SPACE = "moonsleep-alibaba:person";
+const CONVERSATION_CONTACT_SPACE = "moonsleep-alibaba:conversation";
+const IDENTITY_DIRECTORY_CONTRACT = "alibaba.identity-directory.v2";
 const DEFAULT_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const DEFAULT_MONITOR_OVERLAP_MS = 72 * 60 * 60 * 1000;
 const DEFAULT_ATTACHMENT_TEXT_LIMIT = 30_000;
@@ -1082,6 +1085,12 @@ function buildRecord(
     throw new Error(`Alibaba message ${message.messageId} has unresolved participant identity`);
   }
   const supplierId = incoming ? actualSenderId : actualReceiverId;
+  const senderContactSpaceId = incoming ? PERSON_CONTACT_SPACE : config.account_id;
+  const receiverContactSpaceId = incoming
+    ? config.account_id
+    : containerKind === "group"
+      ? CONVERSATION_CONTACT_SPACE
+      : PERSON_CONTACT_SPACE;
   const supplierName =
     textValue(message.conversationName) ??
     textValue(conversation?.name) ??
@@ -1130,7 +1139,12 @@ function buildRecord(
         supplier_account_id: textValue(conversation?.accountId) ?? null,
         company_name: textValue(message.companyName) ?? textValue(conversation?.companyName) ?? null,
         direction: incoming ? "incoming" : "outgoing",
+        identity_contract: snapshot.ref.complete.schemaVersion === 2
+          ? IDENTITY_DIRECTORY_CONTRACT
+          : "alibaba.legacy-conversation-identity.v1",
+        sender_contact_space_id: senderContactSpaceId,
         message_receiver_id: actualReceiverId,
+        message_receiver_contact_space_id: receiverContactSpaceId,
         message_receiver_name: incoming
           ? textValue(message.receiverName) ?? config.account_label
           : textValue(message.receiverName) ?? textValue(receiverPerson?.display_name)
@@ -1169,14 +1183,15 @@ function buildRecord(
         snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
         identity_contract: snapshot.ref.complete.schemaVersion === 2
-          ? "alibaba.identity-directory.v1"
+          ? IDENTITY_DIRECTORY_CONTRACT
           : "alibaba.legacy-conversation-identity.v1",
+        sender_contact_space_id: senderContactSpaceId,
         message_receiver_id: actualReceiverId,
+        message_receiver_contact_space_id: receiverContactSpaceId,
         adapter_contacts: adapterContactSeedsForConversation(
           snapshot,
           message.cid,
           connectionId,
-          config.account_id,
           containerKind,
         ),
       },
@@ -1193,7 +1208,6 @@ function adapterContactSeedsForConversation(
   snapshot: LoadedSnapshot,
   conversationId: string,
   connectionId: string,
-  spaceId: string,
   containerKind: "direct" | "group",
 ): UnknownRecord[] {
   const channel = snapshot.channelIdentityByConversationId.get(conversationId);
@@ -1207,7 +1221,7 @@ function adapterContactSeedsForConversation(
       sender_name: textValue(row.display_name),
       aliases: row.aliases ?? [],
       connection_id: connectionId,
-      space_id: spaceId,
+      space_id: PERSON_CONTACT_SPACE,
       container_kind: containerKind,
       container_id: conversationId,
       thread_id: conversationId,
@@ -1496,7 +1510,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.4.0",
+  version: "0.4.1",
   multi_account: true,
   auth: {
     methods: [

@@ -17,7 +17,7 @@ test("adapter reflection is read-only and exposes only ingest operations", async
     },
   });
   assert.equal(info.platform, "alibaba");
-  assert.equal(info.version, "0.4.0");
+  assert.equal(info.version, "0.4.1");
   assert.deepEqual(info.auth?.methods, [
     {
       id: "alibaba_browser_snapshot",
