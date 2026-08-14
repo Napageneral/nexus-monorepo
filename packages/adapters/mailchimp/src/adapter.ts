@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
+import { parse as parseCsv } from "csv-parse/sync";
+import { unzipSync } from "fflate";
+import {
   defineAdapter,
   method,
   requireCredential,
@@ -19,6 +30,7 @@ type MailchimpClient = {
   marketingBaseUrl: string;
   transactionalBaseUrl: string;
   fetchFn: typeof fetch;
+  runtimeConfig: UnknownRecord;
 };
 
 const PLATFORM = "mailchimp";
@@ -26,10 +38,15 @@ const DEFAULT_ACCOUNT_LABEL = "MoonSleep Mailchimp";
 const DEFAULT_CONNECTION_ID = "moonsleep-mailchimp";
 const DEFAULT_MARKETING_DATACENTER = "us20";
 const DEFAULT_TRANSACTIONAL_BASE_URL = "https://mandrillapp.com/api/1.0";
-const MAX_PAGE_SIZE = 500;
+const MAX_PAGE_SIZE = 1000;
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_MONITOR_INTERVAL_MS = 15 * 60 * 1000;
-const DEFAULT_OVERLAP_MS = 72 * 60 * 60 * 1000;
+const DEFAULT_MONITOR_INTERVAL_MS = 60 * 60 * 1000;
+const DEFAULT_OVERLAP_MS = 48 * 60 * 60 * 1000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
+const DEFAULT_EXPORT_POLL_MS = 5_000;
+const DEFAULT_EXPORT_WAIT_MS = 15 * 60 * 1000;
+const MAX_EXPORT_BYTES = 512 * 1024 * 1024;
+const MAX_RETRIES = 5;
 
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -51,6 +68,12 @@ function integerValue(value: unknown, fallback: number, maximum = MAX_PAGE_SIZE)
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(1, Math.min(maximum, Math.floor(parsed)));
+}
+
+function positiveNumber(value: unknown, fallback: number, maximum: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(maximum, Math.floor(parsed));
 }
 
 function sha256(value: string): string {
@@ -79,6 +102,25 @@ function withoutFields(record: UnknownRecord, fields: readonly string[]): Unknow
 
 function runtimeConfig(ctx: AdapterContext): UnknownRecord {
   return asRecord(ctx.runtime?.config);
+}
+
+function adapterStateDir(): string | undefined {
+  const value = textValue(process.env.NEXUS_ADAPTER_STATE_DIR);
+  if (!value) return undefined;
+  const absolute = resolve(value);
+  if (!existsSync(absolute)) mkdirSync(absolute, { recursive: true, mode: 0o700 });
+  chmodSync(absolute, 0o700);
+  return absolute;
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
+}
+
+function retryDelay(attempt: number, retryAfter: string | null): number {
+  const seconds = retryAfter ? Number(retryAfter) : NaN;
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(60_000, seconds * 1000);
+  return Math.min(30_000, 500 * (2 ** attempt));
 }
 
 function configText(ctx: AdapterContext, name: string): string | undefined {
@@ -116,6 +158,7 @@ function buildClient(ctx: AdapterContext, connectionId?: string): MailchimpClien
     transactionalBaseUrl:
       configText(ctx, "transactional_base_url") ?? DEFAULT_TRANSACTIONAL_BASE_URL,
     fetchFn: fetch,
+    runtimeConfig: runtimeConfig(ctx),
   };
 }
 
@@ -131,6 +174,42 @@ async function responseJson(response: Response): Promise<unknown> {
   return parsed;
 }
 
+async function providerFetchJson(
+  client: MailchimpClient,
+  url: URL,
+  init: RequestInit,
+): Promise<unknown> {
+  const configuredTimeout = positiveNumber(
+    runtimeConfigFromClient(client).request_timeout_ms,
+    DEFAULT_REQUEST_TIMEOUT_MS,
+    120_000,
+  );
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), configuredTimeout);
+    try {
+      const response = await client.fetchFn(url, { ...init, signal: controller.signal });
+      if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
+        const delay = retryDelay(attempt, response.headers.get("retry-after"));
+        await response.arrayBuffer();
+        await sleep(delay);
+        continue;
+      }
+      return await responseJson(response);
+    } catch (error) {
+      if (attempt >= MAX_RETRIES) throw error;
+      await sleep(retryDelay(attempt, null));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error("Mailchimp read retries exhausted");
+}
+
+function runtimeConfigFromClient(client: MailchimpClient): UnknownRecord {
+  return client.runtimeConfig;
+}
+
 async function marketingGet(
   client: MailchimpClient,
   path: string,
@@ -141,11 +220,10 @@ async function marketingGet(
     if (value !== undefined) url.searchParams.set(name, String(value));
   }
   const authorization = Buffer.from(`nex:${client.marketingApiKey}`, "utf8").toString("base64");
-  const response = await client.fetchFn(url, {
+  return await providerFetchJson(client, url, {
     method: "GET",
     headers: { Accept: "application/json", Authorization: `Basic ${authorization}` },
   });
-  return await responseJson(response);
 }
 
 async function transactionalPost(
@@ -154,12 +232,11 @@ async function transactionalPost(
   payload: UnknownRecord = {},
 ): Promise<unknown> {
   const url = new URL(path.replace(/^\//u, ""), `${client.transactionalBaseUrl.replace(/\/$/u, "")}/`);
-  const response = await client.fetchFn(url, {
+  return await providerFetchJson(client, url, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ key: client.transactionalApiKey, ...payload }),
   });
-  return await responseJson(response);
 }
 
 function requireClient(ctx: DefinedAdapterContext<MailchimpClient>): MailchimpClient {
@@ -185,11 +262,54 @@ function messageTimestamp(message: UnknownRecord): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
-function marketingRecord(
+function marketingCampaignRecord(
+  client: MailchimpClient,
+  campaign: UnknownRecord,
+  content: UnknownRecord,
+): AdapterInboundRecord {
+  const campaignId = textValue(campaign.id) ?? "unknown-campaign";
+  const subject = textValue(asRecord(campaign.settings).subject_line) ?? "Mailchimp campaign";
+  const providerPayload = { campaign, content };
+  return {
+    operation: "record.ingest",
+    routing: {
+      adapter: PLATFORM,
+      platform: PLATFORM,
+      connection_id: client.connectionId,
+      sender_id: client.connectionId,
+      sender_name: client.accountLabel,
+      receiver_id: client.connectionId,
+      receiver_name: client.accountLabel,
+      space_id: client.connectionId,
+      space_name: client.accountLabel,
+      container_kind: "group",
+      container_id: `marketing:${campaignId}`,
+      container_name: subject,
+      thread_id: `marketing:${campaignId}`,
+      metadata: { source_channel: "mailchimp_marketing_campaign" },
+    },
+    payload: {
+      external_record_id: `mailchimp:${client.connectionId}:marketing-campaign:${campaignId}`,
+      timestamp: campaignTimestamp(campaign),
+      content: `${subject}\n\n${textValue(content.plain_text) ?? textValue(content.html) ?? "[Campaign content unavailable]"}`,
+      content_type: "text",
+      recipients: [],
+      payload: providerPayload,
+      metadata: {
+        source_channel: "mailchimp_marketing_campaign",
+        provider_campaign_id: campaignId,
+        direction: "moonsleep_to_customer",
+        revision_hash: sha256(stableJson(providerPayload)),
+        read_only_source: true,
+      },
+    },
+  };
+}
+
+function marketingRecipientRecord(
   client: MailchimpClient,
   campaign: UnknownRecord,
   activity: UnknownRecord,
-  content: UnknownRecord,
 ): AdapterInboundRecord {
   const campaignId = textValue(campaign.id) ?? "unknown-campaign";
   const emailId = textValue(activity.email_id) ?? normalizedEmailHash(activity.email_address) ?? "unknown-recipient";
@@ -199,7 +319,6 @@ function marketingRecord(
   const providerPayload = {
     campaign,
     activity: withoutFields(activity, ["email_address"]),
-    content,
   };
   const revisionHash = sha256(stableJson(providerPayload));
   return {
@@ -226,7 +345,7 @@ function marketingRecord(
     payload: {
       external_record_id: `mailchimp:${client.connectionId}:marketing:${campaignId}:${emailId}`,
       timestamp,
-      content: `${subject}\n\n${textValue(content.plain_text) ?? textValue(content.html) ?? "[Campaign content unavailable]"}`,
+      content: subject,
       content_type: "text",
       recipients: recipientHash ? [`email-sha256:${recipientHash}`] : [],
       payload: providerPayload,
@@ -234,14 +353,29 @@ function marketingRecord(
         source_channel: "mailchimp_marketing",
         provider_campaign_id: campaignId,
         provider_recipient_id: emailId,
+        campaign_record_ref: `mailchimp:${client.connectionId}:marketing-campaign:${campaignId}`,
         recipient_email_sha256: recipientHash ?? null,
-        delivery_state: "provider_activity_observed",
+        delivery_state: marketingDeliveryState(activity, campaign),
         direction: "moonsleep_to_customer",
         revision_hash: revisionHash,
         read_only_source: true,
       },
     },
   };
+}
+
+function marketingDeliveryState(activity: UnknownRecord, campaign: UnknownRecord = {}): string {
+  const actions = asArray(activity.activity)
+    .map(asRecord)
+    .map((row) => textValue(row.action)?.toLowerCase())
+    .filter((value): value is string => Boolean(value));
+  if (actions.some((value) => value.includes("bounce") || value === "abuse")) {
+    return "verified_not_delivered";
+  }
+  const campaignDelivery = textValue(asRecord(campaign.delivery_status).status)?.toLowerCase();
+  return actions.includes("sent") || campaignDelivery === "delivered"
+    ? "verified_delivered"
+    : "uncertain";
 }
 
 function transactionalRecord(
@@ -251,7 +385,7 @@ function transactionalRecord(
   const messageId = textValue(message._id) ?? sha256(stableJson(message));
   const recipientHash = normalizedEmailHash(message.email);
   const subject = textValue(message.subject) ?? "Mailchimp Transactional message";
-  const state = textValue(message.state) ?? "unknown";
+  const state = transactionalDeliveryState(message.state);
   const providerMessage = withoutFields(message, ["email"]);
   return {
     operation: "record.ingest",
@@ -294,6 +428,76 @@ function transactionalRecord(
   };
 }
 
+function transactionalDeliveryState(value: unknown): string {
+  const state = textValue(value)?.toLowerCase() ?? "unknown";
+  if (["sent", "delivered"].includes(state)) return "verified_delivered";
+  if (["bounced", "rejected", "spam", "unsub"].includes(state)) return "verified_not_delivered";
+  if (["queued", "scheduled"].includes(state)) return "attempted";
+  return "uncertain";
+}
+
+function exportTimestamp(row: UnknownRecord): number {
+  const source = textValue(row.Date) ?? textValue(row.date);
+  if (!source) return Date.now();
+  const utc = /(?:Z|[+-]\d\d:?\d\d)$/u.test(source) ? source : `${source.replace(" ", "T")}Z`;
+  const parsed = Date.parse(utc);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function transactionalExportRecord(
+  client: MailchimpClient,
+  row: UnknownRecord,
+  exportId: string,
+  duplicateOrdinal: number,
+): AdapterInboundRecord {
+  const email = textValue(row["Email Address"]) ?? textValue(row.email);
+  const recipientHash = normalizedEmailHash(email);
+  const sanitized = withoutFields(row, ["Email Address", "email"]);
+  const stableIdentity = sha256(stableJson({ row: sanitized, recipientHash, duplicateOrdinal }));
+  const subject = textValue(row.Subject) ?? textValue(row.subject) ?? "Mailchimp Transactional message";
+  const providerMessageRef = `export:${stableIdentity}`;
+  return {
+    operation: "record.ingest",
+    routing: {
+      adapter: PLATFORM,
+      platform: PLATFORM,
+      connection_id: client.connectionId,
+      sender_id: client.connectionId,
+      sender_name: client.accountLabel,
+      receiver_id: client.connectionId,
+      receiver_name: client.accountLabel,
+      space_id: client.connectionId,
+      space_name: client.accountLabel,
+      container_kind: "direct",
+      container_id: `transactional:${providerMessageRef}`,
+      container_name: subject,
+      thread_id: `transactional:${providerMessageRef}`,
+      metadata: {
+        source_channel: "mailchimp_transactional",
+        recipient_email_sha256: recipientHash ?? null,
+      },
+    },
+    payload: {
+      external_record_id: `mailchimp:${client.connectionId}:transactional:${providerMessageRef}`,
+      timestamp: exportTimestamp(row),
+      content: subject,
+      content_type: "text",
+      recipients: recipientHash ? [`email-sha256:${recipientHash}`] : [],
+      payload: { provider_export_row: sanitized },
+      metadata: {
+        source_channel: "mailchimp_transactional",
+        provider_message_id: providerMessageRef,
+        provider_export_id: exportId,
+        recipient_email_sha256: recipientHash ?? null,
+        delivery_state: transactionalDeliveryState(row.Status ?? row.status),
+        direction: "moonsleep_to_customer",
+        revision_hash: sha256(stableJson(sanitized)),
+        read_only_source: true,
+      },
+    },
+  };
+}
+
 async function listAllCampaigns(
   client: MailchimpClient,
   since: Date,
@@ -307,6 +511,7 @@ async function listAllCampaigns(
       since_send_time: since.toISOString(),
       before_send_time: to?.toISOString(),
       status: "sent",
+      fields: "campaigns.id,campaigns.type,campaigns.create_time,campaigns.send_time,campaigns.status,campaigns.emails_sent,campaigns.recipients.list_id,campaigns.recipients.recipient_count,campaigns.settings.subject_line,campaigns.settings.preview_text,campaigns.settings.title,campaigns.settings.from_name,campaigns.settings.reply_to,campaigns.delivery_status,total_items",
     }));
     const campaigns = asArray(page.campaigns).map(asRecord);
     rows.push(...campaigns);
@@ -315,22 +520,155 @@ async function listAllCampaigns(
   return rows;
 }
 
-async function campaignActivity(
+async function emitCampaignActivity(
   client: MailchimpClient,
   campaignId: string,
-): Promise<UnknownRecord[]> {
-  const rows: UnknownRecord[] = [];
+  emit: (activity: UnknownRecord) => void,
+): Promise<void> {
   for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
     const page = asRecord(await marketingGet(
       client,
       `/reports/${encodeURIComponent(campaignId)}/email-activity`,
-      { count: MAX_PAGE_SIZE, offset },
+      { count: MAX_PAGE_SIZE, offset, fields: "emails.email_id,emails.email_address,emails.activity,total_items" },
     ));
     const emails = asArray(page.emails).map(asRecord);
-    rows.push(...emails);
+    for (const email of emails) emit(email);
     if (emails.length < MAX_PAGE_SIZE) break;
   }
-  return rows;
+}
+
+type ExportCheckpoint = {
+  export_id: string;
+  since: string;
+  to: string;
+};
+
+function exportCheckpointPath(client: MailchimpClient, since: Date, to: Date): string | undefined {
+  const stateDir = adapterStateDir();
+  if (!stateDir) return undefined;
+  const name = sha256(`${client.connectionId}\n${since.toISOString()}\n${to.toISOString()}`);
+  return join(stateDir, `transactional-export-${name}.json`);
+}
+
+function readExportCheckpoint(path: string | undefined): ExportCheckpoint | undefined {
+  if (!path || !existsSync(path)) return undefined;
+  try {
+    const parsed = asRecord(JSON.parse(readFileSync(path, "utf8")));
+    const exportId = textValue(parsed.export_id);
+    const since = textValue(parsed.since);
+    const to = textValue(parsed.to);
+    return exportId && since && to ? { export_id: exportId, since, to } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeExportCheckpoint(path: string | undefined, checkpoint: ExportCheckpoint): void {
+  if (!path) return;
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${stableJson(checkpoint)}\n`, { mode: 0o600, flag: "wx" });
+  renameSync(temporary, path);
+  chmodSync(path, 0o600);
+}
+
+async function fetchBoundedBytes(client: MailchimpClient, rawUrl: string): Promise<Uint8Array> {
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:") throw new Error("Mailchimp export URL must use HTTPS");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await client.fetchFn(url, { method: "GET", signal: controller.signal });
+    if (!response.ok) throw new Error(`Mailchimp export download failed: HTTP ${response.status}`);
+    const length = Number(response.headers.get("content-length"));
+    if (Number.isFinite(length) && length > MAX_EXPORT_BYTES) {
+      throw new Error("Mailchimp export exceeds the configured byte bound");
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_EXPORT_BYTES) throw new Error("Mailchimp export exceeds the configured byte bound");
+    return bytes;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function exportTransactionalHistory(
+  client: MailchimpClient,
+  since: Date,
+  to: Date,
+  emit: (record: AdapterInboundRecord) => void,
+): Promise<void> {
+  const checkpointPath = exportCheckpointPath(client, since, to);
+  let checkpoint = readExportCheckpoint(checkpointPath);
+  if (!checkpoint) {
+    const started = asRecord(await transactionalPost(client, "/exports/activity.json", {
+      date_from: since.toISOString().replace("T", " ").replace(/\.\d{3}Z$/u, ""),
+      date_to: to.toISOString().replace("T", " ").replace(/\.\d{3}Z$/u, ""),
+    }));
+    const exportId = textValue(started.id);
+    if (!exportId) throw new Error("Mailchimp Transactional export did not return an id");
+    checkpoint = { export_id: exportId, since: since.toISOString(), to: to.toISOString() };
+    writeExportCheckpoint(checkpointPath, checkpoint);
+  }
+
+  const waitMs = positiveNumber(
+    runtimeConfigFromClient(client).transactional_export_wait_ms,
+    DEFAULT_EXPORT_WAIT_MS,
+    60 * 60 * 1000,
+  );
+  const pollMs = positiveNumber(
+    runtimeConfigFromClient(client).transactional_export_poll_ms,
+    DEFAULT_EXPORT_POLL_MS,
+    60_000,
+  );
+  const deadline = Date.now() + waitMs;
+  let info: UnknownRecord = {};
+  while (Date.now() < deadline) {
+    info = asRecord(await transactionalPost(client, "/exports/info.json", { id: checkpoint.export_id }));
+    const state = textValue(info.state)?.toLowerCase();
+    if (state === "complete") break;
+    if (state === "error" || state === "failed") throw new Error("Mailchimp Transactional export failed");
+    await sleep(pollMs);
+  }
+  if (textValue(info.state)?.toLowerCase() !== "complete") {
+    throw new Error(`Mailchimp Transactional export is still pending: ${checkpoint.export_id}`);
+  }
+  const resultUrl = textValue(info.result_url);
+  if (!resultUrl) throw new Error("Mailchimp Transactional export result URL is missing");
+  const archive = await fetchBoundedBytes(client, resultUrl);
+  const files = unzipSync(archive);
+  const csvEntry = Object.entries(files).find(([name]) => name.endsWith("activity.csv"));
+  if (!csvEntry) throw new Error("Mailchimp Transactional export did not contain activity.csv");
+  const rows = parseCsv(Buffer.from(csvEntry[1]), {
+    columns: true,
+    bom: true,
+    relax_column_count: true,
+    skip_empty_lines: true,
+  }) as UnknownRecord[];
+  const duplicateCounts = new Map<string, number>();
+  for (const row of rows) {
+    const sanitized = withoutFields(asRecord(row), ["Email Address", "email"]);
+    const identity = stableJson({ sanitized, recipientHash: normalizedEmailHash(row["Email Address"] ?? row.email) });
+    const ordinal = duplicateCounts.get(identity) ?? 0;
+    duplicateCounts.set(identity, ordinal + 1);
+    emit(transactionalExportRecord(client, asRecord(row), checkpoint.export_id, ordinal));
+  }
+}
+
+async function searchRecentTransactional(
+  client: MailchimpClient,
+  since: Date,
+  to: Date,
+  emit: (record: AdapterInboundRecord) => void,
+): Promise<void> {
+  const messages = asArray(await transactionalPost(client, "/messages/search.json", {
+    date_from: since.toISOString().slice(0, 10),
+    date_to: to.toISOString().slice(0, 10),
+    limit: 1000,
+  })).map(asRecord);
+  if (messages.length >= 1000) {
+    throw new Error("Mailchimp Transactional recent search reached its 1000-message completeness cap");
+  }
+  for (const message of messages) emit(transactionalRecord(client, message));
 }
 
 async function ingestWindow(
@@ -342,19 +680,16 @@ async function ingestWindow(
   for (const campaign of campaigns) {
     const campaignId = textValue(campaign.id);
     if (!campaignId) continue;
-    const [content, activities] = await Promise.all([
-      marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`).then(asRecord),
-      campaignActivity(client, campaignId),
-    ]);
-    for (const activity of activities) emit(marketingRecord(client, campaign, activity, content));
+    const content = asRecord(await marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`));
+    emit(marketingCampaignRecord(client, campaign, content));
+    await emitCampaignActivity(client, campaignId, (activity) => {
+      emit(marketingRecipientRecord(client, campaign, activity));
+    });
   }
-
-  const transactional = asArray(await transactionalPost(client, "/messages/search.json", {
-    date_from: args.since.toISOString().slice(0, 10),
-    date_to: (args.to ?? new Date()).toISOString().slice(0, 10),
-    limit: 1000,
-  })).map(asRecord);
-  for (const message of transactional) emit(transactionalRecord(client, message));
+  const to = args.to ?? new Date();
+  const useExport = to.getTime() - args.since.getTime() > 7 * 24 * 60 * 60 * 1000;
+  if (useExport) await exportTransactionalHistory(client, args.since, to, emit);
+  else await searchRecentTransactional(client, args.since, to, emit);
 }
 
 async function monitor(
@@ -398,14 +733,18 @@ async function health(client: MailchimpClient): Promise<{ connected: boolean; de
 export const __test__ = {
   normalizedEmailHash,
   marketingDatacenter,
-  marketingRecord,
+  marketingCampaignRecord,
+  marketingRecipientRecord,
+  marketingDeliveryState,
   transactionalRecord,
+  transactionalExportRecord,
+  transactionalDeliveryState,
 };
 
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   platform: PLATFORM,
   name: "nexus-mailchimp-readonly-adapter",
-  version: "0.1.0",
+  version: "0.2.0",
   multi_account: true,
   credential_service: "mailchimp",
   auth: {
@@ -531,6 +870,30 @@ export const mailchimpAdapter = defineAdapter<MailchimpClient>({
         const messageId = textValue(payloadRecord(req).message_id);
         if (!messageId) throw new Error("message_id is required");
         return { message: await transactionalPost(requireClient(ctx), "/messages/info.json", { id: messageId }) };
+      },
+    }),
+    "mailchimp.transactional.exports.list": method({
+      description: "List read-side Mailchimp Transactional activity exports.",
+      action: "read",
+      connection_required: true,
+      mutates_remote: false,
+      params: {},
+      response: { exports: "Provider export jobs" },
+      handler: async (ctx) => ({
+        exports: await transactionalPost(requireClient(ctx), "/exports/list.json"),
+      }),
+    }),
+    "mailchimp.transactional.export.info": method({
+      description: "Read the status of one Mailchimp Transactional activity export.",
+      action: "read",
+      connection_required: true,
+      mutates_remote: false,
+      params: { export_id: "Transactional export id" },
+      response: { export: "Provider export job" },
+      handler: async (ctx, req) => {
+        const exportId = textValue(payloadRecord(req).export_id);
+        if (!exportId) throw new Error("export_id is required");
+        return { export: await transactionalPost(requireClient(ctx), "/exports/info.json", { id: exportId }) };
       },
     }),
     "mailchimp.transactional.templates.list": method({

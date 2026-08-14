@@ -15,5 +15,18 @@ The two provider products use separate credential fields:
 - `marketing_api_key` (or `MAILCHIMP_API_KEY`)
 - `transactional_api_key` (or `MAILCHIMP_TRANSACTIONAL_API_KEY`)
 
-Historical ingestion overlaps its monitor window by 72 hours and relies on
-stable provider identities plus revision hashes for idempotent replay.
+The hourly monitor rereads a bounded 48-hour overlap and relies on stable
+provider identities plus revision hashes for idempotent replay. Marketing
+campaign content is stored once; per-recipient delivery evidence refers to that
+campaign record instead of repeating HTML thousands of times.
+
+Historical Transactional ingestion uses Mailchimp's complete activity export
+for windows longer than seven days. The export job id is checkpointed in the
+private adapter state directory, so a restart resumes the same export rather
+than requesting another. Seven-day-or-shorter live windows use the normal
+message search endpoint and fail closed if its 1,000-result ceiling is reached.
+
+Provider responses are retried only for throttling and transient server/network
+failures, with bounded exponential backoff and request timeouts. Raw recipient
+addresses are hashed before Nex ingestion and never appear in records or
+receipts.

@@ -11,6 +11,12 @@ importers:
       '@nexus-project/adapter-sdk-ts':
         specifier: file:../nexus-adapter-sdks/nexus-adapter-sdk-ts
         version: file:../nexus-adapter-sdks/nexus-adapter-sdk-ts
+      csv-parse:
+        specifier: ^6.1.0
+        version: 6.2.1
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
     devDependencies:
       '@types/node':
         specifier: 24.10.13
@@ -372,6 +378,9 @@ packages:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
     engines: {node: '>=18'}
 
+  csv-parse@6.2.1:
+    resolution: {integrity: sha512-LRLMV+UCyfMokp8Wb411duBf1gaBKJfOfBWU9eHMJ+b+cJYZsNu3AFmjJf3+yPGd59Exz1TsMjaSFyxnYB9+IQ==}
+
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
 
@@ -395,6 +404,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
@@ -772,6 +784,8 @@ snapshots:
 
   chai@6.2.2: {}
 
+  csv-parse@6.2.1: {}
+
   es-module-lexer@1.7.0: {}
 
   esbuild@0.27.3:
@@ -812,6 +826,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
+
+  fflate@0.8.3: {}
 
   fsevents@2.3.3:
     optional: true
