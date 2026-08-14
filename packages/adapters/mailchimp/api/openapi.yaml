@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Mailchimp Read-Only History Adapter API
+  version: 0.2.0
+  description: Read-only Marketing and Transactional evidence ingestion for Nex.
+tags:
+  - name: Adapter
+paths:
+  /operations/adapter.info:
+    post:
+      operationId: adapter.info
+      summary: Read adapter package metadata
+      tags: [Adapter]
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Adapter metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /operations/adapter.health:
+    post:
+      operationId: adapter.health
+      summary: Read Marketing and Transactional connection health
+      tags: [Adapter]
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Read-only provider health
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
