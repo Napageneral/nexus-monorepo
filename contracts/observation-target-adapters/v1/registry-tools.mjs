@@ -45,6 +45,19 @@ if (registry.protocol?.projection_version !== "1.0.0") fail("projection version 
 if (registry.protocol?.unknown_target !== "fail_closed") fail("unknown targets must fail closed");
 if (registry.protocol?.writer !== "append_custody_only") fail("protocol writer must be custody-only");
 
+const receiptIds = new Set();
+for (const receipt of registry.substrate_deployment_receipts ?? []) {
+  requireText(receipt.receipt_id, "substrate receipt ID");
+  if (receiptIds.has(receipt.receipt_id)) fail(`duplicate substrate receipt ${receipt.receipt_id}`);
+  receiptIds.add(receipt.receipt_id);
+  if (!new Set(["implemented_not_live", "live", "retired"]).has(receipt.deployment_state)) {
+    fail(`${receipt.receipt_id} has invalid deployment state`);
+  }
+  if (receipt.chapter1_promotion_performed !== false || receipt.chapter2_projection_performed !== false || receipt.resource_mutation_performed !== false) {
+    fail(`${receipt.receipt_id} claims forbidden foundation work`);
+  }
+}
+
 for (const entry of registry.entries ?? []) {
   requireText(entry.adapter_contract_id, "adapter_contract_id");
   requireText(entry.canonical_object_id, `${entry.adapter_contract_id}.canonical_object_id`);

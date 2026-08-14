@@ -4,7 +4,7 @@
   "title": "Nex Observation target-adapter registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["registry_id", "schema_version", "status", "protocol", "entries", "compatibility_rules"],
+  "required": ["registry_id", "schema_version", "status", "protocol", "substrate_deployment_receipts", "entries", "compatibility_rules"],
   "properties": {
     "registry_id": { "type": "string", "minLength": 1 },
     "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
@@ -21,6 +21,10 @@
         "writer": { "const": "append_custody_only" },
         "authority": { "$ref": "#/$defs/authority" }
       }
+    },
+    "substrate_deployment_receipts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/substrateDeploymentReceipt" }
     },
     "entries": {
       "type": "array",
@@ -43,6 +47,28 @@
     }
   },
   "$defs": {
+    "substrateDeploymentReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_id", "deployment_state", "repository_id", "source_revision",
+        "sql_sha256", "receipt_sha256", "receipt_path",
+        "chapter1_promotion_performed", "chapter2_projection_performed",
+        "resource_mutation_performed"
+      ],
+      "properties": {
+        "receipt_id": { "type": "string", "minLength": 1 },
+        "deployment_state": { "enum": ["implemented_not_live", "live", "retired"] },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sql_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "receipt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "receipt_path": { "type": "string", "minLength": 1 },
+        "chapter1_promotion_performed": { "const": false },
+        "chapter2_projection_performed": { "const": false },
+        "resource_mutation_performed": { "const": false }
+      }
+    },
     "sourcePointer": {
       "type": "object",
       "additionalProperties": false,
