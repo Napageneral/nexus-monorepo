@@ -97,7 +97,8 @@
       "properties": {
         "relationship_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "target_object_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-        "cardinality": { "enum": ["one", "optional_one", "set_valued"] }
+        "cardinality": { "enum": ["one", "optional_one", "set_valued"] },
+        "semantic_status": { "enum": ["canonical", "compatibility_only"] }
       }
     },
     "entry": {
@@ -105,7 +106,7 @@
       "additionalProperties": false,
       "required": [
         "adapter_contract_id", "canonical_object_id", "decision", "adapter_version",
-        "implementation_owner", "identity_format", "read_surface", "allowed_attribute_paths",
+        "implementation_owner", "identity_format", "semantic_status", "read_surface", "allowed_attribute_paths",
         "allowed_relationships", "privacy_default", "projection_writer", "readback_support",
         "authority", "implementation_refs", "implementation_state", "deployment_receipts"
       ],
@@ -114,6 +115,7 @@
         "canonical_object_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
         "decision": { "enum": ["reuse", "generalize", "create"] },
         "adapter_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "semantic_status": { "enum": ["canonical", "compatibility_only"] },
         "implementation_owner": { "type": "string", "minLength": 1 },
         "identity_format": { "type": "string", "minLength": 1 },
         "read_surface": { "type": "string", "minLength": 1 },

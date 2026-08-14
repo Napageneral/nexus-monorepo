@@ -36,6 +36,7 @@
       "canonical_object_id": "nex.entity",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "Nex Identity",
       "identity_format": "opaque Nex Entity row ID",
       "read_surface": "entities.get plus entities.tags.list for role-qualified reads",
@@ -57,6 +58,7 @@
       "canonical_object_id": "nex.contact",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "Nex Identity",
       "identity_format": "opaque immutable Contact row ID",
       "read_surface": "contacts.get",
@@ -78,6 +80,7 @@
       "canonical_object_id": "nex.channel",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "Nex Channels",
       "identity_format": "opaque current Channel row ID with logical provider identity retained in readback",
       "read_surface": "channels.get",
@@ -99,6 +102,7 @@
       "canonical_object_id": "moonsleep.customer",
       "decision": "generalize",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "MoonSleep Customer Operations over Nex Identity",
       "identity_format": "canonical Nex Entity ID with active customer role",
       "read_surface": "entities.get plus entities.tags.list; no separate Customer row",
@@ -108,7 +112,7 @@
         { "relationship_id": "has_contact", "target_object_ids": ["nex.contact"], "cardinality": "set_valued" },
         { "relationship_id": "participates_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" },
         { "relationship_id": "placed_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "set_valued" },
-        { "relationship_id": "has_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "set_valued" }
+        { "relationship_id": "has_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "set_valued", "semantic_status": "compatibility_only" }
       ],
       "privacy_default": "restricted_identity",
       "projection_writer": "append_custody_only",
@@ -123,6 +127,7 @@
       "canonical_object_id": "moonsleep.commerce_order",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "Commerce provider with Nex canonical commerce readback",
       "identity_format": "platform plus space_id plus provider order_id",
       "read_surface": "commerce.orders.get",
@@ -147,6 +152,7 @@
       "canonical_object_id": "moonsleep.customer_issue",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "compatibility_only",
       "implementation_owner": "MoonSleep Customer Operations",
       "identity_format": "opaque support_episode_ref equal to accepted issue_ref, including customer_issue_<sha256>",
       "read_surface": "ops_customer_issue_measurement_current",
@@ -162,7 +168,7 @@
       "privacy_default": "restricted_communications",
       "projection_writer": "append_custody_only",
       "readback_support": "current_and_as_of",
-      "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
       "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
       "deployment_receipts": []
@@ -172,6 +178,7 @@
       "canonical_object_id": "moonsleep.commitment",
       "decision": "reuse",
       "adapter_version": "1.0.0",
+      "semantic_status": "canonical",
       "implementation_owner": "General MoonSleep Commitment contract",
       "identity_format": "commitment_id",
       "read_surface": "public.commitments and its three canonical relationship tables",
@@ -182,7 +189,7 @@
         { "relationship_id": "evidenced_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" },
         { "relationship_id": "involves_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "optional_one" },
         { "relationship_id": "concerns_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "optional_one" },
-        { "relationship_id": "belongs_to_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "optional_one" },
+        { "relationship_id": "belongs_to_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "optional_one", "semantic_status": "compatibility_only" },
         { "relationship_id": "concerns_resource", "target_object_ids": ["moonsleep.carrier_case", "moonsleep.carrier_incident", "moonsleep.fulfillment_package", "moonsleep.sample_article"], "cardinality": "set_valued" },
         { "relationship_id": "satisfied_by_event", "target_object_ids": ["moonsleep.action_receipt", "moonsleep.carrier_case_event", "moonsleep.sample_article_status"], "cardinality": "set_valued" },
         { "relationship_id": "supersedes_commitment", "target_object_ids": ["moonsleep.commitment"], "cardinality": "optional_one" }
@@ -197,6 +204,12 @@
     }
   ],
   "compatibility_rules": [
+    {
+      "compatibility_id": "moonsleep.customer-issue.legacy-target",
+      "owner": "MoonSleep Customer Operations compatibility",
+      "rule": "Resolve existing Customer Issue identities, aliases, attributes, and relationships for migration/readback only. This adapter has no projection authority and does not select Customer Issue as the long-term semantic Resource while the cross-domain communication-loop/open-response model is under review; general Commitments remain reusable.",
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-observation-target-adapter-foundation.md" }]
+    },
     {
       "compatibility_id": "moonsleep.supply.chapter2-typed-allowlists",
       "owner": "MoonSleep Supply",
