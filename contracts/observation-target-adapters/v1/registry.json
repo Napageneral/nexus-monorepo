@@ -190,7 +190,7 @@
         { "relationship_id": "involves_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "optional_one" },
         { "relationship_id": "concerns_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "optional_one" },
         { "relationship_id": "belongs_to_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "optional_one", "semantic_status": "compatibility_only" },
-        { "relationship_id": "concerns_resource", "target_object_ids": ["moonsleep.carrier_case", "moonsleep.carrier_incident", "moonsleep.fulfillment_package", "moonsleep.sample_article"], "cardinality": "set_valued" },
+        { "relationship_id": "concerns_resource", "target_object_ids": ["moonsleep.carrier_case", "moonsleep.carrier_incident", "moonsleep.communication_loop", "moonsleep.fulfillment_package", "moonsleep.sample_article"], "cardinality": "set_valued" },
         { "relationship_id": "satisfied_by_event", "target_object_ids": ["moonsleep.action_receipt", "moonsleep.carrier_case_event", "moonsleep.sample_article_status"], "cardinality": "set_valued" },
         { "relationship_id": "supersedes_commitment", "target_object_ids": ["moonsleep.commitment"], "cardinality": "optional_one" }
       ],
@@ -207,8 +207,8 @@
     {
       "compatibility_id": "moonsleep.customer-issue.legacy-target",
       "owner": "MoonSleep Customer Operations compatibility",
-      "rule": "Resolve existing Customer Issue identities, aliases, attributes, and relationships for migration/readback only. This adapter has no projection authority and does not select Customer Issue as the long-term semantic Resource while the cross-domain communication-loop/open-response model is under review; general Commitments remain reusable.",
-      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-observation-target-adapter-foundation.md" }]
+      "rule": "Resolve existing Customer Issue identities, aliases, attributes, and relationships for migration/readback only. This adapter has no projection authority. General Communication Loop is the canonical cross-domain response-cycle Resource, and general Commitment remains the only promise/responsibility Resource.",
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-observation-target-adapter-foundation.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }]
     },
     {
       "compatibility_id": "moonsleep.supply.chapter2-typed-allowlists",

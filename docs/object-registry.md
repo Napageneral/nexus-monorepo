@@ -1,7 +1,7 @@
 # Nex and MoonSleep canonical object registry
 
 Status: **proposed_canonical**
-Schema version: **1.0.0**
+Schema version: **1.0.1**
 Registry ID: `nex.moonsleep.object-registry`
 
 > This document is generated from `contracts/object-registry/v1/registry.json`.
@@ -1321,8 +1321,8 @@ Existing Supply organization row used by product and procurement tables. It must
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
 | [Customer](#moonsleepcustomer) | business_resource | deployed | MoonSleep Customer Operations over Nex Identity and source-owned customer identities | canonical Nex Entity with Customer role plus reviewed provider identity links | through_owner_adapter |
-| [Customer Issue Compatibility](#moonsleepcustomer_issue) | compatibility_alias | compatibility | MoonSleep Customer Operations compatibility; cross-domain semantic owner pending | legacy opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references | compatibility_only |
-| [Customer Thread](#moonsleepcustomer_thread) | read_model | implemented | Customer Operations over Nex communications | Customer plus preserved native Channel identities; any support-thread identity remains Helpdesk-owned | through_owner_adapter |
+| [Customer Issue Compatibility](#moonsleepcustomer_issue) | compatibility_alias | compatibility | MoonSleep Customer Operations compatibility/read-model owner | legacy opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references | compatibility_only |
+| [Entity Communication History (Customer Thread Compatibility View)](#moonsleepcustomer_thread) | read_model | compatibility | Customer Operations read model over Nex communications | derived Entity plus preserved native Channel identities; no canonical Customer Thread Resource ID | compatibility_only |
 
 <a id="moonsleepcustomer"></a>
 
@@ -1371,7 +1371,7 @@ Federated business-role view over a canonical Entity, Customer role, native Cont
 
 `moonsleep.customer_issue` · compatibility_alias · compatibility
 
-Existing bounded support-episode identity and read surfaces retained for migration, aliases, and historical readback. This entry does not select Customer Issue as the long-term canonical Resource while a cross-domain communication-loop/open-response model plus general Commitments is evaluated.
+Existing bounded support-episode identity and read surfaces retained only for migration, aliases, and historical readback. New interpreted exchanges use the general Communication Loop Resource; actual promises and responsibilities use the general Commitment Resource.
 
 **Stable identity:** legacy opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references
 
@@ -1392,59 +1392,59 @@ Existing bounded support-episode identity and read surfaces retained for migrati
 - `initiated_in_channel` → `nex.channel` (one; owner: Nex Channels compatibility)
 - `concerns_order` → `moonsleep.commerce_order` (optional_many; owner: Commerce compatibility)
 - `has_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner compatibility)
+- `migrates_to_communication_loop` → `moonsleep.communication_loop` (optional_many; owner: Customer Operations migration) — Reviewed alias/migration mapping only; the legacy Issue row is not promoted into a new semantic owner.
 
 **Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
 **Aliases and legacy names:** `Customer Issue`, `support episode`, `customer case`.
 
-**Do not recreate:** new customer-specific issue semantics during compatibility period; one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object; parallel Customer ID when Entity plus active Customer role exists.
-
-**Open questions:** Define the cross-domain communication-loop/open-response Resource or read contract and its migration mapping to general Commitments before canonical adoption.
+**Do not recreate:** new canonical Customer Issue semantics; one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object; parallel Customer ID when Entity plus active Customer role exists.
 
 **Source contracts:**
 
 - `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
 - `moonsleep-v1:infra/ops-analytics/sql/customer_operations_verified_issue_postgres.sql`
 - `moonsleep-v1:docs/specs/moonsleep-observation-target-adapter-foundation.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Deliberate Communication Loop replacement decision merged in PR #1774
 
 <a id="moonsleepcustomer_thread"></a>
 
-### Customer Thread
+### Entity Communication History (Customer Thread Compatibility View)
 
-`moonsleep.customer_thread` · read_model · implemented
+`moonsleep.customer_thread` · read_model · compatibility
 
-Customer-facing history view that preserves each native Channel and provider conversation while presenting their combined chronology for one Customer. It is not a replacement Channel or reply route.
+Compatibility name for a derived Entity communication-history view across preserved native Channels, Communication Loops, and Commitments. It is not a business Resource, replacement Channel, provider reply route, or independent semantic history.
 
-**Stable identity:** Customer plus preserved native Channel identities; any support-thread identity remains Helpdesk-owned
+**Stable identity:** derived Entity plus preserved native Channel identities; no canonical Customer Thread Resource ID
 
-**Revision identity:** Derived from immutable communication occurrences and current identity links
+**Revision identity:** Regenerated from immutable communication occurrences and current reviewed identity links
 
 **Canonical storage/read custody:**
 
 - Nex: `channels, channel_participants, records` (canonical)
-- MoonSleep Helpdesk: `Customer Threads read model` (projection)
+- MoonSleep Helpdesk: `Entity communication history / Customer Threads compatibility view` (projection)
 
-**Key fields:** `customer_ref`, `channel_refs`, `provider_thread_refs`, `latest_customer_activity_at`, `latest_moonsleep_activity_at`, `open_commitment_count`, `issue_refs`.
+**Key fields:** `entity_ref`, `channel_refs`, `provider_thread_refs`, `communication_loop_refs`, `commitment_refs`, `latest_external_activity_at`, `latest_moonsleep_activity_at`.
 
 **Relationships:**
 
-- `for_customer` → `moonsleep.customer` (one; owner: Customer Operations)
+- `for_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
 - `includes_channel` → `nex.channel` (many; owner: Nex Channels)
-- `has_issue` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations compatibility) — Legacy migration and alias relationship only.
+- `includes_communication_loop` → `moonsleep.communication_loop` (optional_many; owner: General Communication Loop contract)
+- `has_issue` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations compatibility) — Historical migration and alias relationship only.
 - `evidences_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner)
 
-**Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `false`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `consolidated customer history`, `support thread`.
+**Aliases and legacy names:** `Customer Thread`, `consolidated customer history`, `support thread`.
 
-**Do not recreate:** cross-provider mega-thread; synthetic reply target; communication stream treated as native Channel.
-
-**Open questions:** The exact derived multi-Channel read contract needs central registration.
+**Do not recreate:** canonical Customer Thread business Resource; cross-provider mega-thread; synthetic reply target; communication stream treated as native Channel.
 
 **Source contracts:**
 
 - `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
 - `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — General Communication Loop decision introduced in PR #1774
 
 ## MoonSleep product and supply
 
@@ -2158,6 +2158,7 @@ One supplier-proposed packaging configuration attached to a Product Quotation, p
 | --- | --- | --- | --- | --- | --- |
 | [Action and Receipt](#moonsleepaction_receipt) | business_resource | implemented | Owning mutation domain and resolution executor | registered action ID plus domain receipt ID | through_owner_adapter |
 | [Commitment](#moonsleepcommitment) | business_resource | deployed | General Commitment contract; accepting domain owns satisfaction evidence | commitment_id | direct |
+| [Communication Loop](#moonsleepcommunication_loop) | business_resource | deployed | General Communication Loop contract; the interpreting domain owns closure evidence | communication_loop_id | direct |
 
 <a id="moonsleepaction_receipt"></a>
 
@@ -2193,7 +2194,7 @@ Stable governed action identity and immutable provider/readback receipt. It sepa
 
 `moonsleep.commitment` · business_resource · deployed
 
-General evidenced obligation, promise, accepted responsibility, policy-implied responsibility, or detected customer-affecting exception. It can concern any Entity and optionally Customer, Channel, Order, Issue, or other Resource.
+General evidenced obligation, promise, accepted responsibility, policy-implied responsibility, or detected customer-affecting exception. It can concern any Entity, Channel, Communication Loop, Order, or other Resource. It is not required for ordinary questions, and closing a linked Communication Loop does not complete it.
 
 **Stable identity:** commitment_id
 
@@ -2202,7 +2203,7 @@ General evidenced obligation, promise, accepted responsibility, policy-implied r
 **Canonical storage/read custody:**
 
 - MoonSleep PostgreSQL: `public.commitments` (canonical; identity `commitment_id`)
-- MoonSleep PostgreSQL: `commitment_channels, commitment_resource_contexts, commitment_satisfaction_events` (canonical)
+- MoonSleep PostgreSQL: `public.commitment_channels, public.commitment_resource_contexts, public.commitment_satisfaction_events, public.communication_loop_commitments` (canonical)
 
 **Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `committed_by_entity_id`, `committed_to_entity_id`, `action_authority`.
 
@@ -2213,6 +2214,7 @@ General evidenced obligation, promise, accepted responsibility, policy-implied r
 - `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
 - `involves_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
 - `concerns_order` → `moonsleep.commerce_order` (optional_one; owner: Commerce)
+- `concerns_resource` → `moonsleep.communication_loop` (optional_many; owner: General Communication Loop contract) — Optional communication context; neither Resource requires the other.
 - `belongs_to_issue` → `moonsleep.customer_issue` (optional_one; owner: Customer Operations compatibility) — Legacy migration and alias relationship only; Commitments remain general.
 - `supersedes_commitment` → `moonsleep.commitment` (optional_one; owner: Commitment contract)
 - `satisfied_by_event` → `moonsleep.action_receipt` (optional_many; owner: Owning mutation domain)
@@ -2221,12 +2223,55 @@ General evidenced obligation, promise, accepted responsibility, policy-implied r
 
 **Aliases and legacy names:** `operational obligation`, `customer obligation`.
 
-**Do not recreate:** Customer Obligation subtype table; Issue-required Commitment; promise treated as completed without receipt.
+**Do not recreate:** Customer Obligation subtype table; Issue-required Commitment; Communication Loop treated as a Commitment; promise treated as completed without receipt.
 
 **Source contracts:**
 
-- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Communication Loop context and closure boundary merged in PR #1774
 - `moonsleep-v1:infra/ops-analytics/sql/reviewed_commitment_foundation_v1_postgres.sql`
+- `moonsleep-v1:infra/ops-analytics/sql/reviewed_communication_loop_foundation_v1_postgres.sql` — Optional loop context merged in PR #1774
+- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py` — Chapter 2 projection corrected in PR #1775 and replay-canonicalized in PR #1780
+
+<a id="moonsleepcommunication_loop"></a>
+
+### Communication Loop
+
+`moonsleep.communication_loop` · business_resource · deployed
+
+One interpreted exchange that expects a response, clarification, decision, confirmation, or other next communication. It is distinct from native Nex Channel/Record evidence, from a Commitment, and from customer-, partner-, supplier-, or claims-specific views. Closing a Communication Loop never implies that linked operational work or a Commitment is complete.
+
+**Stable identity:** communication_loop_id
+
+**Revision identity:** Explicit supersedes_communication_loop relationship; split or merged interpretations receive new stable IDs and exact reviewed provenance
+
+**Canonical storage/read custody:**
+
+- MoonSleep PostgreSQL: `public.communication_loops` (canonical; identity `communication_loop_id`)
+- MoonSleep PostgreSQL: `public.communication_loop_addressees, public.communication_loop_awaiting_response_parties, public.communication_loop_channels, public.communication_loop_resource_contexts, public.communication_loop_commitments` (canonical)
+- Nex: `native Channels and Records` (reference) — Channels and Records remain the evidence owner and reply-route owner.
+
+**Key fields:** `communication_loop_id`, `loop_category`, `desired_response_summary`, `opened_at`, `communication_state`, `closed_at`, `closure_basis`, `initiated_by_entity_id`, `supersedes_communication_loop_id`, `action_authority`.
+
+**Relationships:**
+
+- `initiated_by` → `nex.entity` (one; owner: Nex Identity)
+- `addressed_to` → `nex.entity` (optional_many; owner: Communication Loop contract)
+- `awaiting_response_from` → `nex.entity` (optional_many; owner: Communication Loop contract)
+- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `has_commitment` → `moonsleep.commitment` (optional_many; owner: General Commitment contract)
+- `supersedes_communication_loop` → `moonsleep.communication_loop` (optional_one; owner: Communication Loop contract)
+
+**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+
+**Aliases and legacy names:** `open response loop`, `response loop`, `communication obligation`.
+
+**Do not recreate:** Customer Communication Loop subtype table; Partner Communication Loop subtype table; Supplier Communication Loop subtype table; Claims Communication Loop subtype table; provider thread treated as a Communication Loop; reply treated as operational completion.
+
+**Source contracts:**
+
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Canonical cross-domain model merged in PR #1774
+- `moonsleep-v1:infra/ops-analytics/sql/reviewed_communication_loop_foundation_v1_postgres.sql` — Canonical deployed storage merged in PR #1774
+- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py` — Exact loop joins corrected in PR #1775; terminal receipt timestamps canonicalized in PR #1780
 
 ## Nex communications
 
@@ -3025,8 +3070,8 @@ Sorted immutable Fact membership and digest used as the complete bounded input t
 | --- | --- | --- | --- | --- |
 | `shopify-record-revision-custody-chapter1` Seven historical Shopify Records lack canonical Record Revision registration | open | Nex Records | Keep the existing Records and Orders. Register immutable revisions from the durable source payloads through the canonical registrar before using them as Episode members; no provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
 | `gmail-native-channel-contact-replay-chapter1` Seven historical Gmail conversations have communication projections but no native Channel/participant Contact materialization | open | Nex Gmail adapter and Identity | Run a bounded historical identity and Channel replay through the current adapter machinery. Do not manually create a MoonSleep thread table or new Customer Entities. | `nex.record`, `nex.channel`, `nex.channel_participant`, `nex.contact`, `moonsleep.customer_thread`, `moonsleep.customer` |
-| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | in_progress | Nex semantic foundation and each owning domain | The v1 shared contract registers native and MoonSleep targets with custody-only writers. Legacy Customer Issue targets remain compatibility-only for migration and aliases; they do not settle the pending cross-domain communication-loop/open-response model. Additional adapters reuse this protocol and never copy native Contacts, Orders, Entities, Channels, or legacy issue rows into a parallel Resource store. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.contact`, `nex.channel`, `moonsleep.customer`, `moonsleep.commerce_order`, `moonsleep.customer_issue` |
-| `customer-issue-cross-domain-generalization` Customer Issue compatibility needs a cross-domain communication-loop/open-response decision | open | Nex communications, MoonSleep Customer Operations, and Commitment owners | Keep existing Customer Issue identities and relationships readable through the compatibility adapter only. Define the cross-domain communication-loop/open-response identity, lifecycle, and relationship contract before any canonical replacement or migration; reuse general Commitments and do not create a new customer-specific semantic history meanwhile. | `moonsleep.customer_issue`, `moonsleep.commitment`, `nex.channel`, `nex.entity`, `nex.contact` |
+| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | in_progress | Nex semantic foundation and each owning domain | The v1 shared contract registers native and MoonSleep targets with custody-only writers. Legacy Customer Issue targets remain compatibility-only for migration and aliases. General Communication Loop is now the canonical cross-domain response-cycle Resource and uses the deployed typed reviewed-projection contract; additional owner adapters reuse this protocol and never copy native Contacts, Orders, Entities, Channels, Communication Loops, or legacy issue rows into a parallel Resource store. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.contact`, `nex.channel`, `moonsleep.customer`, `moonsleep.commerce_order`, `moonsleep.customer_issue`, `moonsleep.communication_loop` |
+| `customer-issue-cross-domain-generalization` Customer Issue compatibility migrated to general Communication Loop and Commitment | resolved | General Communication Loop and Commitment contracts with Customer Operations compatibility stewardship | Use canonical Communication Loop for interpreted exchanges awaiting a response, clarification, decision, or confirmation; use general Commitment only for evidenced promises or responsibilities. Keep existing customer_issue_* identities and relationships readable through the compatibility adapter and migration aliases only. No Customer Thread business Resource is created; Entity communication history remains a derived view across native Channels. | `moonsleep.customer_issue`, `moonsleep.communication_loop`, `moonsleep.commitment`, `moonsleep.customer_thread`, `nex.channel`, `nex.entity`, `nex.contact` |
 | `supply-organization-entity-crosswalk` Supply organization compatibility IDs are not yet mandatorily crosswalked to Nex Organization Entities | open | Identity steward and Supply | Add an evidence-backed mandatory reference/crosswalk; do not merge or recreate organizations from provider text. | `moonsleep.supply_organization`, `moonsleep.partner`, `nex.entity`, `nex.contact` |
 | `finance-party-entity-crosswalk` Finance AP party IDs are not yet production-enforced against canonical Nex Organization Entities | open | Identity steward and Finance | Register a typed party-to-Entity relationship with evidence and review; retain AP party as subledger identity without making it a second Organization. | `moonsleep.finance_ap_party`, `moonsleep.invoice`, `moonsleep.partner`, `nex.entity` |
 | `finance-local-observation-compatibility` Finance-local observation tables need explicit compatibility and retirement semantics | open | Finance and Nex semantic foundation | Mark them as references/projections of canonical Nex Observations, define regeneration or retirement, and prohibit an independent predecessor chain. | `moonsleep.finance_observation_compat`, `nex.observation` |
