@@ -1,0 +1,61 @@
+openapi: 3.1.0
+info:
+  title: Borden FedEx Adapter API
+  version: 0.1.0
+  description: Read-only source identity and health contract for the externally operated Borden FedEx invoice collector.
+tags:
+  - name: Adapter
+paths:
+  /operations/adapter.info:
+    post:
+      operationId: adapter.info
+      summary: Read adapter package metadata
+      tags: [Adapter]
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Adapter metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /operations/adapter.connections.list:
+    post:
+      operationId: adapter.connections.list
+      summary: List configured source identities
+      tags: [Adapter]
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Configured source identities
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /operations/adapter.health:
+    post:
+      operationId: adapter.health
+      summary: Read connection health and authority ceiling
+      tags: [Adapter]
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                connection_id:
+                  type: string
+              required: [connection_id]
+              additionalProperties: false
+      responses:
+        "200":
+          description: Connection health
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
