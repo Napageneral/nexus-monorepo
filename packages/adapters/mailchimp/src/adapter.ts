@@ -688,8 +688,17 @@ async function ingestWindow(
   }
   const to = args.to ?? new Date();
   const useExport = to.getTime() - args.since.getTime() > 7 * 24 * 60 * 60 * 1000;
-  if (useExport) await exportTransactionalHistory(client, args.since, to, emit);
-  else await searchRecentTransactional(client, args.since, to, emit);
+  if (useExport) {
+    // Mailchimp's recent-search surface carries the provider message id while
+    // activity exports do not. Keep the newest seven days on recent search so
+    // the periodic overlap monitor reuses the same stable identity instead of
+    // producing a second observation for an exported row.
+    const recentBoundary = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+    await exportTransactionalHistory(client, args.since, recentBoundary, emit);
+    await searchRecentTransactional(client, recentBoundary, to, emit);
+  } else {
+    await searchRecentTransactional(client, args.since, to, emit);
+  }
 }
 
 async function monitor(
