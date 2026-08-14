@@ -134,11 +134,13 @@
       "decision": "reuse",
       "adapter_version": "1.0.0",
       "implementation_owner": "MoonSleep Customer Operations",
-      "identity_format": "opaque support_episode_ref equal to issue_ref",
-      "read_surface": "ops_verified_customer_issue_current",
+      "identity_format": "opaque support_episode_ref equal to accepted issue_ref, including customer_issue_<sha256>",
+      "read_surface": "ops_customer_issue_measurement_current",
       "allowed_attribute_paths": ["conversation_state", "created_at", "customer_ref", "evidence_readiness", "issue_category", "operational_state", "review_action", "updated_at"],
       "allowed_relationships": [
-        { "relationship_id": "belongs_to_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "one" },
+        { "relationship_id": "belongs_to_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "optional_one" },
+        { "relationship_id": "concerns_entity", "target_object_ids": ["nex.entity"], "cardinality": "set_valued" },
+        { "relationship_id": "concerns_contact", "target_object_ids": ["nex.contact"], "cardinality": "set_valued" },
         { "relationship_id": "initiated_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "one" },
         { "relationship_id": "concerns_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "set_valued" },
         { "relationship_id": "has_commitment", "target_object_ids": ["moonsleep.commitment"], "cardinality": "set_valued" }

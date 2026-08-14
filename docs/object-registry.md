@@ -1321,7 +1321,7 @@ Existing Supply organization row used by product and procurement tables. It must
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
 | [Customer](#moonsleepcustomer) | business_resource | deployed | MoonSleep Customer Operations over Nex Identity and source-owned customer identities | canonical Nex Entity with Customer role plus reviewed provider identity links | through_owner_adapter |
-| [Customer Issue](#moonsleepcustomer_issue) | business_resource | deployed | MoonSleep Customer Operations | opaque support_episode_ref equal to the verified issue_ref | through_owner_adapter |
+| [Customer Issue](#moonsleepcustomer_issue) | business_resource | deployed | MoonSleep Customer Operations | opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references | through_owner_adapter |
 | [Customer Thread](#moonsleepcustomer_thread) | read_model | implemented | Customer Operations over Nex communications | Customer plus preserved native Channel identities; any support-thread identity remains Helpdesk-owned | through_owner_adapter |
 
 <a id="moonsleepcustomer"></a>
@@ -1373,7 +1373,7 @@ Federated business-role view over a canonical Entity, Customer role, native Cont
 
 Canonical support episode for one customer goal, question, exception, or remedy. One Channel may contain several Issues; acknowledgments or general history may create no Issue.
 
-**Stable identity:** opaque support_episode_ref equal to the verified issue_ref
+**Stable identity:** opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references
 
 **Revision identity:** Issue lifecycle events and reviewed successors preserve chronology
 
@@ -1386,7 +1386,9 @@ Canonical support episode for one customer goal, question, exception, or remedy.
 
 **Relationships:**
 
-- `belongs_to_customer` → `moonsleep.customer` (one; owner: Customer Operations)
+- `belongs_to_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
+- `concerns_entity` → `nex.entity` (optional_many; owner: Nex Identity)
+- `concerns_contact` → `nex.contact` (optional_many; owner: Nex Identity)
 - `initiated_in_channel` → `nex.channel` (one; owner: Nex Channels)
 - `concerns_order` → `moonsleep.commerce_order` (optional_many; owner: Commerce and Customer Operations)
 - `has_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner)
@@ -1395,7 +1397,7 @@ Canonical support episode for one customer goal, question, exception, or remedy.
 
 **Aliases and legacy names:** `support episode`, `customer case`.
 
-**Do not recreate:** one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object.
+**Do not recreate:** one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object; parallel Customer ID when Entity plus active Customer role exists.
 
 **Source contracts:**
 
