@@ -1,0 +1,933 @@
+{
+  "$schema": "./registry.schema.json",
+  "registry_id": "nex.moonsleep.object-registry",
+  "schema_version": "1.0.0",
+  "status": "proposed_canonical",
+  "scope": "Canonical reuse and ownership index for Nex evidence, identity, communication, orchestration, and MoonSleep operational objects used by the reviewed-interpretation tracks. It points to owning schemas and read contracts; it does not copy their data or create a parallel business model.",
+  "decision_contract": {
+    "lookup_order": ["exact object", "alias", "more general object", "owning-domain extension", "new object"],
+    "allowed_decisions": ["reuse", "generalize", "create"],
+    "new_object_requirements": [
+      "record the registry searches and rejected candidates",
+      "prove a distinct stable identity and canonical owner",
+      "define revision and relationship cardinality semantics",
+      "define evidence, Observation, projection, and action boundaries",
+      "provide an alias or migration plan and cross-domain review"
+    ]
+  },
+  "repositories": [
+    { "repository_id": "nexus-umbrella", "role": "Publishes cross-repository contracts and this registry", "workspace_hint": "~/nexus/home/projects/nexus" },
+    { "repository_id": "nex-core", "role": "Owns Nex runtime primitives, APIs, and storage", "workspace_hint": "~/nexus/home/projects/nexus/nex" },
+    { "repository_id": "moonsleep-v1", "role": "Owns MoonSleep domain contracts and PostgreSQL operational resources", "workspace_hint": "~/nexus/home/projects/moonsleep-v1" }
+  ],
+  "entries": [
+    {
+      "object_id": "nex.record", "display_name": "Record", "registry_class": "nex_primitive", "domain": "Nex evidence", "lifecycle_status": "deployed", "canonical_owner": "Nex Records",
+      "definition": "Stable source-object envelope for one provider record identity. It is evidence, not a business Resource. Exact immutable payload custody belongs to Record Revision.",
+      "stable_identity": "Nex record ID plus unique provider platform and provider record ID", "revision_identity": "nex.record_revision",
+      "canonical_storage": [{ "system": "Nex", "surface": "records", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["records.get", "records.list", "records.search", "records.open_native_source"],
+      "key_fields": ["id", "record_id", "platform", "content_type", "timestamp", "received_at", "sender_entity_id", "receiver_entity_id", "sender_contact_id", "receiver_contact_id", "container_id", "thread_id", "metadata"],
+      "relationships": [{ "relationship_id": "has_revision", "target_object_id": "nex.record_revision", "cardinality": "many", "owner": "Nex Records" }, { "relationship_id": "has_attachment", "target_object_id": "nex.attachment", "cardinality": "optional_many", "owner": "Nex Records" }, { "relationship_id": "observed_in_channel", "target_object_id": "nex.channel", "cardinality": "optional_one", "owner": "Nex identity and Channels" }],
+      "evidence_inputs": [], "observation_target": "not_applicable", "observation_head_rule": "Records are Observation evidence, never Observation targets by default.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/records/helpers.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }],
+      "deployed_release_receipts": [], "legacy_aliases": ["source_record", "communication_occurrence"], "forbidden_parallel_objects": ["domain-local copies of source messages or provider rows"], "open_questions": []
+    },
+    {
+      "object_id": "nex.record_revision", "display_name": "Record Revision", "registry_class": "evidence_custody", "domain": "Nex evidence", "lifecycle_status": "deployed", "canonical_owner": "Nex Records",
+      "definition": "Immutable capture of one exact provider payload version, including content digest, source/capture timing, registration receipt, and attachment revision membership. Episodes bind Record Revisions, not mutable search results.",
+      "stable_identity": "Nex record_revision_id", "revision_identity": "Content-addressed immutable revision; no in-place successor mutation",
+      "canonical_storage": [{ "system": "Nex PostgreSQL", "surface": "nex_runtime.record_revisions", "identity_field": "id", "status": "canonical" }, { "system": "Nex PostgreSQL", "surface": "nex_runtime.record_revision_registration_receipts", "status": "canonical" }],
+      "read_surfaces": ["records.revisions.get", "records.revisions.list", "records.revisions.scan", "records.revisions.registration_receipts.get"],
+      "key_fields": ["id", "record_id", "content_sha256", "source_timestamp", "captured_at", "registration_receipt_id", "access_scope"],
+      "relationships": [{ "relationship_id": "revision_of", "target_object_id": "nex.record", "cardinality": "one", "owner": "Nex Records" }, { "relationship_id": "member_of_episode", "target_object_id": "nex.episode", "cardinality": "optional_many", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["provider payload", "durable existing Record capture"], "observation_target": "not_applicable", "observation_head_rule": "Exact revisions support Facts and Episode membership.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/export_reviewed_interpretation_nex_record_index.py" }],
+      "deployed_release_receipts": [], "legacy_aliases": ["immutable Record", "source revision"], "forbidden_parallel_objects": ["hash-only domain evidence rows presented as canonical revision custody"], "open_questions": []
+    },
+    {
+      "object_id": "nex.attachment", "display_name": "Attachment", "registry_class": "evidence_custody", "domain": "Nex evidence", "lifecycle_status": "deployed", "canonical_owner": "Nex Records",
+      "definition": "File or media evidence attached to a source Record, with immutable content identity and optional interpretation kept separate from the binary custody.",
+      "stable_identity": "Record ID plus attachment ID; content hash detects exact binary identity", "revision_identity": "Attachment revision follows its owning Record Revision",
+      "canonical_storage": [{ "system": "Nex", "surface": "attachments", "identity_field": "record_id,id", "status": "canonical" }, { "system": "Nex", "surface": "attachment_interpretations", "status": "projection" }],
+      "read_surfaces": ["records.attachments.get", "records.revisions.attachments.get"],
+      "key_fields": ["record_id", "id", "filename", "mime_type", "size", "content_hash", "url", "local_path"],
+      "relationships": [{ "relationship_id": "attached_to", "target_object_id": "nex.record", "cardinality": "one", "owner": "Nex Records" }],
+      "evidence_inputs": ["provider attachment"], "observation_target": "not_applicable", "observation_head_rule": "Attachment fragments support Facts; interpretations do not replace binary evidence.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/records/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["document", "source document"], "forbidden_parallel_objects": ["treating one PDF as one Invoice or Claim"], "open_questions": []
+    },
+    {
+      "object_id": "nex.entity", "display_name": "Entity", "registry_class": "nex_primitive", "domain": "Nex identity", "lifecycle_status": "deployed", "canonical_owner": "Nex Identity",
+      "definition": "Cross-platform identity for a person, organization, agent, or other identity-bearing actor. Platform Contacts point to an Entity; merges are explicit and historical.",
+      "stable_identity": "Nex entity ID", "revision_identity": "Explicit update/merge history; merged_into preserves canonicalization",
+      "canonical_storage": [{ "system": "Nex", "surface": "entities", "identity_field": "id", "status": "canonical" }, { "system": "Nex", "surface": "entity_tags", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["entities.get", "entities.list", "entities.search", "entities.resolve", "entities.tags.list"],
+      "key_fields": ["id", "name", "type", "merged_into", "normalized", "origin", "created_at", "updated_at", "deleted_at"],
+      "relationships": [{ "relationship_id": "represented_by_contact", "target_object_id": "nex.contact", "cardinality": "optional_many", "owner": "Nex Identity" }, { "relationship_id": "participates_in_channel", "target_object_id": "nex.channel", "cardinality": "optional_many", "owner": "Nex Channels" }],
+      "evidence_inputs": ["Contact observations", "reviewed identity equivalence"], "observation_target": "direct", "observation_head_rule": "Stable tuple of Entity ID and attribute or typed relationship slot.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }], "deployed_release_receipts": [], "target_adapter_contracts": ["nex.entity.target-adapter.v1"], "legacy_aliases": ["person identity", "organization identity", "customer-role entity"], "forbidden_parallel_objects": ["domain-local person or organization copies", "Customer rows that duplicate an existing Entity"], "open_questions": []
+    },
+    {
+      "object_id": "nex.entity_role", "display_name": "Entity Role", "registry_class": "typed_supporting_object", "domain": "Nex identity", "lifecycle_status": "deployed", "canonical_owner": "Nex Identity and owning business domain",
+      "definition": "Effective role classification attached to an Entity, such as Customer, Shopify, supplier, carrier, or partner. A role does not create a second Entity.",
+      "stable_identity": "Entity ID plus active role/tag value", "revision_identity": "Append/delete role history",
+      "canonical_storage": [{ "system": "Nex", "surface": "entity_tags", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["entities.tags.list"], "key_fields": ["id", "entity_id", "tag", "created_at", "deleted_at"],
+      "relationships": [{ "relationship_id": "classifies", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }],
+      "evidence_inputs": ["source-owned role identity", "reviewed role promotion"], "observation_target": "direct", "observation_head_rule": "Entity ID plus role slot and value.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["entity tag", "business role"], "forbidden_parallel_objects": ["standalone Customer identity when Customer is an Entity role"], "open_questions": []
+    },
+    {
+      "object_id": "nex.contact", "display_name": "Contact", "registry_class": "nex_primitive", "domain": "Nex identity", "lifecycle_status": "deployed", "canonical_owner": "Nex Identity",
+      "definition": "Platform- and space-scoped address or account through which an Entity is observed or contacted. Shopify and Gmail Contacts can represent the same Entity without being the same Contact.",
+      "stable_identity": "platform plus space_id plus contact_id, represented by immutable Contact row ID", "revision_identity": "Contact observations retain seen names and platform aliases",
+      "canonical_storage": [{ "system": "Nex", "surface": "contacts", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["contacts.get", "contacts.list", "contacts.search", "contacts.resolve", "contacts.history"],
+      "key_fields": ["id", "entity_id", "platform", "space_id", "contact_id", "contact_name", "avatar_url", "origin", "last_observed_at", "deleted_at"],
+      "relationships": [{ "relationship_id": "represents", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "participates_in", "target_object_id": "nex.channel", "cardinality": "optional_many", "owner": "Nex Channels" }, { "relationship_id": "has_observation", "target_object_id": "nex.contact_observation", "cardinality": "many", "owner": "Nex Identity" }],
+      "evidence_inputs": ["adapter participant identity", "provider account identity"], "observation_target": "direct", "observation_head_rule": "Contact row ID plus attribute or relationship slot.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }], "deployed_release_receipts": [], "target_adapter_contracts": ["nex.contact.target-adapter.v1"], "legacy_aliases": ["email contact", "Shopify customer contact", "Gmail participant"], "forbidden_parallel_objects": ["email-string-only customer rows", "domain-local Contacts"], "open_questions": []
+    },
+    {
+      "object_id": "nex.contact_observation", "display_name": "Contact Observation", "registry_class": "evidence_custody", "domain": "Nex identity", "lifecycle_status": "deployed", "canonical_owner": "Nex Identity",
+      "definition": "Immutable observation that a platform contact identity, name, or alias was seen and resolved or proposed against a Contact and Entity.",
+      "stable_identity": "Contact observation ID", "revision_identity": "Immutable append-only sighting",
+      "canonical_storage": [{ "system": "Nex", "surface": "contact_observations", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["contacts.history"], "key_fields": ["id", "contact_row_id", "entity_id", "platform", "space_id", "contact_id", "observed_platform", "observed_contact_id", "origin", "observed_at"],
+      "relationships": [{ "relationship_id": "observes_contact", "target_object_id": "nex.contact", "cardinality": "optional_one", "owner": "Nex Identity" }, { "relationship_id": "resolves_entity", "target_object_id": "nex.entity", "cardinality": "optional_one", "owner": "Nex Identity" }],
+      "evidence_inputs": ["adapter identity observation"], "observation_target": "not_applicable", "observation_head_rule": "Identity custody evidence is append-only and is not a semantic business-field Observation.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["contact history"], "forbidden_parallel_objects": ["silent Contact-to-Entity merge based only on a matching string"], "open_questions": []
+    },
+    {
+      "object_id": "nex.channel", "display_name": "Channel", "registry_class": "nex_primitive", "domain": "Nex communications", "lifecycle_status": "deployed", "canonical_owner": "Nex Channels",
+      "definition": "Native provider communication container. Provider threads, inbox conversations, direct-message containers, and support conversations resolve here; a cross-provider history is a derived Entity view, not a synthetic mega-channel.",
+      "stable_identity": "logical active-channel resolution key platform plus connection_id plus container_id plus nullable thread_id", "revision_identity": "Stored Channel row ID is version identity: channels.update soft-deletes the prior row and creates a successor row with a new ID and created_at; table uniqueness includes created_at",
+      "canonical_storage": [{ "system": "Nex", "surface": "channels", "identity_field": "id", "status": "canonical" }, { "system": "Nex", "surface": "channel_participants", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["channels.get", "channels.list", "channels.search", "channels.resolve", "channels.history", "channels.participants.list"],
+      "key_fields": ["id", "platform", "connection_id", "space_id", "container_id", "container_kind", "thread_id", "created_at", "deleted_at", "metadata_json"],
+      "relationships": [{ "relationship_id": "has_participant", "target_object_id": "nex.channel_participant", "cardinality": "many", "owner": "Nex Channels" }, { "relationship_id": "contains_record", "target_object_id": "nex.record", "cardinality": "many", "owner": "Nex Records and Channels" }],
+      "evidence_inputs": ["adapter container/thread identity"], "observation_target": "direct", "observation_head_rule": "Logical active-channel resolution key plus attribute or typed relationship slot; a historical Channel row ID is never treated as the eternal provider-thread identity.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }], "deployed_release_receipts": [], "target_adapter_contracts": ["nex.channel.target-adapter.v1"], "legacy_aliases": ["provider conversation", "provider thread", "communication container"], "forbidden_parallel_objects": ["MoonSleep-specific thread table that replaces native Channels", "synthetic cross-provider reply route"], "open_questions": []
+    },
+    {
+      "object_id": "nex.channel_participant", "display_name": "Channel Participant", "registry_class": "typed_supporting_object", "domain": "Nex communications", "lifecycle_status": "deployed", "canonical_owner": "Nex Channels",
+      "definition": "Effective participation of one Contact and optional Entity in one native Channel, with role and history.",
+      "stable_identity": "Channel participant ID", "revision_identity": "channel_participant_history observations",
+      "canonical_storage": [{ "system": "Nex", "surface": "channel_participants", "identity_field": "id", "status": "canonical" }, { "system": "Nex", "surface": "channel_participant_history", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["channels.participants.get", "channels.participants.list", "channels.participants.history"], "key_fields": ["id", "channel_id", "contact_id", "entity_id", "role", "message_count", "status"],
+      "relationships": [{ "relationship_id": "in_channel", "target_object_id": "nex.channel", "cardinality": "one", "owner": "Nex Channels" }, { "relationship_id": "uses_contact", "target_object_id": "nex.contact", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "represents_entity", "target_object_id": "nex.entity", "cardinality": "optional_one", "owner": "Nex Identity" }],
+      "evidence_inputs": ["Record sender/recipient identity"], "observation_target": "direct", "observation_head_rule": "Participant ID plus attribute slot.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["thread participant"], "forbidden_parallel_objects": ["free-text participant arrays as canonical identity"], "open_questions": []
+    },
+    {
+      "object_id": "nex.episode", "display_name": "Episode", "registry_class": "nex_primitive", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Nex Memory evidence",
+      "definition": "Immutable bounded set of exact Record Revisions reviewed together for one coherent period or subject.",
+      "stable_identity": "Immutable evidence-set ID returned as episode_id, bound to exact Record Revision membership and sealed scope/member digests", "revision_identity": "Episode membership is immutable; any membership or scope change creates a new Episode with a new episode_id",
+      "canonical_storage": [{ "system": "Nex Memory evidence", "surface": "memory.evidence.episodes", "identity_field": "episode_id", "status": "canonical" }],
+      "read_surfaces": ["memory.evidence.episodes.create", "memory.evidence.episodes.get", "memory.evidence.episodes.list"],
+      "key_fields": ["episode_id", "profile_id", "profile_version", "subject", "effective_start", "effective_end", "record_revision_count", "record_set_sha256", "seal"],
+      "relationships": [{ "relationship_id": "contains_revision", "target_object_id": "nex.record_revision", "cardinality": "many", "owner": "Nex Memory evidence" }, { "relationship_id": "contains_fact", "target_object_id": "nex.fact", "cardinality": "many", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["exact Record Revisions"], "observation_target": "not_applicable", "observation_head_rule": "Episode is a sealed evidence boundary, not an interpreted Resource field.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "docs/specs/evidence-episodes-and-typed-facts.md" }, { "repository_id": "nex-core", "path": "src/api/server-methods/memory-evidence.ts" }, { "repository_id": "nex-core", "path": "src/capabilities/memory/evidence.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }], "deployed_release_receipts": [], "legacy_aliases": ["review chapter", "bounded history window"], "forbidden_parallel_objects": ["mutable chapter membership", "search-result-as-episode", "legacy Memory review Episode treated as continuous-evidence Episode authority"], "open_questions": []
+    },
+    {
+      "object_id": "nex.fact", "display_name": "Fact", "registry_class": "nex_primitive", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Nex Memory evidence",
+      "definition": "Immutable typed assertion supported by exact fragments from Record Revisions inside one Episode.",
+      "stable_identity": "fact_id", "revision_identity": "Changed or corroborating evidence creates another Fact; prior Facts remain",
+      "canonical_storage": [{ "system": "Nex Memory evidence", "surface": "memory.evidence.facts", "identity_field": "fact_id", "status": "canonical" }],
+      "read_surfaces": ["memory.evidence.facts.list", "memory.evidence.facts.create", "memory.evidence.facts.create_from_episode"], "key_fields": ["fact_id", "episode_id", "assertion_type", "subject", "value", "effective_from", "effective_through", "effective_precision", "support_fragments"],
+      "relationships": [{ "relationship_id": "belongs_to_episode", "target_object_id": "nex.episode", "cardinality": "one", "owner": "Nex Memory evidence" }, { "relationship_id": "member_of_fact_set", "target_object_id": "nex.fact_set", "cardinality": "optional_many", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["Record Revision fragments"], "observation_target": "not_applicable", "observation_head_rule": "Facts are inputs to Observations and never project directly into Resources. Strict create_from_episode requires exactly one Episode and fails closed if any cited Record Revision is outside that Episode.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "docs/specs/evidence-episodes-and-typed-facts.md" }, { "repository_id": "nex-core", "path": "src/api/server-methods/memory-evidence.ts" }, { "repository_id": "nex-core", "path": "src/capabilities/memory/evidence.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }], "deployed_release_receipts": [], "legacy_aliases": ["fact assertion"], "forbidden_parallel_objects": ["model guesses presented as Facts", "direct Fact-to-Resource writes", "Fact citation outside its one governing Episode"], "open_questions": []
+    },
+    {
+      "object_id": "nex.fact_set", "display_name": "Sealed Fact Set", "registry_class": "nex_primitive", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Nex Memory evidence",
+      "definition": "Sorted immutable Fact membership and digest used as the complete bounded input to an Observation.",
+      "stable_identity": "input_set_id plus sorted membership digest", "revision_identity": "Immutable seal",
+      "canonical_storage": [{ "system": "Nex Memory evidence", "surface": "sealed sets and Observation input membership", "identity_field": "input_set_id", "status": "canonical" }],
+      "read_surfaces": ["memory.sets.get", "memory.sets.members.list"], "key_fields": ["input_set_id", "input_count", "input_set_sha256", "sealed_at", "members"],
+      "relationships": [{ "relationship_id": "contains_fact", "target_object_id": "nex.fact", "cardinality": "many", "owner": "Nex Memory evidence" }, { "relationship_id": "interpreted_by", "target_object_id": "nex.observation", "cardinality": "optional_many", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["Facts"], "observation_target": "not_applicable", "observation_head_rule": "Several Observations may intentionally interpret the same sealed Fact set.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }], "deployed_release_receipts": [], "legacy_aliases": ["Observation input set"], "forbidden_parallel_objects": ["unordered or mutable input membership"], "open_questions": []
+    },
+    {
+      "object_id": "nex.observation", "display_name": "Observation", "registry_class": "nex_primitive", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Nex Memory evidence",
+      "definition": "Versioned reviewed interpretation of one sealed Fact set for a Resource attribute or typed relationship. It carries uncertainty, contradiction state, business-effective timing, and semantic predecessor history.",
+      "stable_identity": "observation_id and deterministic head key", "revision_identity": "revision_number plus prior_observation_id within one head",
+      "canonical_storage": [{ "system": "Nex Memory evidence", "surface": "Observation candidates, committed Observations, heads, and semantic receipts", "identity_field": "observation_id", "status": "canonical" }, { "system": "MoonSleep PostgreSQL", "surface": "evidence_nex_observation_refs", "identity_field": "observation_id", "status": "reference", "note": "Immutable custody reference, not a copied Observation" }],
+      "read_surfaces": ["memory.evidence.observations.head.get", "memory.evidence.observations.commit", "memory.evidence.observations.candidates.get", "memory.evidence.observations.candidates.stage", "memory.evidence.observations.candidates.promote"],
+      "key_fields": ["observation_id", "head_key", "revision_number", "prior_observation_id", "profile_id", "subject", "input_set_id", "input_set_sha256", "output_payload_sha256", "effective_from", "effective_through", "effective_precision", "review_decision"],
+      "relationships": [{ "relationship_id": "interprets", "target_object_id": "nex.fact_set", "cardinality": "one", "owner": "Nex Memory evidence" }, { "relationship_id": "projects_attribute_through", "target_object_id": "nex.resource_attribute_projection", "cardinality": "optional_many", "owner": "Owning Resource domain" }, { "relationship_id": "projects_relationship_through", "target_object_id": "nex.resource_relationship_projection", "cardinality": "optional_many", "owner": "Owning Resource domain" }],
+      "evidence_inputs": ["sealed Fact Set"], "observation_target": "not_applicable", "observation_head_rule": "Attribute head is Resource class, Resource ID, and attribute path. Relationship head follows the registered single-valued slot or set-valued destination contract.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "docs/specs/evidence-episodes-and-typed-facts.md" }, { "repository_id": "nex-core", "path": "src/api/server-methods/memory-evidence.ts" }, { "repository_id": "nex-core", "path": "src/capabilities/memory/evidence.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["reviewed interpretation", "semantic Observation"], "forbidden_parallel_objects": ["domain-local semantic history", "projection row as Observation authority", "legacy Memory review Observation treated as semantic authority"], "open_questions": []
+    },
+    {
+      "object_id": "nex.resource_attribute_projection", "display_name": "Resource Attribute Projection Custody", "registry_class": "evidence_custody", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Owning Resource domain with Nex Observation authority",
+      "definition": "Append-only receipt that one exact Nex Observation was applied to one registered Resource attribute. It is custody, not a second Resource or Observation.",
+      "stable_identity": "attribute projection link and receipt IDs", "revision_identity": "Semantic predecessor remains the Nex Observation predecessor; current projection is derived",
+      "canonical_storage": [{ "system": "MoonSleep PostgreSQL", "surface": "evidence_resource_attribute_observation_links", "identity_field": "attribute_link_id", "status": "canonical" }, { "system": "MoonSleep PostgreSQL", "surface": "evidence_resource_attribute_projection_current_v3", "status": "projection" }],
+      "read_surfaces": ["typed Resource projection readback"], "key_fields": ["resource_type", "resource_id", "attribute_path", "observation_id", "projected_value", "projection_receipt_id", "projected_at"],
+      "relationships": [{ "relationship_id": "governed_by", "target_object_id": "nex.observation", "cardinality": "one", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["committed Observation reference", "registered typed Resource adapter"], "observation_target": "not_applicable", "observation_head_rule": "Resource class, identity, and attribute path.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["attribute Observation link"], "forbidden_parallel_objects": ["second active/superseded chain outside Nex Observation history"], "open_questions": []
+    },
+    {
+      "object_id": "nex.resource_relationship_projection", "display_name": "Resource Relationship Projection Custody", "registry_class": "evidence_custody", "domain": "Nex semantics", "lifecycle_status": "deployed", "canonical_owner": "Owning Resource domain with Nex Observation authority",
+      "definition": "Append-only receipt that one exact Nex Observation was applied to one registered typed Resource relationship.",
+      "stable_identity": "relationship projection link and receipt IDs", "revision_identity": "Semantic predecessor remains the Nex Observation predecessor",
+      "canonical_storage": [{ "system": "MoonSleep PostgreSQL", "surface": "evidence_resource_relationship_observation_links", "identity_field": "relationship_link_id", "status": "canonical" }, { "system": "MoonSleep PostgreSQL", "surface": "evidence_resource_relationship_projection_current_v3", "status": "projection" }],
+      "read_surfaces": ["typed Resource relationship projection readback"], "key_fields": ["from_resource_type", "from_resource_id", "relationship_type", "to_resource_type", "to_resource_id", "relationship_attributes", "observation_id", "projection_receipt_id"],
+      "relationships": [{ "relationship_id": "governed_by", "target_object_id": "nex.observation", "cardinality": "one", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["committed Observation reference", "registered relationship adapter"], "observation_target": "not_applicable", "observation_head_rule": "Registered single-valued slot or set-valued destination identity.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["relationship Observation link"], "forbidden_parallel_objects": ["untyped foreign-key guesses", "relationship cardinality inferred from one chapter"], "open_questions": []
+    },
+    {
+      "object_id": "nex.set", "display_name": "Set", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Memory",
+      "definition": "Named or content-addressed membership collection used for job inputs, review packets, or derived cross-object collections. A Set never replaces the stable identity of its members.",
+      "stable_identity": "set ID and definition", "revision_identity": "Sealed membership or a new Set",
+      "canonical_storage": [{ "system": "Nex", "surface": "sets and set_members", "identity_field": "id", "status": "canonical" }],
+      "read_surfaces": ["memory.sets.get", "memory.sets.list", "memory.sets.members.list"], "key_fields": ["id", "definition_id", "created_at", "metadata", "member_type", "member_id", "position"],
+      "relationships": [], "evidence_inputs": ["registered members"], "observation_target": "not_applicable", "observation_head_rule": "Set is orchestration membership, not business truth.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/memory/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["review packet", "derived collection"], "forbidden_parallel_objects": ["synthetic multi-channel collection used as a reply route"], "open_questions": []
+    },
+    {
+      "object_id": "nex.channel_collection", "display_name": "Derived Channel Collection", "registry_class": "read_model", "domain": "Nex communications", "lifecycle_status": "planned", "canonical_owner": "Nex Channels and consuming read domain",
+      "definition": "Non-routable evidence or history view over an exact membership of native Channels and Records. It can group a multi-channel customer history or claims review corpus while every native Channel remains independently visible and replyable.",
+      "stable_identity": "content-addressed Set identity plus exact native Channel membership digest", "revision_identity": "Changed membership creates a new sealed Set or collection revision",
+      "canonical_storage": [{ "system": "Nex", "surface": "sets and set_members", "identity_field": "id", "status": "canonical" }, { "system": "Consuming domain", "surface": "derived Channel collection read", "status": "projection" }],
+      "read_surfaces": ["planned shared derived Channel collection read"], "key_fields": ["set_id", "channel_refs", "record_revision_refs", "membership_sha256", "subject_entity_refs", "effective_start", "effective_end", "routable"],
+      "relationships": [{ "relationship_id": "represented_by_set", "target_object_id": "nex.set", "cardinality": "one", "owner": "Nex Memory" }, { "relationship_id": "includes_channel", "target_object_id": "nex.channel", "cardinality": "many", "owner": "Nex Channels" }, { "relationship_id": "includes_revision", "target_object_id": "nex.record_revision", "cardinality": "optional_many", "owner": "Nex Records" }],
+      "evidence_inputs": ["exact native Channel membership", "optional exact Record Revision membership"], "observation_target": "not_applicable", "observation_head_rule": "Collection membership is a sealed read definition; Observations target the member Channels, Records, Entities, or business Resources.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/memory/helpers.ts" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["logical evidence collection", "multi-Channel history view"], "forbidden_parallel_objects": ["mega reply route", "replacement native Channel identity"], "open_questions": ["Shared read API and membership contract remain to be published"]
+    },
+    {
+      "object_id": "nex.job", "display_name": "Job and Job Run", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Jobs",
+      "definition": "Durable execution request and run receipt. Jobs may produce candidate outputs but are never source evidence or business Resources.",
+      "stable_identity": "job ID and run ID", "revision_identity": "Run attempts and status history",
+      "canonical_storage": [{ "system": "Nex", "surface": "jobs, runs, queue, idempotency, and DAG runtime", "identity_field": "job_id", "status": "canonical" }],
+      "read_surfaces": ["jobs.get", "jobs.runs.get", "jobs.list", "jobs.status"], "key_fields": ["job_id", "job_type", "input_set_id", "status", "idempotency_key", "created_at", "started_at", "completed_at", "error"],
+      "relationships": [{ "relationship_id": "uses_input_set", "target_object_id": "nex.set", "cardinality": "optional_one", "owner": "Nex Jobs" }],
+      "evidence_inputs": ["Job invocation and receipts"], "observation_target": "not_applicable", "observation_head_rule": "Job outputs remain candidates until accepted by their owning contract.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/migrations/memory/helpers.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["run", "automation execution"], "forbidden_parallel_objects": ["job output treated as accepted Fact or Resource"], "open_questions": []
+    },
+    {
+      "object_id": "nex.adapter_connection", "display_name": "Adapter Connection", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Adapters",
+      "definition": "Configured provider connection and its live-sync/backfill state. It supplies Records and identity observations but does not own business semantics.",
+      "stable_identity": "adapter connection ID", "revision_identity": "Connection configuration and monitor state history",
+      "canonical_storage": [{ "system": "Nex", "surface": "adapter connection runtime", "identity_field": "connection_id", "status": "canonical" }],
+      "read_surfaces": ["adapters.connections.get", "adapters.connections.list", "adapters.connections.status", "adapter.health"], "key_fields": ["connection_id", "adapter_id", "account_scope", "status", "live_sync_state", "backfill_state"],
+      "relationships": [{ "relationship_id": "creates_channel", "target_object_id": "nex.channel", "cardinality": "optional_many", "owner": "Nex Channels" }, { "relationship_id": "ingests_record", "target_object_id": "nex.record", "cardinality": "optional_many", "owner": "Nex Records" }],
+      "evidence_inputs": ["provider connection state"], "observation_target": "not_applicable", "observation_head_rule": "Operational configuration object.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/runtime/domains/adapters" }], "deployed_release_receipts": [], "legacy_aliases": ["source connection"], "forbidden_parallel_objects": ["provider badge as freshness proof"], "open_questions": []
+    },
+    {
+      "object_id": "nex.event_subscription", "display_name": "Event Subscription", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Jobs",
+      "definition": "Durable rule selecting runtime events that should enqueue governed work. Subscription breadth never changes evidence or action authority.",
+      "stable_identity": "subscription ID", "revision_identity": "Explicit subscription revisions",
+      "canonical_storage": [{ "system": "Nex", "surface": "events.subscriptions runtime", "identity_field": "subscription_id", "status": "canonical" }],
+      "read_surfaces": ["events.subscriptions.get", "events.subscriptions.list"], "key_fields": ["subscription_id", "event_selector", "target_job", "enabled", "created_at", "updated_at"],
+      "relationships": [{ "relationship_id": "enqueues_job", "target_object_id": "nex.job", "cardinality": "many", "owner": "Nex Jobs" }],
+      "evidence_inputs": ["runtime event envelope"], "observation_target": "not_applicable", "observation_head_rule": "Subscription is orchestration, not semantic truth.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/runtime/domains" }], "deployed_release_receipts": [], "legacy_aliases": ["record subscription"], "forbidden_parallel_objects": ["fast recognizer required as a second mandatory stage"], "open_questions": []
+    },
+    {
+      "object_id": "nex.workspace", "display_name": "Workspace", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Workspaces",
+      "definition": "Durable operating context for an Entity or Agent, including identity and role-facing files. A Workspace is not a business customer, company, or case.",
+      "stable_identity": "workspace ID", "revision_identity": "Manifest and file revision history",
+      "canonical_storage": [{ "system": "Nex", "surface": "workspace runtime and manifest", "identity_field": "workspace_id", "status": "canonical" }],
+      "read_surfaces": ["workspaces.get", "workspaces.list", "workspaces.manifest.get"], "key_fields": ["workspace_id", "entity_id", "manifest", "created_at", "updated_at"],
+      "relationships": [{ "relationship_id": "owned_by", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Workspaces" }],
+      "evidence_inputs": [], "observation_target": "not_applicable", "observation_head_rule": "Runtime context object.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/runtime/domains" }], "deployed_release_receipts": [], "legacy_aliases": ["agent workspace"], "forbidden_parallel_objects": ["Workspace interpreted as business Entity"], "open_questions": []
+    },
+    {
+      "object_id": "nex.agent", "display_name": "Agent", "registry_class": "nex_primitive", "domain": "Nex orchestration", "lifecycle_status": "deployed", "canonical_owner": "Nex Agents",
+      "definition": "Configured operating identity and behavior that can run Jobs or conversations within explicit authority. Agent output is candidate interpretation until accepted.",
+      "stable_identity": "agent ID backed by Entity identity", "revision_identity": "Agent configuration and session history",
+      "canonical_storage": [{ "system": "Nex", "surface": "agents runtime", "identity_field": "agent_id", "status": "canonical" }],
+      "read_surfaces": ["agents.get", "agents.list", "agents.identity.get"], "key_fields": ["agent_id", "entity_id", "workspace_id", "role_config", "model_config", "status"],
+      "relationships": [{ "relationship_id": "has_identity", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "uses_workspace", "target_object_id": "nex.workspace", "cardinality": "one", "owner": "Nex Workspaces" }],
+      "evidence_inputs": [], "observation_target": "not_applicable", "observation_head_rule": "Agent execution metadata is not business truth.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "nex-core", "path": "src/storage/agents.ts" }], "deployed_release_receipts": [], "legacy_aliases": ["persistent agent", "investigator"], "forbidden_parallel_objects": ["agent confidence as acceptance authority"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.customer", "display_name": "Customer", "registry_class": "business_resource", "domain": "MoonSleep people and service", "lifecycle_status": "deployed", "canonical_owner": "MoonSleep Customer Operations over Nex Identity and source-owned customer identities",
+      "definition": "Federated business-role view over a canonical Entity, Customer role, native Contacts, and source-owned customer identities. It is not a separate duplicate person table.",
+      "stable_identity": "canonical Nex Entity with Customer role plus reviewed provider identity links", "revision_identity": "Entity/contact/role history remains with each owner; equivalence links are reviewed",
+      "canonical_storage": [{ "system": "Nex", "surface": "entities and entity_tags", "identity_field": "entity_id", "status": "canonical" }, { "system": "Nex", "surface": "contacts and contact_observations", "identity_field": "contact_id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "federated Customers object view", "status": "projection" }],
+      "read_surfaces": ["Customers object workspace", "Shopify customer/order context", "Helpdesk customer context"],
+      "key_fields": ["entity_id", "customer_role", "contact_refs", "source_customer_refs", "identity_resolution_state", "latest_customer_activity_at", "latest_moonsleep_activity_at"],
+      "relationships": [{ "relationship_id": "represented_by_entity", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "has_contact", "target_object_id": "nex.contact", "cardinality": "many", "owner": "Nex Identity" }, { "relationship_id": "participates_in_channel", "target_object_id": "nex.channel", "cardinality": "many", "owner": "Nex Channels" }, { "relationship_id": "placed_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "optional_many", "owner": "Commerce" }, { "relationship_id": "has_issue", "target_object_id": "moonsleep.customer_issue", "cardinality": "optional_many", "owner": "Customer Operations" }],
+      "evidence_inputs": ["Shopify customer Contact", "Gmail participant Contact", "reviewed identity equivalence"], "observation_target": "through_owner_adapter", "observation_head_rule": "Customer facade field targets resolve to the owning Entity, Contact, role, or Customer Operations view field.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-customer-operations.md" }], "deployed_release_receipts": [], "target_adapter_contracts": ["moonsleep.customer.target-adapter.v1"], "legacy_aliases": ["customer role resource", "Shopify customer", "Helpdesk roster customer"], "forbidden_parallel_objects": ["synthetic Customer IDs when an Entity and Customer role already exist", "email-address-only Customer identity"], "open_questions": ["Cross-channel equivalence promotion remains reviewable rather than universally automatic"]
+    },
+    {
+      "object_id": "moonsleep.customer_thread", "display_name": "Customer Thread", "registry_class": "read_model", "domain": "MoonSleep people and service", "lifecycle_status": "implemented", "canonical_owner": "Customer Operations over Nex communications",
+      "definition": "Customer-facing history view that preserves each native Channel and provider conversation while presenting their combined chronology for one Customer. It is not a replacement Channel or reply route.",
+      "stable_identity": "Customer plus preserved native Channel identities; any support-thread identity remains Helpdesk-owned", "revision_identity": "Derived from immutable communication occurrences and current identity links",
+      "canonical_storage": [{ "system": "Nex", "surface": "channels, channel_participants, records", "status": "canonical" }, { "system": "MoonSleep Helpdesk", "surface": "Customer Threads read model", "status": "projection" }],
+      "read_surfaces": ["Customer Threads object workspace", "Helpdesk conversation/message pane"], "key_fields": ["customer_ref", "channel_refs", "provider_thread_refs", "latest_customer_activity_at", "latest_moonsleep_activity_at", "open_commitment_count", "issue_refs"],
+      "relationships": [{ "relationship_id": "for_customer", "target_object_id": "moonsleep.customer", "cardinality": "one", "owner": "Customer Operations" }, { "relationship_id": "includes_channel", "target_object_id": "nex.channel", "cardinality": "many", "owner": "Nex Channels" }, { "relationship_id": "has_issue", "target_object_id": "moonsleep.customer_issue", "cardinality": "optional_many", "owner": "Customer Operations" }, { "relationship_id": "evidences_commitment", "target_object_id": "moonsleep.commitment", "cardinality": "optional_many", "owner": "Commitment owner" }],
+      "evidence_inputs": ["native Channels", "logical messages", "Customer identity links"], "observation_target": "through_owner_adapter", "observation_head_rule": "Thread-view fields must resolve to an owning native Channel, Customer, Issue, or Commitment target; no synthetic semantic history.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-customer-operations.md" }], "deployed_release_receipts": [], "legacy_aliases": ["consolidated customer history", "support thread"], "forbidden_parallel_objects": ["cross-provider mega-thread", "synthetic reply target", "communication stream treated as native Channel"], "open_questions": ["The exact derived multi-Channel read contract needs central registration"]
+    },
+    {
+      "object_id": "moonsleep.customer_issue", "display_name": "Customer Issue", "registry_class": "business_resource", "domain": "MoonSleep people and service", "lifecycle_status": "deployed", "canonical_owner": "MoonSleep Customer Operations",
+      "definition": "Canonical support episode for one customer goal, question, exception, or remedy. One Channel may contain several Issues; acknowledgments or general history may create no Issue.",
+      "stable_identity": "opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references", "revision_identity": "Issue lifecycle events and reviewed successors preserve chronology",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "ops_verified_customer_issue_review_receipts", "identity_field": "support_episode_ref", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "ops_customer_issue_measurement_current", "status": "projection" }],
+      "read_surfaces": ["Customer Issues object workspace", "Candidate Inbox", "Verified Customer Issues"],
+      "key_fields": ["support_episode_ref", "issue_ref", "initiating_logical_message_id", "channel_ref", "customer_ref", "issue_category", "conversation_state", "operational_state", "created_at", "updated_at"],
+      "relationships": [{ "relationship_id": "belongs_to_customer", "target_object_id": "moonsleep.customer", "cardinality": "optional_one", "owner": "Customer Operations" }, { "relationship_id": "concerns_entity", "target_object_id": "nex.entity", "cardinality": "optional_many", "owner": "Nex Identity" }, { "relationship_id": "concerns_contact", "target_object_id": "nex.contact", "cardinality": "optional_many", "owner": "Nex Identity" }, { "relationship_id": "initiated_in_channel", "target_object_id": "nex.channel", "cardinality": "one", "owner": "Nex Channels" }, { "relationship_id": "concerns_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "optional_many", "owner": "Commerce and Customer Operations" }, { "relationship_id": "has_commitment", "target_object_id": "moonsleep.commitment", "cardinality": "optional_many", "owner": "Commitment owner" }],
+      "evidence_inputs": ["customer-authored communication", "operational receipts", "reviewed issue-boundary decision"], "observation_target": "through_owner_adapter", "observation_head_rule": "Issue ID plus attribute path or registered relationship slot.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-customer-operations.md" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/customer_operations_verified_issue_postgres.sql" }], "deployed_release_receipts": [], "target_adapter_contracts": ["moonsleep.customer-issue.target-adapter.v1"], "legacy_aliases": ["support episode", "customer case"], "forbidden_parallel_objects": ["one Issue per provider thread", "acknowledgment-only Issue", "dossier as canonical object", "parallel Customer ID when Entity plus active Customer role exists"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.commitment", "display_name": "Commitment", "registry_class": "business_resource", "domain": "MoonSleep work and governance", "lifecycle_status": "deployed", "canonical_owner": "General Commitment contract; accepting domain owns satisfaction evidence",
+      "definition": "General evidenced obligation, promise, accepted responsibility, policy-implied responsibility, or detected customer-affecting exception. It can concern any Entity and optionally Customer, Channel, Order, Issue, or other Resource.",
+      "stable_identity": "commitment_id", "revision_identity": "Explicit supersedes_commitment relationship; satisfaction requires owning receipt",
+      "canonical_storage": [{ "system": "MoonSleep PostgreSQL", "surface": "public.commitments", "identity_field": "commitment_id", "status": "canonical" }, { "system": "MoonSleep PostgreSQL", "surface": "commitment_channels, commitment_resource_contexts, commitment_satisfaction_events", "status": "canonical" }],
+      "read_surfaces": ["Commitments object workspace", "typed Resource projection readback"],
+      "key_fields": ["commitment_id", "commitment_statement", "commitment_category", "commitment_basis", "committed_at", "due_at", "due_condition", "commitment_state", "completion_evidence_state", "completed_at", "breach_state", "committed_by_entity_id", "committed_to_entity_id", "action_authority"],
+      "relationships": [{ "relationship_id": "committed_by", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "committed_to", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "evidenced_in_channel", "target_object_id": "nex.channel", "cardinality": "optional_many", "owner": "Nex Channels" }, { "relationship_id": "involves_customer", "target_object_id": "moonsleep.customer", "cardinality": "optional_one", "owner": "Customer Operations" }, { "relationship_id": "concerns_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "optional_one", "owner": "Commerce" }, { "relationship_id": "belongs_to_issue", "target_object_id": "moonsleep.customer_issue", "cardinality": "optional_one", "owner": "Customer Operations" }, { "relationship_id": "supersedes_commitment", "target_object_id": "moonsleep.commitment", "cardinality": "optional_one", "owner": "Commitment contract" }, { "relationship_id": "satisfied_by_event", "target_object_id": "moonsleep.action_receipt", "cardinality": "optional_many", "owner": "Owning mutation domain" }],
+      "evidence_inputs": ["accepted Observation", "policy rule", "operational exception detection"], "observation_target": "direct", "observation_head_rule": "Commitment ID plus attribute path or registered relationship slot.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_commitment_foundation_v1_postgres.sql" }], "deployed_release_receipts": [], "target_adapter_contracts": ["moonsleep.commitment.target-adapter.v1"], "legacy_aliases": ["operational obligation", "customer obligation"], "forbidden_parallel_objects": ["Customer Obligation subtype table", "Issue-required Commitment", "promise treated as completed without receipt"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.action_receipt", "display_name": "Action and Receipt", "registry_class": "business_resource", "domain": "MoonSleep work and governance", "lifecycle_status": "implemented", "canonical_owner": "Owning mutation domain and resolution executor",
+      "definition": "Stable governed action identity and immutable provider/readback receipt. It separates proposed action, approval, execution, provider effect, reconciliation, and recovery.",
+      "stable_identity": "registered action ID plus domain receipt ID", "revision_identity": "Append-only lifecycle events and readbacks",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "domain action and receipt tables", "identity_field": "action_id or receipt_id", "status": "canonical" }],
+      "read_surfaces": ["Actions and Receipts object workspace", "domain executor readback"], "key_fields": ["action_id", "target_object_type", "target_object_id", "preview", "approval", "execution_state", "provider_effect", "readback", "receipt_sha256", "recovery_state"],
+      "relationships": [], "evidence_inputs": ["approval", "provider response", "source-owned readback"], "observation_target": "through_owner_adapter", "observation_head_rule": "Owning action domain controls status and receipt history.", "projection_authority": false, "action_authority": true,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["resolution receipt", "provider receipt"], "forbidden_parallel_objects": ["accepted Observation as action authorization", "provider status without readback as completion"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.commerce_order", "display_name": "Commerce Order", "registry_class": "business_resource", "domain": "MoonSleep commerce", "lifecycle_status": "deployed", "canonical_owner": "Commerce provider with Nex canonical commerce reference",
+      "definition": "Provider-native commerce order with stable Nex identity and MoonSleep operational projection. Shopify, Amazon, and TikTok retain provider truth.",
+      "stable_identity": "provider platform plus provider order ID, represented by commerce_order ID/order_key", "revision_identity": "commerce_order_revisions and provider events",
+      "canonical_storage": [{ "system": "Nex PostgreSQL", "surface": "nex_runtime.commerce_orders", "identity_field": "id", "status": "canonical" }, { "system": "Nex PostgreSQL", "surface": "nex_runtime.commerce_order_revisions", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "public.fact_order", "identity_field": "order_key", "status": "projection" }],
+      "read_surfaces": ["commerce.orders.get", "commerce.orders.list", "Orders object workspace", "Order Journey"],
+      "key_fields": ["order_id", "provider_order_id", "order_number", "customer_entity_id", "customer_contact_id", "created_at", "currency", "financial_status", "fulfillment_status", "shipping_address", "billing_address"],
+      "relationships": [{ "relationship_id": "placed_by", "target_object_id": "moonsleep.customer", "cardinality": "optional_one", "owner": "Commerce and Identity" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.commerce_order_line", "cardinality": "many", "owner": "Commerce" }, { "relationship_id": "has_refund", "target_object_id": "moonsleep.refund", "cardinality": "optional_many", "owner": "Commerce" }, { "relationship_id": "has_obligation", "target_object_id": "moonsleep.fulfillment_obligation", "cardinality": "optional_many", "owner": "Dispatch" }],
+      "evidence_inputs": ["provider Order Record Revisions", "commerce events"], "observation_target": "through_owner_adapter", "observation_head_rule": "Canonical commerce_order ID plus registered attribute or relationship slot.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-order-journey.md" }], "deployed_release_receipts": [], "target_adapter_contracts": ["moonsleep.commerce-order.target-adapter.v1"], "legacy_aliases": ["Order", "Shopify Order", "fact_order"], "forbidden_parallel_objects": ["Customer-service-local Order", "order number alone as cross-provider identity", "current projection backdated as historical truth"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.commerce_order_line", "display_name": "Commerce Order Line", "registry_class": "business_resource", "domain": "MoonSleep commerce", "lifecycle_status": "deployed", "canonical_owner": "Commerce provider",
+      "definition": "Provider-native order line carrying purchased product/variant, quantity, and price identity.",
+      "stable_identity": "provider line ID represented by line_key", "revision_identity": "commerce line observations and provider revisions",
+      "canonical_storage": [{ "system": "Nex PostgreSQL", "surface": "nex_runtime.commerce_line_items", "identity_field": "id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "public.fact_order_line", "identity_field": "line_key", "status": "projection" }],
+      "read_surfaces": ["Order Journey", "Order Items object workspace"], "key_fields": ["line_key", "order_key", "provider_line_id", "sku", "variant_id", "quantity", "unit_price", "currency"],
+      "relationships": [{ "relationship_id": "belongs_to_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "one", "owner": "Commerce" }, { "relationship_id": "requires_fulfillment", "target_object_id": "moonsleep.fulfillment_obligation", "cardinality": "optional_many", "owner": "Dispatch" }],
+      "evidence_inputs": ["provider Order Revision"], "observation_target": "through_owner_adapter", "observation_head_rule": "Canonical line ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["Order Item", "fact_order_line"], "forbidden_parallel_objects": ["product description as line identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.refund", "display_name": "Refund", "registry_class": "business_resource", "domain": "MoonSleep commerce", "lifecycle_status": "deployed", "canonical_owner": "Commerce provider and Finance readback",
+      "definition": "Provider-native refund or adjustment with exact amount, currency, timing, and owning Order. A refund statement in email is not a Refund receipt.",
+      "stable_identity": "provider refund ID/refund_key", "revision_identity": "Provider refund events and immutable readback",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.fact_refund", "identity_field": "refund_key", "status": "canonical" }],
+      "read_surfaces": ["Order Journey", "Refunds object workspace"], "key_fields": ["refund_key", "order_key", "refund_created_at", "amount", "currency", "provider_status", "source_reference"],
+      "relationships": [{ "relationship_id": "refunds_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "one", "owner": "Commerce" }, { "relationship_id": "may_satisfy_commitment", "target_object_id": "moonsleep.commitment", "cardinality": "optional_many", "owner": "Commitment owner" }],
+      "evidence_inputs": ["provider refund object", "payment readback"], "observation_target": "through_owner_adapter", "observation_head_rule": "Provider refund identity plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-customer-operations.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["refund event", "price adjustment"], "forbidden_parallel_objects": ["zero-dollar edit treated as monetary refund", "email promise treated as refund completion"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.return_case", "display_name": "Return Case", "registry_class": "business_resource", "domain": "MoonSleep commerce", "lifecycle_status": "deployed", "canonical_owner": "Returns domain",
+      "definition": "Canonical return request and lifecycle with provider readback, policy decision, affected lines, physical return path, and refund relationship.",
+      "stable_identity": "return_case_id", "revision_identity": "Return lifecycle events and policy decisions",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.fulfillment_return_cases", "identity_field": "return_case_id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "public.fulfillment_return_policy_decisions", "status": "canonical" }],
+      "read_surfaces": ["Returns object workspace", "Customer Operations dossier"], "key_fields": ["return_case_id", "order_key", "customer_ref", "request_state", "reason", "policy_decision", "received_state", "refund_ref"],
+      "relationships": [{ "relationship_id": "for_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "one", "owner": "Returns" }, { "relationship_id": "results_in_refund", "target_object_id": "moonsleep.refund", "cardinality": "optional_many", "owner": "Returns and Commerce" }],
+      "evidence_inputs": ["customer request", "return provider", "warehouse receipt", "policy decision"], "observation_target": "through_owner_adapter", "observation_head_rule": "Return case ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/fulfillment_returns_policy_v2_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["Return"], "forbidden_parallel_objects": ["return question as executed Return", "policy answer as Return receipt"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.fulfillment_obligation", "display_name": "Fulfillment Component Obligation", "registry_class": "business_resource", "domain": "MoonSleep fulfillment", "lifecycle_status": "deployed", "canonical_owner": "Dispatch",
+      "definition": "Stable component-level obligation created by an Order line and satisfied only through authoritative allocation/package/shipment evidence.",
+      "stable_identity": "obligation_id", "revision_identity": "Dispatch obligation state history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.fulfillment_component_obligations", "identity_field": "obligation_id", "status": "canonical" }],
+      "read_surfaces": ["Order Journey", "Fulfillment Obligations object workspace"], "key_fields": ["obligation_id", "order_key", "line_key", "component_code", "required_units", "state", "node_id", "allocation_ref"],
+      "relationships": [{ "relationship_id": "for_order_line", "target_object_id": "moonsleep.commerce_order_line", "cardinality": "one", "owner": "Dispatch" }, { "relationship_id": "planned_by", "target_object_id": "moonsleep.fulfillment_delivery_plan", "cardinality": "optional_many", "owner": "Dispatch" }, { "relationship_id": "fulfilled_by", "target_object_id": "moonsleep.fulfillment_package", "cardinality": "optional_many", "owner": "Dispatch" }],
+      "evidence_inputs": ["Order line", "inventory allocation", "Dispatch plan/package"], "observation_target": "through_owner_adapter", "observation_head_rule": "Obligation ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-order-journey.md" }], "deployed_release_receipts": [], "legacy_aliases": ["component obligation"], "forbidden_parallel_objects": ["order status as fulfillment obligation state"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.fulfillment_delivery_plan", "display_name": "Fulfillment Delivery Plan", "registry_class": "business_resource", "domain": "MoonSleep fulfillment", "lifecycle_status": "deployed", "canonical_owner": "Dispatch",
+      "definition": "Expected fulfillment grouping and route for one or more component obligations. A plan is not a physical shipment.",
+      "stable_identity": "delivery_plan_id", "revision_identity": "Plan state and supersession history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.fulfillment_delivery_plans", "identity_field": "delivery_plan_id", "status": "canonical" }],
+      "read_surfaces": ["Order Journey", "Customer Shipments object workspace"], "key_fields": ["delivery_plan_id", "order_key", "node_id", "plan_state", "scheduled_at", "expected_components"],
+      "relationships": [{ "relationship_id": "plans_obligation", "target_object_id": "moonsleep.fulfillment_obligation", "cardinality": "many", "owner": "Dispatch" }, { "relationship_id": "generates_package", "target_object_id": "moonsleep.fulfillment_package", "cardinality": "optional_many", "owner": "Dispatch" }],
+      "evidence_inputs": ["Dispatch planning state"], "observation_target": "through_owner_adapter", "observation_head_rule": "Delivery plan ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-order-journey.md" }], "deployed_release_receipts": [], "legacy_aliases": ["customer shipment plan"], "forbidden_parallel_objects": ["shipment created from a promise or ETA"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.fulfillment_package", "display_name": "Fulfillment Package", "registry_class": "business_resource", "domain": "MoonSleep fulfillment", "lifecycle_status": "deployed", "canonical_owner": "Dispatch",
+      "definition": "Dispatch package attempt and its composition, label, node, wave, and physical carrier evidence. Tracking number is an attribute until a broader transport identity is approved.",
+      "stable_identity": "dispatch wave_row_id/package attempt ID", "revision_identity": "Package state and tracking event history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.dispatch_wave_rows", "identity_field": "wave_row_id", "status": "canonical" }],
+      "read_surfaces": ["Dispatch", "Tracking object workspace", "Order Journey"], "key_fields": ["wave_row_id", "wave_id", "order_key", "node_id", "package_state", "label_ref", "tracking_number", "first_physical_event_at"],
+      "relationships": [{ "relationship_id": "in_wave", "target_object_id": "moonsleep.dispatch_wave", "cardinality": "one", "owner": "Dispatch" }, { "relationship_id": "operated_by", "target_object_id": "moonsleep.fulfillment_node", "cardinality": "one", "owner": "Dispatch" }, { "relationship_id": "fulfills_obligation", "target_object_id": "moonsleep.fulfillment_obligation", "cardinality": "many", "owner": "Dispatch" }, { "relationship_id": "has_incident", "target_object_id": "moonsleep.carrier_incident", "cardinality": "optional_many", "owner": "Claims" }],
+      "evidence_inputs": ["Dispatch package", "label", "carrier physical events"], "observation_target": "through_owner_adapter", "observation_head_rule": "Package attempt ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-order-journey.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["Customer Shipment", "Tracking"], "forbidden_parallel_objects": ["label as carrier possession", "duplicate original/remedy Shipment object", "tracking string as standalone Resource without owner decision"], "open_questions": ["A cross-domain transport identity may later generalize package tracking"]
+    },
+    {
+      "object_id": "moonsleep.dispatch_wave", "display_name": "Dispatch Wave", "registry_class": "business_resource", "domain": "MoonSleep fulfillment", "lifecycle_status": "deployed", "canonical_owner": "Dispatch",
+      "definition": "Executable or planned node-scoped grouping of fulfillment packages. A wave does not prove carrier possession.",
+      "stable_identity": "wave_id", "revision_identity": "Wave lifecycle and packet publication history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.dispatch_waves", "identity_field": "wave_id", "status": "canonical" }],
+      "read_surfaces": ["Dispatch", "Label Workbench"], "key_fields": ["wave_id", "node_id", "wave_state", "created_at", "released_at", "closed_at"],
+      "relationships": [{ "relationship_id": "contains_package", "target_object_id": "moonsleep.fulfillment_package", "cardinality": "many", "owner": "Dispatch" }, { "relationship_id": "operated_by", "target_object_id": "moonsleep.fulfillment_node", "cardinality": "one", "owner": "Dispatch" }],
+      "evidence_inputs": ["Dispatch planning and execution receipts"], "observation_target": "through_owner_adapter", "observation_head_rule": "Wave ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["fulfillment wave"], "forbidden_parallel_objects": ["fulfillment packet Resource"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.fulfillment_node", "display_name": "Fulfillment Node", "registry_class": "business_resource", "domain": "MoonSleep fulfillment", "lifecycle_status": "deployed", "canonical_owner": "Dispatch",
+      "definition": "Operational Dispatch node identity, distinct from but explicitly related to a physical Facility and partner Organization.",
+      "stable_identity": "node_id", "revision_identity": "Node configuration history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.fulfillment_nodes", "identity_field": "node_id", "status": "canonical" }],
+      "read_surfaces": ["Dispatch", "Facilities and Nodes object workspace"], "key_fields": ["node_id", "node_name", "node_state", "facility_ref", "partner_ref"],
+      "relationships": [{ "relationship_id": "located_at", "target_object_id": "moonsleep.facility", "cardinality": "optional_one", "owner": "Inventory and Dispatch" }, { "relationship_id": "operates_wave", "target_object_id": "moonsleep.dispatch_wave", "cardinality": "optional_many", "owner": "Dispatch" }],
+      "evidence_inputs": ["Dispatch configuration", "facility mapping"], "observation_target": "through_owner_adapter", "observation_head_rule": "Node ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["warehouse node"], "forbidden_parallel_objects": ["Facility and Node collapsed into one identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.carrier_incident", "display_name": "Carrier Incident", "registry_class": "business_resource", "domain": "MoonSleep claims", "lifecycle_status": "deployed", "canonical_owner": "Claims",
+      "definition": "MoonSleep operational incident affecting an Order or fulfillment package, independent from a provider claim case.",
+      "stable_identity": "incident_id", "revision_identity": "Incident events and reviewed attribute/relationship Observations",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.carrier_incidents", "identity_field": "incident_id", "status": "canonical" }],
+      "read_surfaces": ["GET /api/fulfillment/carrier-incidents", "GET /api/fulfillment/carrier-incidents/{incident_id}", "Claims object workspace"],
+      "key_fields": ["incident_id", "order_ref", "helpdesk_ref", "reason", "summary", "discovered_at", "operational_state", "next_action", "due_at", "closure", "outcome", "cost", "confidence"],
+      "relationships": [{ "relationship_id": "for_order", "target_object_id": "moonsleep.commerce_order", "cardinality": "optional_one", "owner": "Claims" }, { "relationship_id": "affects_package", "target_object_id": "moonsleep.fulfillment_package", "cardinality": "optional_many", "owner": "Claims and Dispatch" }, { "relationship_id": "has_case", "target_object_id": "moonsleep.carrier_case", "cardinality": "optional_many", "owner": "Claims" }],
+      "evidence_inputs": ["carrier events", "customer report", "Dispatch state"], "observation_target": "through_owner_adapter", "observation_head_rule": "Incident ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_incidents_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["Claim incident", "shipping claim"], "forbidden_parallel_objects": ["customer issue copied as carrier incident", "delivery status as customer possession"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.carrier_case", "display_name": "Carrier Case", "registry_class": "business_resource", "domain": "MoonSleep claims", "lifecycle_status": "deployed", "canonical_owner": "Claims and carrier/provider",
+      "definition": "Provider-native claim, trace, or recovery case associated with an operational Carrier Incident.",
+      "stable_identity": "carrier_case_id; natural uniqueness provider_name plus provider_account_ref plus external_case_number when present", "revision_identity": "Carrier Case Events",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.carrier_cases", "identity_field": "carrier_case_id", "status": "canonical" }],
+      "read_surfaces": ["Carrier Incident detail", "Claims workspace"], "key_fields": ["carrier_case_id", "incident_id", "provider_name", "provider_account_ref", "external_case_number", "case_type", "status", "filed_at", "requested_amount", "approved_amount", "next_action"],
+      "relationships": [{ "relationship_id": "concerns_incident", "target_object_id": "moonsleep.carrier_incident", "cardinality": "one", "owner": "Claims" }, { "relationship_id": "has_event", "target_object_id": "moonsleep.carrier_case_event", "cardinality": "many", "owner": "Claims" }, { "relationship_id": "has_recovery", "target_object_id": "moonsleep.carrier_recovery_receipt", "cardinality": "optional_many", "owner": "Claims and Finance" }],
+      "evidence_inputs": ["carrier/provider case Record Revisions"], "observation_target": "through_owner_adapter", "observation_head_rule": "Carrier case ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_incidents_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_claims_provenance_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["provider claim", "carrier trace"], "forbidden_parallel_objects": ["provider acknowledgment as approval or recovery"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.carrier_case_event", "display_name": "Carrier Case Event", "registry_class": "typed_supporting_object", "domain": "MoonSleep claims", "lifecycle_status": "deployed", "canonical_owner": "Claims",
+      "definition": "Immutable event in one Carrier Case, with exact source and idempotency custody.",
+      "stable_identity": "carrier_case_event_id; unique carrier_case_id plus idempotency_fingerprint_sha256", "revision_identity": "Immutable append-only event",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.carrier_case_events", "identity_field": "carrier_case_event_id", "status": "canonical" }],
+      "read_surfaces": ["GET /api/fulfillment/carrier-incidents/events"], "key_fields": ["carrier_case_event_id", "carrier_case_id", "event_type", "event_at", "summary", "payload", "actor", "source_revision_refs", "idempotency_fingerprint_sha256"],
+      "relationships": [{ "relationship_id": "event_for", "target_object_id": "moonsleep.carrier_case", "cardinality": "one", "owner": "Claims" }, { "relationship_id": "sourced_from", "target_object_id": "nex.record_revision", "cardinality": "optional_many", "owner": "Nex Records" }],
+      "evidence_inputs": ["carrier/provider Record Revision"], "observation_target": "through_owner_adapter", "observation_head_rule": "Event identity is immutable; interpretations target owning Incident or Case fields.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_incidents_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_claims_provenance_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["claim event"], "forbidden_parallel_objects": ["event as business Resource when it only changes a Case"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.carrier_recovery_receipt", "display_name": "Carrier Recovery Receipt", "registry_class": "business_resource", "domain": "MoonSleep claims", "lifecycle_status": "deployed", "canonical_owner": "Claims for case linkage; Finance for cash/accounting meaning",
+      "definition": "Exact provider credit, remittance, or recovery receipt tied to a Carrier Case. Provider status alone is not recovery.",
+      "stable_identity": "carrier_recovery_receipt_id; unique source_system plus source_reference", "revision_identity": "Immutable provider receipt and reconciliation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.carrier_recovery_receipts", "identity_field": "carrier_recovery_receipt_id", "status": "canonical" }],
+      "read_surfaces": ["Carrier Incident detail", "Finance reconciliation"], "key_fields": ["carrier_recovery_receipt_id", "carrier_case_id", "source_system", "source_reference", "amount", "currency", "received_at", "reconciliation_state"],
+      "relationships": [{ "relationship_id": "recovers_case", "target_object_id": "moonsleep.carrier_case", "cardinality": "one", "owner": "Claims" }],
+      "evidence_inputs": ["provider credit/remittance", "cash/accounting readback"], "observation_target": "through_owner_adapter", "observation_head_rule": "Receipt ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_incidents_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_claims_provenance_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["claim recovery"], "forbidden_parallel_objects": ["claim closure as financial recovery"], "open_questions": ["Provider credit and remittance links to Finance need a shared typed contract"]
+    },
+    {
+      "object_id": "moonsleep.partner", "display_name": "Partner", "registry_class": "business_resource", "domain": "MoonSleep partner and supply", "lifecycle_status": "implemented", "canonical_owner": "Owning partner registry over Nex Entity",
+      "definition": "Business-role facade for a supplier, carrier, creator, facility operator, or service provider represented by canonical Nex Entities and Contacts.",
+      "stable_identity": "canonical Nex Organization Entity plus reviewed partner role and provider references", "revision_identity": "Entity/role/contact history and owner-specific agreement history",
+      "canonical_storage": [{ "system": "Nex", "surface": "entities, entity_tags, contacts", "identity_field": "entity_id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "Partners object view", "status": "projection" }],
+      "read_surfaces": ["Partners object workspace", "Supply inspector", "Creator hub", "Claims"], "key_fields": ["entity_id", "partner_roles", "contact_refs", "provider_refs", "relationship_state"],
+      "relationships": [{ "relationship_id": "represented_by", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity" }, { "relationship_id": "has_contact", "target_object_id": "nex.contact", "cardinality": "many", "owner": "Nex Identity" }, { "relationship_id": "participates_in", "target_object_id": "nex.channel", "cardinality": "optional_many", "owner": "Nex Channels" }],
+      "evidence_inputs": ["provider identity", "contracts", "communications", "reviewed equivalence"], "observation_target": "through_owner_adapter", "observation_head_rule": "Partner view fields target owning Entity, role, agreement, or domain Resource.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["supplier", "carrier", "creator", "service provider"], "forbidden_parallel_objects": ["provider text as a new Organization", "domain-local Partner identity"], "open_questions": ["Supply and Finance party tables require enforced Entity crosswalks"]
+    },
+    {
+      "object_id": "moonsleep.supply_organization", "display_name": "Supply Organization", "registry_class": "compatibility_alias", "domain": "MoonSleep partner and supply", "lifecycle_status": "compatibility", "canonical_owner": "Supply compatibility storage with Nex Organization target",
+      "definition": "Existing Supply organization row used by product and procurement tables. It must crosswalk to the canonical Nex Organization Entity rather than becoming a competing identity authority.",
+      "stable_identity": "organization_id pending mandatory Nex Entity crosswalk", "revision_identity": "Supply compatibility identity history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_organizations", "identity_field": "organization_id", "status": "compatibility" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["organization_id"],
+      "relationships": [{ "relationship_id": "resolves_to_partner", "target_object_id": "moonsleep.partner", "cardinality": "one", "owner": "Identity steward and Supply" }],
+      "evidence_inputs": ["reviewed supplier identity"], "observation_target": "compatibility_only", "observation_head_rule": "New partner facts should target the canonical Entity/Partner once crosswalked.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["supplier organization"], "forbidden_parallel_objects": ["second supplier company identity"], "open_questions": ["Mandatory supply_organization to Nex Entity crosswalk is not production-enforced"]
+    },
+    {
+      "object_id": "moonsleep.product_family", "display_name": "Product Family", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Supply",
+      "definition": "Stable commercial/product concept that can have revisions, prototypes, BOMs, experiments, purchase plans, and commercial variants.",
+      "stable_identity": "product_family_id", "revision_identity": "Product Revision",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_families", "identity_field": "product_family_id", "status": "canonical" }],
+      "read_surfaces": ["Products and Components object workspace", "Supply reviewed projection"], "key_fields": ["product_family_id", "canonical_name", "lifecycle_state"],
+      "relationships": [{ "relationship_id": "has_revision", "target_object_id": "moonsleep.product_revision", "cardinality": "many", "owner": "Product and Supply" }, { "relationship_id": "has_prototype", "target_object_id": "moonsleep.product_prototype", "cardinality": "optional_many", "owner": "Product and Supply" }, { "relationship_id": "has_experiment", "target_object_id": "moonsleep.product_experiment", "cardinality": "optional_many", "owner": "Product and Supply" }],
+      "evidence_inputs": ["reviewed product evidence"], "observation_target": "direct", "observation_head_rule": "product_family_id plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product concept"], "forbidden_parallel_objects": ["SKU or prototype substituted for Product Family"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_revision", "display_name": "Product Revision", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Supply",
+      "definition": "Effective-dated version of a Product Family's design and requirements.",
+      "stable_identity": "product_revision_id", "revision_identity": "Explicit revision label/state and effective_from",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_revisions", "identity_field": "product_revision_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["product_revision_id", "product_family_id", "revision_label", "revision_state", "effective_from"],
+      "relationships": [{ "relationship_id": "belongs_to_family", "target_object_id": "moonsleep.product_family", "cardinality": "one", "owner": "Product and Supply" }, { "relationship_id": "specified_by", "target_object_id": "moonsleep.product_bom_version", "cardinality": "optional_many", "owner": "Product and Supply" }],
+      "evidence_inputs": ["reviewed design requirements"], "observation_target": "direct", "observation_head_rule": "product_revision_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product version"], "forbidden_parallel_objects": ["BOM version collapsed into Product Revision"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_bom_version", "display_name": "Product BOM Version", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Inventory",
+      "definition": "Versioned bill of materials for one Product Revision.",
+      "stable_identity": "bom_version_id", "revision_identity": "version_ordinal and supersedes_bom_version_id",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_bom_versions", "identity_field": "bom_version_id", "status": "canonical" }],
+      "read_surfaces": ["Products and Components object workspace"], "key_fields": ["bom_version_id", "product_revision_id", "version_ordinal", "version_state", "supersedes_bom_version_id"],
+      "relationships": [{ "relationship_id": "specifies_revision", "target_object_id": "moonsleep.product_revision", "cardinality": "one", "owner": "Product and Inventory" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.product_bom_line", "cardinality": "many", "owner": "Product and Inventory" }],
+      "evidence_inputs": ["reviewed component specification"], "observation_target": "direct", "observation_head_rule": "bom_version_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["BOM"], "forbidden_parallel_objects": ["mutable component list without BOM version"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_bom_line", "display_name": "Product BOM Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Inventory",
+      "definition": "One component requirement within a BOM Version.",
+      "stable_identity": "bom_line_id", "revision_identity": "Inherited from BOM Version",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_bom_lines", "identity_field": "bom_line_id", "status": "canonical" }],
+      "read_surfaces": ["Products and Components object workspace"], "key_fields": ["bom_line_id", "bom_version_id", "component_code", "component_role", "quantity", "unit_of_measure", "specification_json"],
+      "relationships": [{ "relationship_id": "belongs_to_bom", "target_object_id": "moonsleep.product_bom_version", "cardinality": "one", "owner": "Product and Inventory" }],
+      "evidence_inputs": ["component specification"], "observation_target": "direct", "observation_head_rule": "bom_line_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["component requirement"], "forbidden_parallel_objects": ["free-text component obligation as BOM identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_prototype", "display_name": "Product Prototype", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Supply",
+      "definition": "Planned or realized prototype design identity, distinct from each physical Sample Article.",
+      "stable_identity": "prototype_id", "revision_identity": "supersedes_prototype_id and current_prototype_state",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_prototypes", "identity_field": "prototype_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["prototype_id", "product_family_id", "product_revision_id", "prototype_label", "current_prototype_state", "supersedes_prototype_id"],
+      "relationships": [{ "relationship_id": "belongs_to_family", "target_object_id": "moonsleep.product_family", "cardinality": "one", "owner": "Product and Supply" }, { "relationship_id": "implements_revision", "target_object_id": "moonsleep.product_revision", "cardinality": "one", "owner": "Product and Supply" }, { "relationship_id": "realized_by", "target_object_id": "moonsleep.sample_article", "cardinality": "optional_many", "owner": "Supply" }],
+      "evidence_inputs": ["reviewed design conversation"], "observation_target": "direct", "observation_head_rule": "prototype_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["prototype design"], "forbidden_parallel_objects": ["physical sample collapsed into prototype identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_experiment", "display_name": "Product Experiment", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Supply",
+      "definition": "Structured product hypothesis and evaluation over one or more options or prototypes.",
+      "stable_identity": "experiment_id", "revision_identity": "experiment state and conclusion history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_experiments", "identity_field": "experiment_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["experiment_id", "product_family_id", "product_revision_id", "title", "hypothesis", "experiment_state", "opened_at", "concluded_at"],
+      "relationships": [{ "relationship_id": "belongs_to_family", "target_object_id": "moonsleep.product_family", "cardinality": "one", "owner": "Product and Supply" }, { "relationship_id": "has_option", "target_object_id": "moonsleep.product_experiment_option", "cardinality": "many", "owner": "Product and Supply" }],
+      "evidence_inputs": ["reviewed experiment decision"], "observation_target": "direct", "observation_head_rule": "experiment_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product trial"], "forbidden_parallel_objects": ["informal preference promoted to experiment without decision"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.product_experiment_option", "display_name": "Product Experiment Option", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Product and Supply",
+      "definition": "One tested alternative and result within a Product Experiment.",
+      "stable_identity": "experiment_option_id", "revision_identity": "Option state and result history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_product_experiment_options", "identity_field": "experiment_option_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["experiment_option_id", "experiment_id", "option_label", "option_state", "tested_prototype_id", "result_summary"],
+      "relationships": [{ "relationship_id": "belongs_to_experiment", "target_object_id": "moonsleep.product_experiment", "cardinality": "one", "owner": "Product and Supply" }, { "relationship_id": "tests_prototype", "target_object_id": "moonsleep.product_prototype", "cardinality": "optional_one", "owner": "Product and Supply" }],
+      "evidence_inputs": ["reviewed experiment result"], "observation_target": "direct", "observation_head_rule": "experiment_option_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["experiment alternative"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.purchase_plan", "display_name": "Purchase Plan", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply planning",
+      "definition": "Pre-commitment procurement plan evaluating requirements, suppliers, product quotes, and freight options. It is not a Purchase Order.",
+      "stable_identity": "purchase_plan_id", "revision_identity": "Plan state and option/requirement history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_purchase_plans", "identity_field": "purchase_plan_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["purchase_plan_id", "display_name", "product_family_id", "product_revision_id", "target_units", "planning_state", "opened_at"],
+      "relationships": [{ "relationship_id": "plans_family", "target_object_id": "moonsleep.product_family", "cardinality": "one", "owner": "Supply" }, { "relationship_id": "has_option", "target_object_id": "moonsleep.purchase_plan_option", "cardinality": "many", "owner": "Supply" }, { "relationship_id": "has_requirement", "target_object_id": "moonsleep.purchase_plan_requirement", "cardinality": "many", "owner": "Supply" }, { "relationship_id": "may_result_in", "target_object_id": "moonsleep.purchase_order", "cardinality": "optional_many", "owner": "Inventory Ledger" }],
+      "evidence_inputs": ["reviewed sourcing Facts and quotes"], "observation_target": "direct", "observation_head_rule": "purchase_plan_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["sourcing plan"], "forbidden_parallel_objects": ["plan treated as committed Purchase Order"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.purchase_plan_option", "display_name": "Purchase Plan Option", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply planning",
+      "definition": "One supplier/product/freight alternative evaluated inside a Purchase Plan.",
+      "stable_identity": "purchase_plan_option_id", "revision_identity": "Option state history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_purchase_plan_options", "identity_field": "purchase_plan_option_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["purchase_plan_option_id", "purchase_plan_id", "option_label", "option_state", "supplier_organization_id", "target_units"],
+      "relationships": [{ "relationship_id": "belongs_to_plan", "target_object_id": "moonsleep.purchase_plan", "cardinality": "one", "owner": "Supply" }, { "relationship_id": "uses_supplier", "target_object_id": "moonsleep.supply_organization", "cardinality": "optional_one", "owner": "Supply compatibility" }, { "relationship_id": "evaluates_product_quote", "target_object_id": "moonsleep.supplier_product_quote_line", "cardinality": "optional_many", "owner": "Supply" }, { "relationship_id": "evaluates_freight_quote", "target_object_id": "moonsleep.supplier_freight_quote_line", "cardinality": "optional_many", "owner": "Supply" }],
+      "evidence_inputs": ["supplier quote Facts"], "observation_target": "direct", "observation_head_rule": "purchase_plan_option_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["sourcing alternative"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.purchase_plan_requirement", "display_name": "Purchase Plan Requirement", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply planning",
+      "definition": "One quantity, component, product, or service requirement inside a Purchase Plan or option.",
+      "stable_identity": "purchase_plan_requirement_id", "revision_identity": "Requirement Observations and plan revisions",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_purchase_plan_requirements", "identity_field": "purchase_plan_requirement_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["purchase_plan_requirement_id", "purchase_plan_id", "purchase_plan_option_id", "requirement_category", "requirement_description", "resource_ref", "quantity", "unit_of_measure", "supplier_organization_id"],
+      "relationships": [{ "relationship_id": "belongs_to_plan", "target_object_id": "moonsleep.purchase_plan", "cardinality": "one", "owner": "Supply" }, { "relationship_id": "requires_resource", "target_object_id": "moonsleep.product_revision", "cardinality": "optional_one", "owner": "Supply" }],
+      "evidence_inputs": ["reviewed requirements"], "observation_target": "direct", "observation_head_rule": "purchase_plan_requirement_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["procurement requirement"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.supplier_product_quote", "display_name": "Supplier Product Quotation", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "Versioned supplier-issued commercial quotation for product/components, distinct from a Purchase Order or Invoice.",
+      "stable_identity": "product_quotation_id", "revision_identity": "quotation_state, valid_through, and superseding evidence",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_supplier_product_quotations", "identity_field": "product_quotation_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["product_quotation_id", "supplier_organization_id", "supplier_reference", "issued_at", "valid_through", "currency", "price_basis", "lead_time_basis", "quotation_state"],
+      "relationships": [{ "relationship_id": "issued_by", "target_object_id": "moonsleep.supply_organization", "cardinality": "one", "owner": "Supply compatibility" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.supplier_product_quote_line", "cardinality": "many", "owner": "Supply" }, { "relationship_id": "has_packaging_option", "target_object_id": "moonsleep.supplier_product_quote_packaging_option", "cardinality": "optional_many", "owner": "Supply" }],
+      "evidence_inputs": ["supplier communication and document Record Revisions"], "observation_target": "direct", "observation_head_rule": "product_quotation_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product quote"], "forbidden_parallel_objects": ["quote as Purchase Order or Invoice"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.supplier_product_quote_line", "display_name": "Supplier Product Quotation Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "One priced quantity break or resource line within a Supplier Product Quotation.",
+      "stable_identity": "product_quote_line_id", "revision_identity": "Inherited from quotation and Observation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_supplier_product_quotation_lines", "identity_field": "product_quote_line_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["product_quote_line_id", "product_quotation_id", "quoted_resource_ref", "line_description", "quantity_break_units", "unit_price_minor_units"],
+      "relationships": [{ "relationship_id": "belongs_to_quote", "target_object_id": "moonsleep.supplier_product_quote", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["supplier quote Facts"], "observation_target": "direct", "observation_head_rule": "product_quote_line_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product quote line"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.supplier_product_quote_packaging_option", "display_name": "Supplier Product Quotation Packaging Option", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "One supplier-proposed packaging configuration attached to a Product Quotation, preserving package and carton assumptions separately from price lines.",
+      "stable_identity": "product_quote_packaging_option_id", "revision_identity": "Inherited from quotation and Observation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_supplier_product_quotation_packaging_options", "identity_field": "product_quote_packaging_option_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["product_quote_packaging_option_id", "product_quotation_id", "package_type", "units_per_package", "packages_per_carton", "carton_length_cm", "carton_width_cm", "carton_height_cm", "compression_packaging", "packaging_basis"],
+      "relationships": [{ "relationship_id": "belongs_to_quote", "target_object_id": "moonsleep.supplier_product_quote", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["supplier packaging quote Facts"], "observation_target": "direct", "observation_head_rule": "product_quote_packaging_option_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["product quotation packaging option"], "forbidden_parallel_objects": ["packaging assumption copied into product identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.supplier_freight_quote", "display_name": "Supplier Freight Quotation", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "Supplier or forwarder-issued freight quotation with transport mode, service scope, incoterm, and priced lines.",
+      "stable_identity": "freight_quotation_id", "revision_identity": "supersedes_freight_quotation_id and quotation state",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_supplier_freight_quotations", "identity_field": "freight_quotation_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["freight_quotation_id", "supplier_organization_id", "supplier_reference", "issued_at", "currency", "transport_mode", "service_scope", "incoterm_code", "quotation_state", "supersedes_freight_quotation_id"],
+      "relationships": [{ "relationship_id": "issued_by", "target_object_id": "moonsleep.supply_organization", "cardinality": "one", "owner": "Supply compatibility" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.supplier_freight_quote_line", "cardinality": "many", "owner": "Supply" }],
+      "evidence_inputs": ["supplier/forwarder quote Record Revisions"], "observation_target": "direct", "observation_head_rule": "freight_quotation_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["freight quote"], "forbidden_parallel_objects": ["freight quote as shipment or invoice"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.supplier_freight_quote_line", "display_name": "Supplier Freight Quotation Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "One priced cargo/service alternative within a Supplier Freight Quotation.",
+      "stable_identity": "freight_quote_line_id", "revision_identity": "Inherited from quotation and Observation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_supplier_freight_quotation_lines", "identity_field": "freight_quote_line_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["freight_quote_line_id", "freight_quotation_id", "cargo_resource_ref", "quantity_basis_units", "carton_count", "quoted_amount_minor_units", "transit_min_days", "transit_max_days", "duties_included", "delivery_to_address_included"],
+      "relationships": [{ "relationship_id": "belongs_to_quote", "target_object_id": "moonsleep.supplier_freight_quote", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["freight quote Facts"], "observation_target": "direct", "observation_head_rule": "freight_quote_line_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["freight option"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_order", "display_name": "Sample Order", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "Supplier-facing order for prototypes or samples, distinct from commercial Purchase Orders and Customer Orders.",
+      "stable_identity": "sample_order_id", "revision_identity": "Sample Order Status events",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_orders", "identity_field": "sample_order_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_order_id", "supplier_organization_id", "provider_order_reference", "provider_contract_reference", "ordered_at", "currency", "total_minor_units", "current_order_state"],
+      "relationships": [{ "relationship_id": "ordered_from", "target_object_id": "moonsleep.supply_organization", "cardinality": "one", "owner": "Supply compatibility" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.sample_order_line", "cardinality": "many", "owner": "Supply" }, { "relationship_id": "has_status", "target_object_id": "moonsleep.sample_order_status", "cardinality": "many", "owner": "Supply" }, { "relationship_id": "has_payment_report", "target_object_id": "moonsleep.sample_payment_report", "cardinality": "optional_many", "owner": "Supply evidence and Finance" }],
+      "evidence_inputs": ["supplier order Record Revisions"], "observation_target": "direct", "observation_head_rule": "sample_order_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["prototype order"], "forbidden_parallel_objects": ["sample order as commercial PO"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_order_line", "display_name": "Sample Order Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "One product revision/BOM quantity within a Sample Order.",
+      "stable_identity": "sample_order_line_id", "revision_identity": "Inherited from order and Observation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_order_lines", "identity_field": "sample_order_line_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_order_line_id", "sample_order_id", "product_revision_id", "bom_version_id", "quantity", "unit_price_minor_units"],
+      "relationships": [{ "relationship_id": "belongs_to_order", "target_object_id": "moonsleep.sample_order", "cardinality": "one", "owner": "Supply" }, { "relationship_id": "orders_revision", "target_object_id": "moonsleep.product_revision", "cardinality": "optional_one", "owner": "Supply" }],
+      "evidence_inputs": ["sample order Facts"], "observation_target": "direct", "observation_head_rule": "sample_order_line_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": [], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_order_status", "display_name": "Sample Order Status Event", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "Effective status assertion for one Sample Order, preserving source precision.",
+      "stable_identity": "sample_order_status_id", "revision_identity": "Immutable append-only status history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_order_status_history", "identity_field": "sample_order_status_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_order_status_id", "sample_order_id", "order_state", "effective_at", "source_precision"],
+      "relationships": [{ "relationship_id": "status_for", "target_object_id": "moonsleep.sample_order", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["supplier status Fact"], "observation_target": "direct", "observation_head_rule": "Status event is immutable; current state is derived.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["sample order state"], "forbidden_parallel_objects": ["supplier promise as physical shipment"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_article", "display_name": "Sample Article", "registry_class": "business_resource", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "One physical sample article realizing a prototype or product revision and fulfilling a Sample Order Line.",
+      "stable_identity": "sample_article_id", "revision_identity": "Sample Article Status events",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_articles", "identity_field": "sample_article_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_article_id", "article_label", "sample_order_line_id", "product_revision_id", "prototype_id", "bom_version_id", "current_article_state", "is_commercial_inventory"],
+      "relationships": [{ "relationship_id": "fulfills_line", "target_object_id": "moonsleep.sample_order_line", "cardinality": "one", "owner": "Supply" }, { "relationship_id": "realizes_prototype", "target_object_id": "moonsleep.product_prototype", "cardinality": "optional_one", "owner": "Supply" }, { "relationship_id": "has_status", "target_object_id": "moonsleep.sample_article_status", "cardinality": "many", "owner": "Supply" }],
+      "evidence_inputs": ["supplier sample evidence", "receipt/inspection"], "observation_target": "direct", "observation_head_rule": "sample_article_id plus field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["physical prototype", "sample unit"], "forbidden_parallel_objects": ["prototype design and physical sample collapsed"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_article_status", "display_name": "Sample Article Status Event", "registry_class": "typed_supporting_object", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply",
+      "definition": "Effective status assertion for one physical Sample Article.",
+      "stable_identity": "sample_article_status_id", "revision_identity": "Immutable append-only status history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_article_status_history", "identity_field": "sample_article_status_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_article_status_id", "sample_article_id", "article_state", "effective_at", "reported_by_scope", "source_precision"],
+      "relationships": [{ "relationship_id": "status_for", "target_object_id": "moonsleep.sample_article", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["supplier/inspection status Fact"], "observation_target": "direct", "observation_head_rule": "Status event immutable; current article state derived.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["sample status"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.sample_payment_report", "display_name": "Sample Payment Report", "registry_class": "evidence_custody", "domain": "MoonSleep product and supply", "lifecycle_status": "deployed", "canonical_owner": "Supply evidence; Finance owns actual payment truth",
+      "definition": "Source-supported report that a Sample Order payment occurred. It is evidence and not necessarily a canonical Payment.",
+      "stable_identity": "sample_payment_report_id", "revision_identity": "Immutable report",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_sample_order_payment_reports", "identity_field": "sample_payment_report_id", "status": "canonical" }],
+      "read_surfaces": ["Supply reviewed projection"], "key_fields": ["sample_payment_report_id", "sample_order_id", "amount_minor_units", "currency", "reported_at", "payment_evidence_scope"],
+      "relationships": [{ "relationship_id": "reports_payment_for", "target_object_id": "moonsleep.sample_order", "cardinality": "one", "owner": "Supply" }],
+      "evidence_inputs": ["supplier/payment communication"], "observation_target": "direct", "observation_head_rule": "Report ID plus field or relationship; Payment promotion requires Finance receipt.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["reported payment"], "forbidden_parallel_objects": ["reported payment as settled Payment"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.purchase_order", "display_name": "Purchase Order", "registry_class": "business_resource", "domain": "MoonSleep inventory and supply", "lifecycle_status": "deployed", "canonical_owner": "Inventory Ledger",
+      "definition": "Commercial procurement commitment issued to a supplier, distinct from a Purchase Plan, quote, Invoice, or Sample Order.",
+      "stable_identity": "po_id/purchase_order_id", "revision_identity": "PO status, line, lot, and payment histories",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.inventory_purchase_orders", "identity_field": "po_id", "status": "canonical" }],
+      "read_surfaces": ["Purchase Orders object workspace", "Inventory Ledger"], "key_fields": ["po_id", "supplier_ref", "ordered_at", "status", "currency", "units_ordered", "expected_delivery", "payment_state"],
+      "relationships": [{ "relationship_id": "ordered_from", "target_object_id": "moonsleep.partner", "cardinality": "one", "owner": "Inventory and Identity" }, { "relationship_id": "has_lot", "target_object_id": "moonsleep.lot", "cardinality": "optional_many", "owner": "Inventory Ledger" }],
+      "evidence_inputs": ["PO document", "supplier confirmation", "inventory ledger receipt"], "observation_target": "through_owner_adapter", "observation_head_rule": "PO ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["supply_order", "PO"], "forbidden_parallel_objects": ["Purchase Plan or Invoice as PO"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.lot", "display_name": "Lot", "registry_class": "business_resource", "domain": "MoonSleep inventory and supply", "lifecycle_status": "deployed", "canonical_owner": "Inventory Ledger",
+      "definition": "Distinct purchased/produced inventory lot tied to a Purchase Order and physical receipt history. Lot and business Batch remain distinct.",
+      "stable_identity": "purchase order lot ID", "revision_identity": "ETA, shipment, receipt, and allocation history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.inventory_purchase_order_lots", "identity_field": "lot_id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "public.inventory_purchase_order_lot_eta_history", "status": "canonical" }],
+      "read_surfaces": ["Lots and Batches object workspace", "Inventory Ledger"], "key_fields": ["lot_id", "po_id", "sku_key", "units", "lot_state", "expected_at", "received_at", "location"],
+      "relationships": [{ "relationship_id": "belongs_to_po", "target_object_id": "moonsleep.purchase_order", "cardinality": "one", "owner": "Inventory Ledger" }, { "relationship_id": "has_position", "target_object_id": "moonsleep.inventory_position", "cardinality": "optional_many", "owner": "Inventory Ledger" }],
+      "evidence_inputs": ["PO", "inbound shipment", "receiving"], "observation_target": "through_owner_adapter", "observation_head_rule": "Lot ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["PO lot"], "forbidden_parallel_objects": ["Lot and Batch collapsed", "supplier promise as received inventory"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.inventory_position", "display_name": "Inventory Position", "registry_class": "business_resource", "domain": "MoonSleep inventory and supply", "lifecycle_status": "deployed", "canonical_owner": "Inventory Ledger",
+      "definition": "Source-owned stock position facet by component, variant, node, lot, or location, retaining physical basis, reserve, allocations, and reconciliation.",
+      "stable_identity": "position identity defined by owning inventory surface", "revision_identity": "Ledger transactions and snapshots",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "Inventory Ledger and inventory position views", "identity_field": "position_ref", "status": "canonical" }],
+      "read_surfaces": ["Inventory Positions object workspace", "Inventory Ledger"], "key_fields": ["position_ref", "resource_ref", "node_or_location_ref", "lot_ref", "on_hand", "allocated", "reserved", "available", "reconciliation_state", "as_of"],
+      "relationships": [{ "relationship_id": "at_facility", "target_object_id": "moonsleep.facility", "cardinality": "optional_one", "owner": "Inventory Ledger" }, { "relationship_id": "from_lot", "target_object_id": "moonsleep.lot", "cardinality": "optional_one", "owner": "Inventory Ledger" }],
+      "evidence_inputs": ["inventory ledger transactions", "physical counts", "receipts", "allocations"], "observation_target": "through_owner_adapter", "observation_head_rule": "Owning position identity plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["stock position", "inventory snapshot"], "forbidden_parallel_objects": ["Shopify quantity as canonical inventory", "snapshot as ledger identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.facility", "display_name": "Facility", "registry_class": "business_resource", "domain": "MoonSleep inventory and supply", "lifecycle_status": "deployed", "canonical_owner": "Inventory and Organization registry",
+      "definition": "Physical facility/location identity, distinct from a Dispatch Node and related explicitly to a Partner Organization.",
+      "stable_identity": "facility/location ID", "revision_identity": "Facility edit and mapping history",
+      "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_facility_locations", "identity_field": "facility_id", "status": "canonical" }, { "system": "MoonSleep Ops", "surface": "public.supply_facility_node_mappings", "status": "canonical" }],
+      "read_surfaces": ["Facilities and Nodes object workspace", "Inventory Ledger"], "key_fields": ["facility_id", "organization_ref", "name", "address", "status", "capabilities"],
+      "relationships": [{ "relationship_id": "operated_by", "target_object_id": "moonsleep.partner", "cardinality": "optional_one", "owner": "Identity and Inventory" }, { "relationship_id": "mapped_to_node", "target_object_id": "moonsleep.fulfillment_node", "cardinality": "optional_many", "owner": "Inventory and Dispatch" }],
+      "evidence_inputs": ["partner/facility registry", "address evidence"], "observation_target": "through_owner_adapter", "observation_head_rule": "Facility ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/supply_facility_master_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-ops-object-workspace.md" }], "deployed_release_receipts": [], "legacy_aliases": ["warehouse", "factory location"], "forbidden_parallel_objects": ["Facility and Dispatch Node collapsed", "address text as Facility identity"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.finance_source_stream", "display_name": "Finance Source Stream", "registry_class": "evidence_custody", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Finance evidence registry",
+      "definition": "Registered Finance source lane, revisioned extraction contract, and required control set. It governs coverage and capture; it is not a Financial Account or business Resource.",
+      "stable_identity": "source_stream_id with natural uniqueness source_system plus source_environment plus source_account_ref plus stream_name", "revision_identity": "stream_revision_id and revision_number",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.source_streams, finance.source_stream_revisions, finance.source_stream_required_controls", "identity_field": "source_stream_id", "status": "canonical" }],
+      "read_surfaces": ["Finance source integrity reads"], "key_fields": ["source_stream_id", "source_system", "source_environment", "source_account_ref", "stream_name", "stream_revision_id", "revision_number", "effective_on", "stream_status", "expected_cadence", "coverage_boundary_semantics", "extraction_method", "source_owner", "reconciliation_target"],
+      "relationships": [{ "relationship_id": "has_manifest", "target_object_id": "moonsleep.finance_source_manifest", "cardinality": "many", "owner": "Finance evidence registry" }],
+      "evidence_inputs": ["registered provider source contract"], "observation_target": "not_applicable", "observation_head_rule": "Finance source custody is not semantic business history.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_evidence_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["Finance source lane"], "forbidden_parallel_objects": ["source stream as Financial Account"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.finance_evidence_object", "display_name": "Finance Evidence Object", "registry_class": "evidence_custody", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Finance evidence registry",
+      "definition": "Content-addressed encrypted Finance evidence object with separate envelope, key-wrapper, and storage-location custody. It is source material, never an Invoice, Payment, Transaction, or semantic Observation by itself.",
+      "stable_identity": "evidence_object_id derived from content_sha256", "revision_identity": "Immutable content object; new bytes create a new identity",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.evidence_objects, finance.evidence_encryption_envelopes, finance.evidence_key_wrappers, finance.evidence_locations", "identity_field": "evidence_object_id", "status": "canonical" }],
+      "read_surfaces": ["Finance evidence custody reads"], "key_fields": ["evidence_object_id", "content_sha256", "content_bytes", "media_type", "original_filename", "sensitivity_class", "encryption_envelope_id", "evidence_location_id"],
+      "relationships": [], "evidence_inputs": ["captured Finance document or provider payload"], "observation_target": "not_applicable", "observation_head_rule": "Evidence objects support Facts; they do not hold semantic current state.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_evidence_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["Finance evidence blob"], "forbidden_parallel_objects": ["one evidence object as one Invoice", "encrypted envelope as business Resource"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.finance_source_manifest", "display_name": "Finance Source Manifest", "registry_class": "evidence_custody", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Finance evidence registry",
+      "definition": "Immutable finalized or quarantined coverage manifest tying a source-stream revision to evidence objects and control results.",
+      "stable_identity": "source_manifest_id; unique source_stream_id plus manifest_sequence", "revision_identity": "A new capture creates a new manifest sequence; finalized manifests are immutable",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.source_manifests, finance.source_manifest_objects, finance.source_control_results", "identity_field": "source_manifest_id", "status": "canonical" }],
+      "read_surfaces": ["Finance source integrity reads"], "key_fields": ["source_manifest_id", "source_stream_id", "stream_revision_id", "manifest_sequence", "coverage_start_at", "coverage_end_at", "capture_method", "adapter_revision", "manifest_state", "prior_manifest_sha256", "manifest_sha256", "acquired_at"],
+      "relationships": [{ "relationship_id": "manifest_for_stream", "target_object_id": "moonsleep.finance_source_stream", "cardinality": "one", "owner": "Finance evidence registry" }, { "relationship_id": "contains_evidence_object", "target_object_id": "moonsleep.finance_evidence_object", "cardinality": "many", "owner": "Finance evidence registry" }],
+      "evidence_inputs": ["captured source objects and controls"], "observation_target": "not_applicable", "observation_head_rule": "Manifest membership supports Facts but never replaces Nex semantic Observations.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_evidence_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["Finance capture manifest"], "forbidden_parallel_objects": ["manifest as Invoice, Payment, or Transaction"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.finance_source_record_bridge", "display_name": "Finance Source Record Bridge", "registry_class": "compatibility_alias", "domain": "MoonSleep finance", "lifecycle_status": "compatibility", "canonical_owner": "Finance evidence bridge; Nex owns general Record and Record Revision evidence",
+      "definition": "Finance-owned immutable source reference used by ledger and AP foreign keys. It is a custody bridge, not a second semantic Record system.",
+      "stable_identity": "source_record_id; unique source_system plus external_reference plus content_sha256", "revision_identity": "Content-addressed immutable capture",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.source_records", "identity_field": "source_record_id", "status": "compatibility" }],
+      "read_surfaces": ["Finance ledger and AP source links"], "key_fields": ["source_record_id", "source_system", "external_reference", "document_type", "storage_uri", "content_sha256", "content_bytes", "coverage_start", "coverage_end", "captured_at", "metadata_json"],
+      "relationships": [{ "relationship_id": "may_reference_record", "target_object_id": "nex.record", "cardinality": "optional_one", "owner": "Nex Records" }, { "relationship_id": "may_reference_revision", "target_object_id": "nex.record_revision", "cardinality": "optional_one", "owner": "Nex Records" }],
+      "evidence_inputs": ["Finance provider capture", "optional Nex Record identity"], "observation_target": "compatibility_only", "observation_head_rule": "Canonical semantic interpretation remains in Nex Facts and Observations.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_ledger_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["finance.source_records"], "forbidden_parallel_objects": ["Finance-local semantic Record history"], "open_questions": ["Exact mandatory Nex Record Revision crosswalk is not universal"]
+    },
+    {
+      "object_id": "moonsleep.finance_ap_party", "display_name": "Finance AP Party", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance Accounts Payable subledger",
+      "definition": "Stable AP subledger party identity referenced by Invoices. It is not another Organization and must crosswalk to a canonical Partner or Nex Organization Entity before claiming shared identity.",
+      "stable_identity": "ap_party_id derived and guarded from identity_material_sha256", "revision_identity": "party_status and source evidence; shared Organization equivalence remains reviewed",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_parties", "identity_field": "ap_party_id", "status": "canonical" }],
+      "read_surfaces": ["Accounts Payable reads"], "key_fields": ["ap_party_id", "sanitized_name", "party_status", "first_source_record_id", "identity_material_sha256", "idempotency_key_sha256"],
+      "relationships": [{ "relationship_id": "first_evidenced_by", "target_object_id": "moonsleep.finance_source_record_bridge", "cardinality": "one", "owner": "Finance" }],
+      "evidence_inputs": ["Finance source record and reviewed party identity"], "observation_target": "through_owner_adapter", "observation_head_rule": "AP party ID plus Finance-owned field; shared Entity equivalence uses a separately reviewed relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["AP supplier party"], "forbidden_parallel_objects": ["AP Party as canonical Organization", "provider recipient as durable Partner identity"], "open_questions": ["Mandatory crosswalk to Partner or Nex Entity is unresolved"]
+    },
+    {
+      "object_id": "moonsleep.financial_account", "display_name": "Financial Account", "registry_class": "business_resource", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance ledger",
+      "definition": "Stable general-ledger account identity. Provider-native cash and card registrations are separate supporting objects and may optionally bind an exact Account Revision.",
+      "stable_identity": "account_id", "revision_identity": "account_revision_id and revision_number effective_on",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ledger_accounts", "identity_field": "account_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.account_revisions", "identity_field": "account_revision_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.external_account_refs", "status": "reference" }],
+      "read_surfaces": ["Finance account reads"], "key_fields": ["account_id", "account_code", "account_revision_id", "revision_number", "effective_on", "account_name", "account_classification", "account_type", "account_subtype", "normal_balance", "parent_account_id", "account_status", "posting_allowed"],
+      "relationships": [{ "relationship_id": "has_provider_registration", "target_object_id": "moonsleep.cash_card_account", "cardinality": "optional_many", "owner": "Finance" }],
+      "evidence_inputs": ["chart of accounts", "provider-account mapping review"], "observation_target": "through_owner_adapter", "observation_head_rule": "Account ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_ledger_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["ledger account", "GL account"], "forbidden_parallel_objects": ["supplier-specific GL account for AP detail", "provider mapping as another ledger account"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.cash_card_account", "display_name": "Cash or Card Source Account", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Provider for native identity; Finance for governed registration",
+      "definition": "Registered provider-native cash, credit-card, or charge-card account. It has its own identity and optionally links to an exact Financial Account revision.",
+      "stable_identity": "cash_card_account_id derived from source_system plus source_environment plus source_account_ref_sha256", "revision_identity": "cash_card_account_revision_id, revision_number, and effective_on",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.cash_card_accounts and finance.cash_card_account_revisions", "identity_field": "cash_card_account_id", "status": "canonical" }],
+      "read_surfaces": ["Finance cash/card compact reads"], "key_fields": ["cash_card_account_id", "account_category", "source_system", "source_environment", "source_account_ref_sha256", "cash_card_account_revision_id", "revision_number", "effective_on", "sanitized_label", "account_status", "ledger_account_revision_id"],
+      "relationships": [{ "relationship_id": "maps_to_account", "target_object_id": "moonsleep.financial_account", "cardinality": "optional_one", "owner": "Finance" }, { "relationship_id": "has_transaction", "target_object_id": "moonsleep.financial_transaction", "cardinality": "optional_many", "owner": "Finance" }],
+      "evidence_inputs": ["provider account registration", "Finance source record"], "observation_target": "through_owner_adapter", "observation_head_rule": "Cash/card account ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_cash_card_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["bank source account", "card source account"], "forbidden_parallel_objects": ["provider account mapping as a ledger account"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.financial_transaction", "display_name": "Financial Transaction", "registry_class": "business_resource", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Provider for native truth; Finance for owned history and classification",
+      "definition": "Provider-native cash or card transaction with append-only revisions and an explicitly selected logical current head.",
+      "stable_identity": "cash_card_account_id plus external_transaction_ref_sha256, represented by transaction_id", "revision_identity": "transaction_revision_id and revision_number; selected logical head is a read contract",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.cash_card_transactions", "identity_field": "transaction_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.cash_card_transaction_revisions", "identity_field": "transaction_revision_id", "status": "canonical" }],
+      "read_surfaces": ["finance.cash_card_current_transaction_heads_v1", "finance.cash_card_transaction_compact_integrity_v1", "finance.cash_card_transaction_compact_current_v1", "finance.cash_card_posted_transaction_compact_redacted_v1", "finance.cash_card_transaction_projected_current_v1", "finance.cash_card_posted_transaction_projected_redacted_v1"],
+      "key_fields": ["transaction_id", "transaction_revision_id", "cash_card_account_id", "transaction_state", "transaction_date", "posted_date", "signed_amount_minor_units", "currency_code", "source_row_sha256", "revision_sha256"],
+      "relationships": [{ "relationship_id": "in_account", "target_object_id": "moonsleep.cash_card_account", "cardinality": "one", "owner": "Finance" }],
+      "evidence_inputs": ["provider transaction revisions"], "observation_target": "through_owner_adapter", "observation_head_rule": "Transaction ID plus registered field; latest revision number is not automatically current truth.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_cash_card_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_source_compact_projection_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["cash transaction", "card transaction"], "forbidden_parallel_objects": ["raw, compact, or projected view as another transaction system", "amount match as identity"], "open_questions": ["Typed reconciliation to Payment, Refund, Invoice, and Journal requires a registered join object"]
+    },
+    {
+      "object_id": "moonsleep.invoice", "display_name": "Invoice", "registry_class": "business_resource", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Finance Accounts Payable",
+      "definition": "Stable payable document identity for one supplier obligation. An email, attachment, candidate, queue row, or payment notice is not an Invoice.",
+      "stable_identity": "ap_invoice_id derived from stable_invoice_identity_sha256 and ap_party_id", "revision_identity": "ap_invoice_revision_id with monotonic sequence and superseded_revision_id",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_invoices", "identity_field": "ap_invoice_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.ap_invoice_revisions", "identity_field": "ap_invoice_revision_id", "status": "canonical" }],
+      "read_surfaces": ["finance.ap_invoice_current", "finance.ap_open_payables", "finance.ap_cash_requirements", "finance.ap_review_queue", "GET /api/finance/accounts-payable/projected-canary"],
+      "key_fields": ["ap_invoice_id", "ap_party_id", "stable_invoice_identity_sha256", "invoice_number", "invoice_date", "due_date", "currency", "subtotal_minor_units", "tax_minor_units", "credits_minor_units", "amount_due_minor_units", "invoice_state", "review_state"],
+      "relationships": [{ "relationship_id": "issued_by_ap_party", "target_object_id": "moonsleep.finance_ap_party", "cardinality": "one", "owner": "Finance" }, { "relationship_id": "has_revision", "target_object_id": "moonsleep.invoice_revision", "cardinality": "many", "owner": "Finance" }],
+      "evidence_inputs": ["Nex Records and attachments", "supplier document", "provider payment evidence"], "observation_target": "through_owner_adapter", "observation_head_rule": "Invoice ID plus registered field or relationship; semantic history remains in Nex Observations.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-finance-cockpit-and-bookkeeping.md" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["AP invoice", "credit memo profile"], "forbidden_parallel_objects": ["Luna candidate or intake as Invoice", "one PDF as one Invoice", "carrier-specific Invoice schema"], "open_questions": ["Credit document profile field needs standardization", "Direct Partner or Nex Entity relationship waits for the AP Party crosswalk"]
+    },
+    {
+      "object_id": "moonsleep.invoice_revision", "display_name": "Invoice Revision", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance Accounts Payable",
+      "definition": "Effective immutable version of an Invoice's financial and review fields.",
+      "stable_identity": "ap_invoice_revision_id", "revision_identity": "revision_sequence and superseded_revision_id",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_invoice_revisions", "identity_field": "ap_invoice_revision_id", "status": "canonical" }],
+      "read_surfaces": ["finance.ap_invoice_current"], "key_fields": ["ap_invoice_revision_id", "ap_invoice_id", "revision_sequence", "superseded_revision_id", "invoice_number", "invoice_date", "due_date", "currency", "subtotal_minor_units", "tax_minor_units", "credits_minor_units", "amount_due_minor_units", "source_manifest_id", "source_record_id", "payload_sha256"],
+      "relationships": [{ "relationship_id": "revision_of", "target_object_id": "moonsleep.invoice", "cardinality": "one", "owner": "Finance" }, { "relationship_id": "has_line", "target_object_id": "moonsleep.invoice_line", "cardinality": "many", "owner": "Finance" }, { "relationship_id": "has_payment_application", "target_object_id": "moonsleep.payment_application", "cardinality": "optional_many", "owner": "Finance" }],
+      "evidence_inputs": ["Invoice Facts and source records"], "observation_target": "through_owner_adapter", "observation_head_rule": "Invoice revision fields are projections of accepted Observations; the revision row is not a second Observation store.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["AP revision"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.invoice_line", "display_name": "Invoice Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance Accounts Payable",
+      "definition": "One priced and classified line within an exact Invoice Revision. Cross-domain PO or Claim references require a separate governed typed relationship; source evidence locator text is not that relationship.",
+      "stable_identity": "ap_invoice_line_id within Invoice Revision", "revision_identity": "Owned by exact Invoice Revision",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_invoice_lines", "identity_field": "ap_invoice_line_id", "status": "canonical" }],
+      "read_surfaces": ["Invoice detail"], "key_fields": ["ap_invoice_line_id", "ap_invoice_revision_id", "sanitized_description", "quantity", "unit_label", "unit_price_minor_units", "line_amount_minor_units", "accounting_classification", "ledger_account_revision_id", "source_evidence_locator", "review_state"],
+      "relationships": [{ "relationship_id": "belongs_to_revision", "target_object_id": "moonsleep.invoice_revision", "cardinality": "one", "owner": "Finance" }, { "relationship_id": "posts_to_account", "target_object_id": "moonsleep.financial_account", "cardinality": "optional_one", "owner": "Finance" }],
+      "evidence_inputs": ["Invoice source fields"], "observation_target": "through_owner_adapter", "observation_head_rule": "Invoice line ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["AP line"], "forbidden_parallel_objects": ["copied Supply or Claims state inside invoice line"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.payment", "display_name": "Payment", "registry_class": "business_resource", "domain": "MoonSleep finance", "lifecycle_status": "deployed", "canonical_owner": "Provider for execution; Finance for governed identity and matching",
+      "definition": "Provider-native AP payment order and lifecycle evidence, deployed today for Mercury only. It is distinct from cash/card transactions and supplier-reported payment statements.",
+      "stable_identity": "provider_name plus provider_object_identity_sha256 represented by ap_payment_order_id", "revision_identity": "ap_payment_order_revision_id",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_payment_orders", "identity_field": "ap_payment_order_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.ap_payment_order_revisions", "identity_field": "ap_payment_order_revision_id", "status": "canonical" }],
+      "read_surfaces": ["finance.ap_payment_order_current", "Accounts Payable reads", "Mercury truth read"], "key_fields": ["ap_payment_order_id", "provider_name", "provider_object_identity_sha256", "source_account_identity_sha256", "recipient_binding_sha256", "requested_amount_minor_units", "currency", "provider_lifecycle_state", "payment_rail", "requested_at", "approved_at", "scheduled_at", "sent_at", "settled_at", "failed_at", "cancelled_at", "reversed_at"],
+      "relationships": [{ "relationship_id": "has_application", "target_object_id": "moonsleep.payment_application", "cardinality": "optional_many", "owner": "Finance" }],
+      "evidence_inputs": ["provider payment order", "bank transaction", "recipient binding"], "observation_target": "through_owner_adapter", "observation_head_rule": "Payment ID plus registered field or relationship.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": ["production:finance-source-terminal-closure/25184cf9e78b7bb7e4cdd25ffb022afb277431eb/receipt-v2.json#sha256=7dd29b9f9b3d806c6067666162596fb223217f187871bf2b287ffa4ca80376be"], "legacy_aliases": ["payment order", "Mercury payment"], "forbidden_parallel_objects": ["amount match as Payment identity", "PayPal overloaded as Mercury Payment"], "open_questions": ["PayPal and other provider registration remains a gap"]
+    },
+    {
+      "object_id": "moonsleep.payment_application", "display_name": "Payment Application", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance",
+      "definition": "Governed allocation or reversal effect between one exact Payment Revision and one exact Invoice Revision.",
+      "stable_identity": "ap_invoice_payment_allocation_id", "revision_identity": "Append-only allocation effect and state",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_invoice_payment_allocations", "identity_field": "ap_invoice_payment_allocation_id", "status": "canonical" }],
+      "read_surfaces": ["Invoice and Payment detail"], "key_fields": ["ap_invoice_payment_allocation_id", "ap_invoice_revision_id", "ap_payment_order_revision_id", "allocation_minor_units", "allocation_effect", "allocation_state", "source_record_id", "payload_sha256", "idempotency_key_sha256"],
+      "relationships": [{ "relationship_id": "applies_payment", "target_object_id": "moonsleep.payment", "cardinality": "one", "owner": "Finance" }, { "relationship_id": "to_invoice_revision", "target_object_id": "moonsleep.invoice_revision", "cardinality": "one", "owner": "Finance" }],
+      "evidence_inputs": ["Payment and Invoice revisions", "matching review"], "observation_target": "through_owner_adapter", "observation_head_rule": "Exact Invoice Revision and Payment Revision relationship slot.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["payment allocation"], "forbidden_parallel_objects": ["amount-only automatic application"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.journal_entry", "display_name": "Journal Entry", "registry_class": "business_resource", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance ledger",
+      "definition": "Balanced accounting entry with explicit idempotency, document reference, source links, and reversal relationship.",
+      "stable_identity": "entry_id; document_reference and idempotency_key are separately unique while payload_sha256 is content custody", "revision_identity": "Explicit reversal_of_entry_id references the original Entry",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.journal_entries", "identity_field": "entry_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.journal_source_links", "status": "canonical" }],
+      "read_surfaces": ["Finance ledger and close reports"], "key_fields": ["entry_id", "document_reference", "idempotency_key", "payload_sha256", "period_id", "posting_date", "entry_purpose", "posting_state", "reversal_of_entry_id"],
+      "relationships": [{ "relationship_id": "has_line", "target_object_id": "moonsleep.journal_line", "cardinality": "many", "owner": "Finance" }, { "relationship_id": "reverses", "target_object_id": "moonsleep.journal_entry", "cardinality": "optional_one", "owner": "Finance" }, { "relationship_id": "in_period", "target_object_id": "moonsleep.accounting_period", "cardinality": "one", "owner": "Finance" }],
+      "evidence_inputs": ["Finance source records", "close workpaper", "posting approval"], "observation_target": "through_owner_adapter", "observation_head_rule": "Journal Entry and line fields remain ledger-owned; source links preserve evidence.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_ledger_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-finance-cockpit-and-bookkeeping.md" }], "deployed_release_receipts": [], "legacy_aliases": ["JE"], "forbidden_parallel_objects": ["accepted Observation as posted Journal Entry", "QBO as current owner without adoption"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.journal_line", "display_name": "Journal Line", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance ledger",
+      "definition": "One debit or credit line in a balanced Journal Entry, bound to an exact Financial Account revision.",
+      "stable_identity": "journal_line_id within entry", "revision_identity": "Owned by immutable posted Entry or explicit reversal",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.journal_lines", "identity_field": "journal_line_id", "status": "canonical" }],
+      "read_surfaces": ["Finance ledger"], "key_fields": ["journal_line_id", "entry_id", "line_number", "account_revision_id", "posting_side", "amount_minor_units", "currency_code", "source_line_reference", "memo"],
+      "relationships": [{ "relationship_id": "belongs_to_entry", "target_object_id": "moonsleep.journal_entry", "cardinality": "one", "owner": "Finance" }, { "relationship_id": "posts_to_account", "target_object_id": "moonsleep.financial_account", "cardinality": "one", "owner": "Finance" }],
+      "evidence_inputs": ["Journal Entry"], "observation_target": "through_owner_adapter", "observation_head_rule": "Ledger-owned line identity.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_ledger_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["ledger line"], "forbidden_parallel_objects": [], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.accounting_period", "display_name": "Accounting Period", "registry_class": "typed_supporting_object", "domain": "MoonSleep finance", "lifecycle_status": "implemented", "canonical_owner": "Finance ledger",
+      "definition": "Bounded accounting period whose only allowed state chain is open to review_only to locked. Locked periods are immutable; cross-layer freshness remains separate report data.",
+      "stable_identity": "period_id", "revision_identity": "Append-only finance.audit_events with subject_area accounting_period and event_action period_state_changed; no reopen path",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.accounting_periods", "identity_field": "period_id", "status": "canonical" }, { "system": "MoonSleep Finance", "surface": "finance.audit_events", "status": "canonical" }],
+      "read_surfaces": ["Finance close reports"], "key_fields": ["period_id", "period_start", "period_end", "period_state", "locked_at", "locked_by"],
+      "relationships": [], "evidence_inputs": ["ledger and close receipts"], "observation_target": "through_owner_adapter", "observation_head_rule": "Period identity plus Finance-owned certification fields.", "projection_authority": true, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_ledger_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-finance-cockpit-and-bookkeeping.md" }], "deployed_release_receipts": [], "legacy_aliases": ["close period"], "forbidden_parallel_objects": ["one freshness timestamp for all Finance layers", "locked period reopened in place"], "open_questions": []
+    },
+    {
+      "object_id": "moonsleep.finance_observation_compat", "display_name": "Finance Local Observation Compatibility", "registry_class": "compatibility_alias", "domain": "MoonSleep finance", "lifecycle_status": "compatibility", "canonical_owner": "Finance compatibility; Nex owns semantic Observations",
+      "definition": "Existing Finance-local observation and fact-link tables retained for compatibility. They may reference or project canonical Nex semantics but must not create an independent Observation history.",
+      "stable_identity": "ap_observation_id; fact-link identity ap_observation_fact_link_id", "revision_identity": "Compatibility only; superseded_observation_id mirrors local linkage while canonical predecessor chain is nex.observation",
+      "canonical_storage": [{ "system": "MoonSleep Finance", "surface": "finance.ap_observations and finance.ap_observation_fact_links", "identity_field": "ap_observation_id", "status": "compatibility" }],
+      "read_surfaces": ["Finance compatibility reads"], "key_fields": ["ap_observation_id", "nex_observation_id", "resolution_state", "superseded_observation_id", "source_record_id", "ap_observation_fact_link_id", "nex_fact_id", "fact_relationship"],
+      "relationships": [{ "relationship_id": "references_observation", "target_object_id": "nex.observation", "cardinality": "one", "owner": "Nex Memory evidence" }, { "relationship_id": "references_fact", "target_object_id": "nex.fact", "cardinality": "optional_many", "owner": "Nex Memory evidence" }],
+      "evidence_inputs": ["legacy Finance semantic rows"], "observation_target": "compatibility_only", "observation_head_rule": "Canonical history is always the Nex Observation head.", "projection_authority": false, "action_authority": false,
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["finance.ap_observations"], "forbidden_parallel_objects": ["second Finance Fact/Observation authority"], "open_questions": ["Define retirement or regeneration from canonical Nex Observations"]
+    }
+  ],
+  "open_gaps": [
+    {
+      "gap_id": "shopify-record-revision-custody-chapter1", "title": "Seven historical Shopify Records lack canonical Record Revision registration", "status": "open", "owner": "Nex Records",
+      "decision": "Keep the existing Records and Orders. Register immutable revisions from the durable source payloads through the canonical registrar before using them as Episode members; no provider refetch or new Order schema is implied.",
+      "affected_object_ids": ["nex.record", "nex.record_revision", "nex.episode", "moonsleep.commerce_order"],
+      "evidence": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }]
+    },
+    {
+      "gap_id": "gmail-native-channel-contact-replay-chapter1", "title": "Seven historical Gmail conversations have communication projections but no native Channel/participant Contact materialization", "status": "open", "owner": "Nex Gmail adapter and Identity",
+      "decision": "Run a bounded historical identity and Channel replay through the current adapter machinery. Do not manually create a MoonSleep thread table or new Customer Entities.",
+      "affected_object_ids": ["nex.record", "nex.channel", "nex.channel_participant", "nex.contact", "moonsleep.customer_thread", "moonsleep.customer"],
+      "evidence": [{ "repository_id": "nex-core", "path": "src/storage/migrations/identity/helpers.ts" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-customer-operations.md" }]
+    },
+    {
+      "gap_id": "observation-target-adapters", "title": "Shared reviewed projection needs typed adapters for all registered canonical targets", "status": "in_progress", "owner": "Nex semantic foundation and each owning domain",
+      "decision": "The v1 shared contract registers the first native and MoonSleep targets with custody-only writers. Additional domain adapters reuse this protocol and never copy native Contacts, Orders, Entities, Channels, or Issues into a parallel Resource store.",
+      "affected_object_ids": ["nex.observation", "nex.resource_attribute_projection", "nex.resource_relationship_projection", "nex.entity", "nex.contact", "nex.channel", "moonsleep.customer", "moonsleep.commerce_order", "moonsleep.customer_issue"],
+      "evidence": [{ "repository_id": "nexus-umbrella", "path": "contracts/observation-target-adapters/v1/registry.json" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }]
+    },
+    {
+      "gap_id": "supply-organization-entity-crosswalk", "title": "Supply organization compatibility IDs are not yet mandatorily crosswalked to Nex Organization Entities", "status": "open", "owner": "Identity steward and Supply",
+      "decision": "Add an evidence-backed mandatory reference/crosswalk; do not merge or recreate organizations from provider text.",
+      "affected_object_ids": ["moonsleep.supply_organization", "moonsleep.partner", "nex.entity", "nex.contact"], "evidence": []
+    },
+    {
+      "gap_id": "finance-party-entity-crosswalk", "title": "Finance AP party IDs are not yet production-enforced against canonical Nex Organization Entities", "status": "open", "owner": "Identity steward and Finance",
+      "decision": "Register a typed party-to-Entity relationship with evidence and review; retain AP party as subledger identity without making it a second Organization.",
+      "affected_object_ids": ["moonsleep.finance_ap_party", "moonsleep.invoice", "moonsleep.partner", "nex.entity"], "evidence": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }]
+    },
+    {
+      "gap_id": "finance-local-observation-compatibility", "title": "Finance-local observation tables need explicit compatibility and retirement semantics", "status": "open", "owner": "Finance and Nex semantic foundation",
+      "decision": "Mark them as references/projections of canonical Nex Observations, define regeneration or retirement, and prohibit an independent predecessor chain.",
+      "affected_object_ids": ["moonsleep.finance_observation_compat", "nex.observation"], "evidence": []
+    },
+    {
+      "gap_id": "finance-provider-payment-coverage", "title": "Payment registration covers Mercury AP payment orders but not PayPal or other providers", "status": "open", "owner": "Finance and provider adapters",
+      "decision": "Register provider-native account and payment identities before they participate. Do not overload PayPal into Mercury identity and do not infer a Payment from an email, amount, or creator statement alone.",
+      "affected_object_ids": ["moonsleep.payment", "moonsleep.cash_card_account", "moonsleep.finance_source_record_bridge"], "evidence": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }]
+    },
+    {
+      "gap_id": "finance-cross-domain-typed-links", "title": "Finance cross-domain reconciliation and source-resource links lack deployed typed join contracts", "status": "open", "owner": "Finance with Commerce, Inventory, Supply, and Claims",
+      "decision": "Define exact join storage, stable identity, cardinality, owner, and evidence before projecting Invoice-to-PO, Invoice-Line-to-Claim, Transaction-to-Payment-or-Refund, Sample-Payment-to-Payment, or Recovery-to-Transaction relationships.",
+      "affected_object_ids": ["moonsleep.invoice", "moonsleep.invoice_line", "moonsleep.purchase_order", "moonsleep.carrier_case", "moonsleep.carrier_recovery_receipt", "moonsleep.financial_transaction", "moonsleep.payment", "moonsleep.refund", "moonsleep.sample_payment_report"], "evidence": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }, { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/carrier_claims_provenance_postgres.sql" }]
+    },
+    {
+      "gap_id": "cross-domain-transport-identity", "title": "Tracking and transport identity remains split across Dispatch package attempts and source-owned carrier evidence", "status": "open", "owner": "Dispatch, Claims, and Supply",
+      "decision": "Reuse Fulfillment Package today and preserve ambiguous tracking as Observations. Generalize only after an owner and stable cross-domain transport identity are proven.",
+      "affected_object_ids": ["moonsleep.fulfillment_package", "moonsleep.carrier_incident"], "evidence": []
+    },
+    {
+      "gap_id": "derived-channel-collection-read-contract", "title": "Cross-Channel customer histories and evidence collections need one registered derived read contract", "status": "open", "owner": "Nex Channels, Customer Operations, and consuming review domains",
+      "decision": "Define a non-routable, content-addressed derived collection that preserves every native Channel and reply route. Reuse it for Customer history and claims evidence grouping without creating a synthetic cross-provider Channel identity.",
+      "affected_object_ids": ["nex.channel_collection", "nex.set", "moonsleep.customer_thread", "moonsleep.customer", "nex.channel"], "evidence": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql" }]
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.local/contracts/observation-target-adapters/v1/registry.schema.json",
+  "title": "Nex Observation target-adapter registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_id", "schema_version", "status", "protocol", "entries", "compatibility_rules"],
+  "properties": {
+    "registry_id": { "type": "string", "minLength": 1 },
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "status": { "enum": ["proposed_canonical", "canonical", "retired"] },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_domain", "projection_type", "projection_version", "unknown_target", "writer", "authority"],
+      "properties": {
+        "target_domain": { "const": "nex.resource-target-adapter" },
+        "projection_type": { "const": "observation-target" },
+        "projection_version": { "const": "1.0.0" },
+        "unknown_target": { "const": "fail_closed" },
+        "writer": { "const": "append_custody_only" },
+        "authority": { "$ref": "#/$defs/authority" }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "compatibility_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["compatibility_id", "owner", "rule", "source_contracts"],
+        "properties": {
+          "compatibility_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+          "owner": { "type": "string", "minLength": 1 },
+          "rule": { "type": "string", "minLength": 1 },
+          "source_contracts": { "type": "array", "items": { "$ref": "#/$defs/sourcePointer" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sourcePointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "path"],
+      "properties": {
+        "repository_id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_target", "projection", "resource_mutation", "implicit_creation", "action"],
+      "properties": {
+        "observation_target": { "type": "boolean" },
+        "projection": { "type": "boolean" },
+        "resource_mutation": { "const": false },
+        "implicit_creation": { "const": false },
+        "action": { "const": false }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relationship_id", "target_object_ids", "cardinality"],
+      "properties": {
+        "relationship_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "target_object_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "cardinality": { "enum": ["one", "optional_one", "set_valued"] }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapter_contract_id", "canonical_object_id", "decision", "adapter_version",
+        "implementation_owner", "identity_format", "read_surface", "allowed_attribute_paths",
+        "allowed_relationships", "privacy_default", "projection_writer", "readback_support",
+        "authority", "implementation_refs", "implementation_state", "deployment_receipts"
+      ],
+      "properties": {
+        "adapter_contract_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "canonical_object_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "decision": { "enum": ["reuse", "generalize", "create"] },
+        "adapter_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "implementation_owner": { "type": "string", "minLength": 1 },
+        "identity_format": { "type": "string", "minLength": 1 },
+        "read_surface": { "type": "string", "minLength": 1 },
+        "allowed_attribute_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "allowed_relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
+        "privacy_default": { "enum": ["internal", "restricted_identity", "restricted_communications", "restricted_finance"] },
+        "projection_writer": { "const": "append_custody_only" },
+        "readback_support": { "enum": ["current", "current_and_as_of"] },
+        "authority": { "$ref": "#/$defs/authority" },
+        "implementation_refs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/sourcePointer" } },
+        "implementation_state": { "enum": ["contract_only", "implemented", "retired"] },
+        "deployment_receipts": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
