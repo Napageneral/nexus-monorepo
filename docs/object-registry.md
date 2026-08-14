@@ -1,7 +1,7 @@
 # Nex and MoonSleep canonical object registry
 
-Status: **proposed_canonical**
-Schema version: **1.0.1**
+Status: **canonical**
+Schema version: **1.1.0**
 Registry ID: `nex.moonsleep.object-registry`
 
 > This document is generated from `contracts/object-registry/v1/registry.json`.
@@ -9,7 +9,7 @@ Registry ID: `nex.moonsleep.object-registry`
 
 ## Scope and decision rule
 
-Canonical reuse and ownership index for Nex evidence, identity, communication, orchestration, and MoonSleep operational objects used by the reviewed-interpretation tracks. It points to owning schemas and read contracts; it does not copy their data or create a parallel business model.
+Canonical reuse, alias, and ownership index for the Nex universal real-world graph, domain Facets, and MoonSleep operational Resources and read projections. It points to owning contracts and storage; it does not copy their data or create a parallel business model.
 
 Lookup order: `exact object` → `alias` → `more general object` → `owning-domain extension` → `new object`.
 
@@ -275,7 +275,7 @@ Provider-native refund or adjustment with exact amount, currency, timing, and ow
 **Relationships:**
 
 - `refunds_order` → `moonsleep.commerce_order` (one; owner: Commerce)
-- `may_satisfy_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner)
+- `may_satisfy_commitment` → `nex.commitment` (optional_many; owner: Nex Commitments and Commerce satisfaction evidence)
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `true`; implicit action authority `false`.
 
@@ -1043,7 +1043,7 @@ Operational Dispatch node identity, distinct from but explicitly related to a ph
 
 **Relationships:**
 
-- `located_at` → `moonsleep.facility` (optional_one; owner: Inventory and Dispatch)
+- `located_at` → `nex.place` (optional_one; owner: Nex Places and Dispatch)
 - `operates_wave` → `moonsleep.dispatch_wave` (optional_many; owner: Dispatch)
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `true`; implicit action authority `false`.
@@ -1098,43 +1098,49 @@ Dispatch package attempt and its composition, label, node, wave, and physical ca
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Facility](#moonsleepfacility) | business_resource | deployed | Inventory and Organization registry | facility/location ID | through_owner_adapter |
+| [Facility Facet Compatibility](#moonsleepfacility) | compatibility_alias | compatibility | MoonSleep Facility Facet over canonical Nex Place | canonical Nex Place plus MoonSleep Facility Facet Attachment; existing facility_id resolves through an exact crosswalk | compatibility_only |
 | [Inventory Position](#moonsleepinventory_position) | business_resource | deployed | Inventory Ledger | position identity defined by owning inventory surface | through_owner_adapter |
 | [Lot](#moonsleeplot) | business_resource | deployed | Inventory Ledger | purchase order lot ID | through_owner_adapter |
 | [Purchase Order](#moonsleeppurchase_order) | business_resource | deployed | Inventory Ledger | po_id/purchase_order_id | through_owner_adapter |
 
 <a id="moonsleepfacility"></a>
 
-### Facility
+### Facility Facet Compatibility
 
-`moonsleep.facility` · business_resource · deployed
+`moonsleep.facility` · compatibility_alias · compatibility
 
-Physical facility/location identity, distinct from a Dispatch Node and related explicitly to a Partner Organization.
+MoonSleep operating profile for a Nex Place, including facility capabilities, status, operator, and domain relationships. Existing facility IDs remain compatibility aliases; a Facility is not a second physical-place identity and is distinct from a Dispatch Node.
 
-**Stable identity:** facility/location ID
+**Stable identity:** canonical Nex Place plus MoonSleep Facility Facet Attachment; existing facility_id resolves through an exact crosswalk
 
-**Revision identity:** Facility edit and mapping history
+**Revision identity:** Facet Attachment revisions own Facility profile history; Place owns physical identity and address history
 
 **Canonical storage/read custody:**
 
-- MoonSleep Ops: `public.supply_facility_locations` (canonical; identity `facility_id`)
-- MoonSleep Ops: `public.supply_facility_node_mappings` (canonical)
+- MoonSleep Ops: `public.supply_facility_locations` (compatibility; identity `facility_id`)
+- MoonSleep Ops: `public.supply_facility_node_mappings` (compatibility)
+- Nex: `planned Places and Facet Attachments` (planned)
 
 **Key fields:** `facility_id`, `organization_ref`, `name`, `address`, `status`, `capabilities`.
 
 **Relationships:**
 
-- `operated_by` → `moonsleep.partner` (optional_one; owner: Identity and Inventory)
+- `describes_place` → `nex.place` (one; owner: Nex Places and Inventory)
+- `represented_by_facet` → `nex.facet_attachment` (one; owner: Inventory and Organizations)
+- `operated_by` → `nex.entity` (optional_many; owner: Nex Identity and Inventory)
 - `mapped_to_node` → `moonsleep.fulfillment_node` (optional_many; owner: Inventory and Dispatch)
 
-**Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `true`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `warehouse`, `factory location`.
+**Aliases and legacy names:** `Facility`, `warehouse`, `factory location`.
 
-**Do not recreate:** Facility and Dispatch Node collapsed; address text as Facility identity.
+**Do not recreate:** Facility and Dispatch Node collapsed; address text as Place identity; Facility row as a second Place owner.
+
+**Open questions:** Existing facility IDs require exact Place and Facility Facet crosswalks.
 
 **Source contracts:**
 
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
 - `moonsleep-v1:infra/ops-analytics/sql/supply_facility_master_postgres.sql`
 - `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
 
@@ -1158,7 +1164,7 @@ Source-owned stock position facet by component, variant, node, lot, or location,
 
 **Relationships:**
 
-- `at_facility` → `moonsleep.facility` (optional_one; owner: Inventory Ledger)
+- `at_place` → `nex.place` (optional_one; owner: Nex Places and Inventory Ledger)
 - `from_lot` → `moonsleep.lot` (optional_one; owner: Inventory Ledger)
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `true`; implicit action authority `false`.
@@ -1225,7 +1231,7 @@ Commercial procurement commitment issued to a supplier, distinct from a Purchase
 
 **Relationships:**
 
-- `ordered_from` → `moonsleep.partner` (one; owner: Inventory and Identity)
+- `ordered_from` → `nex.entity` (one; owner: Nex Identity and Procurement)
 - `has_lot` → `moonsleep.lot` (optional_many; owner: Inventory Ledger)
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `true`; implicit action authority `false`.
@@ -1242,41 +1248,42 @@ Commercial procurement commitment issued to a supplier, distinct from a Purchase
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Partner](#moonsleeppartner) | business_resource | implemented | Owning partner registry over Nex Entity | canonical Nex Organization Entity plus reviewed partner role and provider references | through_owner_adapter |
+| [Partners Saved View](#moonsleeppartner) | read_model | deployed | MoonSleep Organizations workspace over Nex Entity and domain Facets | canonical Nex Organization Entity plus exact selected partner-relevant Facet Attachments | not_applicable |
 | [Supply Organization](#moonsleepsupply_organization) | compatibility_alias | compatibility | Supply compatibility storage with Nex Organization target | organization_id pending mandatory Nex Entity crosswalk | compatibility_only |
 
 <a id="moonsleeppartner"></a>
 
-### Partner
+### Partners Saved View
 
-`moonsleep.partner` · business_resource · implemented
+`moonsleep.partner` · read_model · deployed
 
-Business-role facade for a supplier, carrier, creator, facility operator, or service provider represented by canonical Nex Entities and Contacts.
+Saved Organizations view selecting canonical Organization Entities with partner-relevant Facet Attachments such as supplier, carrier, creator, facility operator, or service provider. It owns no second Partner identity.
 
-**Stable identity:** canonical Nex Organization Entity plus reviewed partner role and provider references
+**Stable identity:** canonical Nex Organization Entity plus exact selected partner-relevant Facet Attachments
 
-**Revision identity:** Entity/role/contact history and owner-specific agreement history
+**Revision identity:** Entity, Contact, Facet, agreement, and provider histories remain with their owners; the view is regenerated
 
 **Canonical storage/read custody:**
 
-- Nex: `entities, entity_tags, contacts` (canonical; identity `entity_id`)
-- MoonSleep Ops: `Partners object view` (projection)
+- Nex: `entities, contacts, and planned Facet Attachments` (canonical; identity `entity_id`)
+- MoonSleep Ops: `Organizations Partners saved view` (projection)
 
 **Key fields:** `entity_id`, `partner_roles`, `contact_refs`, `provider_refs`, `relationship_state`.
 
 **Relationships:**
 
 - `represented_by` → `nex.entity` (one; owner: Nex Identity)
+- `selected_by_facet` → `nex.facet_attachment` (many; owner: MoonSleep Organizations and defining domains)
 - `has_contact` → `nex.contact` (many; owner: Nex Identity)
 - `participates_in` → `nex.channel` (optional_many; owner: Nex Channels)
 
-**Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `false`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `not_applicable`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `supplier`, `carrier`, `creator`, `service provider`.
+**Aliases and legacy names:** `Partner`, `Partners`.
 
-**Do not recreate:** provider text as a new Organization; domain-local Partner identity.
+**Do not recreate:** provider text as a new Organization; domain-local Partner identity; Partner table as a second Organization store.
 
-**Open questions:** Supply and Finance party tables require enforced Entity crosswalks.
+**Open questions:** Supply and Finance party tables require enforced Entity crosswalks; Partner-relevant MoonSleep Facet Definitions must be registered.
 
 **Source contracts:**
 
@@ -1302,7 +1309,8 @@ Existing Supply organization row used by product and procurement tables. It must
 
 **Relationships:**
 
-- `resolves_to_partner` → `moonsleep.partner` (one; owner: Identity steward and Supply)
+- `resolves_to_entity` → `nex.entity` (one; owner: Nex Identity and Supply)
+- `resolves_to_supplier_facet` → `nex.facet_attachment` (optional_one; owner: Supply)
 
 **Projection/action boundary:** Observation target `compatibility_only`; projection authority `true`; implicit action authority `false`.
 
@@ -1320,21 +1328,64 @@ Existing Supply organization row used by product and procurement tables. It must
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Customer](#moonsleepcustomer) | business_resource | deployed | MoonSleep Customer Operations over Nex Identity and source-owned customer identities | canonical Nex Entity with Customer role plus reviewed provider identity links | through_owner_adapter |
-| [Customer Issue Compatibility](#moonsleepcustomer_issue) | compatibility_alias | compatibility | MoonSleep Customer Operations compatibility/read-model owner | legacy opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references | compatibility_only |
+| [Customer Issue Workspace Projection](#moonsleepcustomer_issue) | read_model | deployed | MoonSleep Customer Operations read model | deterministic projection handle over the customer Entity and exact selected open-work membership; accepted legacy customer_issue_<sha256> references remain resolvable aliases | compatibility_only |
+| [Customer View](#moonsleepcustomer) | read_model | deployed | MoonSleep Customer Operations view over Nex Entity and Facets | canonical Nex Entity plus the applicable MoonSleep Customer Facet Attachment and reviewed provider identity links | through_owner_adapter |
 | [Entity Communication History (Customer Thread Compatibility View)](#moonsleepcustomer_thread) | read_model | compatibility | Customer Operations read model over Nex communications | derived Entity plus preserved native Channel identities; no canonical Customer Thread Resource ID | compatibility_only |
+
+<a id="moonsleepcustomer_issue"></a>
+
+### Customer Issue Workspace Projection
+
+`moonsleep.customer_issue` · read_model · deployed
+
+Registered customer-operations projection whose inclusion and closure rules compose a customer Entity with relevant open Nex Loops, open Nex Commitments, and concerned domain Resources. Its stable handle supports navigation and audit but owns no independent semantic Resource.
+
+**Stable identity:** deterministic projection handle over the customer Entity and exact selected open-work membership; accepted legacy customer_issue_<sha256> references remain resolvable aliases
+
+**Revision identity:** Changed membership or projection criteria creates a new projection revision while underlying object histories remain with their owners
+
+**Canonical storage/read custody:**
+
+- MoonSleep Ops: `ops_verified_customer_issue_review_receipts` (compatibility; identity `support_episode_ref`)
+- MoonSleep Ops: `ops_customer_issue_measurement_current` (projection)
+
+**Key fields:** `support_episode_ref`, `issue_ref`, `initiating_logical_message_id`, `channel_ref`, `customer_ref`, `issue_category`, `conversation_state`, `operational_state`, `created_at`, `updated_at`.
+
+**Relationships:**
+
+- `for_customer` → `moonsleep.customer` (one; owner: Customer Operations)
+- `concerns_entity` → `nex.entity` (optional_many; owner: Nex Identity)
+- `includes_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `includes_open_loop` → `nex.loop` (optional_many; owner: Nex Loops)
+- `includes_open_commitment` → `nex.commitment` (optional_many; owner: Nex Commitments)
+- `concerns_order` → `moonsleep.commerce_order` (optional_many; owner: Commerce)
+
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
+
+**Aliases and legacy names:** `Customer Issue`, `support episode`, `customer case`.
+
+**Do not recreate:** canonical Customer Issue Resource; one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object; parallel Customer ID when Entity plus active Customer Facet exists.
+
+**Open questions:** Projection inclusion and closure implementation must converge on Nex Loop and Commitment reads.
+
+**Source contracts:**
+
+- `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
+- `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
+- `moonsleep-v1:infra/ops-analytics/sql/customer_operations_verified_issue_postgres.sql` — Historical compatibility and projection input
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
 
 <a id="moonsleepcustomer"></a>
 
-### Customer
+### Customer View
 
-`moonsleep.customer` · business_resource · deployed
+`moonsleep.customer` · read_model · deployed
 
-Federated business-role view over a canonical Entity, Customer role, native Contacts, and source-owned customer identities. It is not a separate duplicate person table.
+Federated business view over a canonical Entity, MoonSleep Customer Facet, native Contacts, and source-owned customer identities. It is not a separate person or organization Resource.
 
-**Stable identity:** canonical Nex Entity with Customer role plus reviewed provider identity links
+**Stable identity:** canonical Nex Entity plus the applicable MoonSleep Customer Facet Attachment and reviewed provider identity links
 
-**Revision identity:** Entity/contact/role history remains with each owner; equivalence links are reviewed
+**Revision identity:** Entity, Contact, Facet, and source identity history remains with each owner; the view is regenerated
 
 **Canonical storage/read custody:**
 
@@ -1347,65 +1398,24 @@ Federated business-role view over a canonical Entity, Customer role, native Cont
 **Relationships:**
 
 - `represented_by_entity` → `nex.entity` (one; owner: Nex Identity)
+- `has_customer_facet` → `nex.facet_attachment` (optional_one; owner: MoonSleep Customer Operations)
 - `has_contact` → `nex.contact` (many; owner: Nex Identity)
 - `participates_in_channel` → `nex.channel` (many; owner: Nex Channels)
 - `placed_order` → `moonsleep.commerce_order` (optional_many; owner: Commerce)
-- `has_issue` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations compatibility) — Legacy migration and alias relationship only; not canonical Customer semantics.
+- `has_issue_projection` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations read model)
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `customer role resource`, `Shopify customer`, `Helpdesk roster customer`.
+**Aliases and legacy names:** `Customer`, `customer profile`, `Shopify customer`, `Helpdesk roster customer`.
 
-**Do not recreate:** synthetic Customer IDs when an Entity and Customer role already exist; email-address-only Customer identity.
+**Do not recreate:** synthetic Customer IDs when an Entity and Customer Facet already exist; email-address-only Customer identity.
 
-**Open questions:** Cross-channel equivalence promotion remains reviewable rather than universally automatic.
+**Open questions:** Cross-channel equivalence promotion remains reviewable rather than universally automatic; MoonSleep Customer Facet Definition remains to be registered and deployed.
 
 **Source contracts:**
 
 - `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
 - `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
-
-<a id="moonsleepcustomer_issue"></a>
-
-### Customer Issue Compatibility
-
-`moonsleep.customer_issue` · compatibility_alias · compatibility
-
-Existing bounded support-episode identity and read surfaces retained only for migration, aliases, and historical readback. New interpreted exchanges use the general Communication Loop Resource; actual promises and responsibilities use the general Commitment Resource.
-
-**Stable identity:** legacy opaque support_episode_ref equal to the verified issue_ref, including accepted customer_issue_<sha256> references
-
-**Revision identity:** Existing issue lifecycle events and reviewed successors remain historical compatibility evidence
-
-**Canonical storage/read custody:**
-
-- MoonSleep Ops: `ops_verified_customer_issue_review_receipts` (compatibility; identity `support_episode_ref`)
-- MoonSleep Ops: `ops_customer_issue_measurement_current` (projection)
-
-**Key fields:** `support_episode_ref`, `issue_ref`, `initiating_logical_message_id`, `channel_ref`, `customer_ref`, `issue_category`, `conversation_state`, `operational_state`, `created_at`, `updated_at`.
-
-**Relationships:**
-
-- `belongs_to_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations compatibility)
-- `concerns_entity` → `nex.entity` (optional_many; owner: Nex Identity compatibility)
-- `concerns_contact` → `nex.contact` (optional_many; owner: Nex Identity compatibility)
-- `initiated_in_channel` → `nex.channel` (one; owner: Nex Channels compatibility)
-- `concerns_order` → `moonsleep.commerce_order` (optional_many; owner: Commerce compatibility)
-- `has_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner compatibility)
-- `migrates_to_communication_loop` → `moonsleep.communication_loop` (optional_many; owner: Customer Operations migration) — Reviewed alias/migration mapping only; the legacy Issue row is not promoted into a new semantic owner.
-
-**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
-
-**Aliases and legacy names:** `Customer Issue`, `support episode`, `customer case`.
-
-**Do not recreate:** new canonical Customer Issue semantics; one Issue per provider thread; acknowledgment-only Issue; dossier as canonical object; parallel Customer ID when Entity plus active Customer role exists.
-
-**Source contracts:**
-
-- `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
-- `moonsleep-v1:infra/ops-analytics/sql/customer_operations_verified_issue_postgres.sql`
-- `moonsleep-v1:docs/specs/moonsleep-observation-target-adapter-foundation.md`
-- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Deliberate Communication Loop replacement decision merged in PR #1774
 
 <a id="moonsleepcustomer_thread"></a>
 
@@ -1413,7 +1423,7 @@ Existing bounded support-episode identity and read surfaces retained only for mi
 
 `moonsleep.customer_thread` · read_model · compatibility
 
-Compatibility name for a derived Entity communication-history view across preserved native Channels, Communication Loops, and Commitments. It is not a business Resource, replacement Channel, provider reply route, or independent semantic history.
+Compatibility name for a derived Entity communication-history view across preserved native Channels, Loops, and Commitments. It is not a business Resource, replacement Channel, provider reply route, or independent semantic history.
 
 **Stable identity:** derived Entity plus preserved native Channel identities; no canonical Customer Thread Resource ID
 
@@ -1430,9 +1440,9 @@ Compatibility name for a derived Entity communication-history view across preser
 
 - `for_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
 - `includes_channel` → `nex.channel` (many; owner: Nex Channels)
-- `includes_communication_loop` → `moonsleep.communication_loop` (optional_many; owner: General Communication Loop contract)
-- `has_issue` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations compatibility) — Historical migration and alias relationship only.
-- `evidences_commitment` → `moonsleep.commitment` (optional_many; owner: Commitment owner)
+- `includes_loop` → `nex.loop` (optional_many; owner: Nex Loops)
+- `has_issue_projection` → `moonsleep.customer_issue` (optional_many; owner: Customer Operations read model)
+- `includes_commitment` → `nex.commitment` (optional_many; owner: Nex Commitments)
 
 **Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
@@ -2157,8 +2167,8 @@ One supplier-proposed packaging configuration attached to a Product Quotation, p
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
 | [Action and Receipt](#moonsleepaction_receipt) | business_resource | implemented | Owning mutation domain and resolution executor | registered action ID plus domain receipt ID | through_owner_adapter |
-| [Commitment](#moonsleepcommitment) | business_resource | deployed | General Commitment contract; accepting domain owns satisfaction evidence | commitment_id | direct |
-| [Communication Loop](#moonsleepcommunication_loop) | business_resource | deployed | General Communication Loop contract; the interpreting domain owns closure evidence | communication_loop_id | direct |
+| [MoonSleep Commitment Projection Compatibility](#moonsleepcommitment) | compatibility_alias | compatibility | MoonSleep projection custody with canonical Nex Commitment target | existing commitment_id plus required crosswalk to canonical Nex commitment ID | compatibility_only |
+| [MoonSleep Loop Projection Compatibility](#moonsleepcommunication_loop) | compatibility_alias | compatibility | MoonSleep projection custody with canonical Nex Loop target | existing communication_loop_id plus required crosswalk to canonical Nex loop ID | compatibility_only |
 
 <a id="moonsleepaction_receipt"></a>
 
@@ -2190,88 +2200,79 @@ Stable governed action identity and immutable provider/readback receipt. It sepa
 
 <a id="moonsleepcommitment"></a>
 
-### Commitment
+### MoonSleep Commitment Projection Compatibility
 
-`moonsleep.commitment` · business_resource · deployed
+`moonsleep.commitment` · compatibility_alias · compatibility
 
-General evidenced obligation, promise, accepted responsibility, policy-implied responsibility, or detected customer-affecting exception. It can concern any Entity, Channel, Communication Loop, Order, or other Resource. It is not required for ordinary questions, and closing a linked Communication Loop does not complete it.
+Deployed MoonSleep Commitment storage retained as projection and migration custody for exact existing IDs. New universal Commitment identity and semantics belong to nex.commitment; MoonSleep domains continue to own the exact evidence that satisfies or breaches their Commitments.
 
-**Stable identity:** commitment_id
+**Stable identity:** existing commitment_id plus required crosswalk to canonical Nex commitment ID
 
-**Revision identity:** Explicit supersedes_commitment relationship; satisfaction requires owning receipt
+**Revision identity:** Existing reviewed projection history remains readable; new semantic revisions belong to Nex Commitment
 
 **Canonical storage/read custody:**
 
-- MoonSleep PostgreSQL: `public.commitments` (canonical; identity `commitment_id`)
-- MoonSleep PostgreSQL: `public.commitment_channels, public.commitment_resource_contexts, public.commitment_satisfaction_events, public.communication_loop_commitments` (canonical)
+- MoonSleep PostgreSQL: `public.commitments and relationship tables` (compatibility; identity `commitment_id`)
+- Nex: `planned commitments` (planned; identity `commitment_id`)
 
-**Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `committed_by_entity_id`, `committed_to_entity_id`, `action_authority`.
+**Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `action_authority`.
 
 **Relationships:**
 
-- `committed_by` → `nex.entity` (one; owner: Nex Identity)
-- `committed_to` → `nex.entity` (one; owner: Nex Identity)
-- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
-- `involves_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
-- `concerns_order` → `moonsleep.commerce_order` (optional_one; owner: Commerce)
-- `concerns_resource` → `moonsleep.communication_loop` (optional_many; owner: General Communication Loop contract) — Optional communication context; neither Resource requires the other.
-- `belongs_to_issue` → `moonsleep.customer_issue` (optional_one; owner: Customer Operations compatibility) — Legacy migration and alias relationship only; Commitments remain general.
-- `supersedes_commitment` → `moonsleep.commitment` (optional_one; owner: Commitment contract)
-- `satisfied_by_event` → `moonsleep.action_receipt` (optional_many; owner: Owning mutation domain)
+- `resolves_to_commitment` → `nex.commitment` (one; owner: Nex Commitments and MoonSleep migration custody)
 
-**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `operational obligation`, `customer obligation`.
+**Aliases and legacy names:** `MoonSleep Commitment`, `legacy commitment_id`.
 
-**Do not recreate:** Customer Obligation subtype table; Issue-required Commitment; Communication Loop treated as a Commitment; promise treated as completed without receipt.
+**Do not recreate:** new MoonSleep-owned Commitment semantic history; Customer Commitment subtype table; Loop treated as a Commitment; promise treated as satisfied without receipt.
+
+**Open questions:** Existing deployed IDs require a bounded exact crosswalk or identity-preserving adoption into Nex Commitment.
 
 **Source contracts:**
 
-- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Communication Loop context and closure boundary merged in PR #1774
-- `moonsleep-v1:infra/ops-analytics/sql/reviewed_commitment_foundation_v1_postgres.sql`
-- `moonsleep-v1:infra/ops-analytics/sql/reviewed_communication_loop_foundation_v1_postgres.sql` — Optional loop context merged in PR #1774
-- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py` — Chapter 2 projection corrected in PR #1775 and replay-canonicalized in PR #1780
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+- `moonsleep-v1:infra/ops-analytics/sql/reviewed_commitment_foundation_v1_postgres.sql` — Existing compatibility storage
+- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py`
 
 <a id="moonsleepcommunication_loop"></a>
 
-### Communication Loop
+### MoonSleep Loop Projection Compatibility
 
-`moonsleep.communication_loop` · business_resource · deployed
+`moonsleep.communication_loop` · compatibility_alias · compatibility
 
-One interpreted exchange that expects a response, clarification, decision, confirmation, or other next communication. It is distinct from native Nex Channel/Record evidence, from a Commitment, and from customer-, partner-, supplier-, or claims-specific views. Closing a Communication Loop never implies that linked operational work or a Commitment is complete.
+Deployed MoonSleep Communication Loop storage retained as projection and migration custody for exact existing IDs. New universal Loop identity and semantics belong to nex.loop; MoonSleep may attach domain Facets or build read projections without creating another Loop owner.
 
-**Stable identity:** communication_loop_id
+**Stable identity:** existing communication_loop_id plus required crosswalk to canonical Nex loop ID
 
-**Revision identity:** Explicit supersedes_communication_loop relationship; split or merged interpretations receive new stable IDs and exact reviewed provenance
+**Revision identity:** Existing reviewed projection history remains readable; new semantic revisions belong to Nex Loop
 
 **Canonical storage/read custody:**
 
-- MoonSleep PostgreSQL: `public.communication_loops` (canonical; identity `communication_loop_id`)
-- MoonSleep PostgreSQL: `public.communication_loop_addressees, public.communication_loop_awaiting_response_parties, public.communication_loop_channels, public.communication_loop_resource_contexts, public.communication_loop_commitments` (canonical)
-- Nex: `native Channels and Records` (reference) — Channels and Records remain the evidence owner and reply-route owner.
+- MoonSleep PostgreSQL: `public.communication_loops and relationship tables` (compatibility; identity `communication_loop_id`)
+- Nex: `planned loops` (planned; identity `loop_id`)
 
-**Key fields:** `communication_loop_id`, `loop_category`, `desired_response_summary`, `opened_at`, `communication_state`, `closed_at`, `closure_basis`, `initiated_by_entity_id`, `supersedes_communication_loop_id`, `action_authority`.
+**Key fields:** `communication_loop_id`, `loop_category`, `desired_response_summary`, `opened_at`, `communication_state`, `closed_at`, `closure_basis`, `action_authority`.
 
 **Relationships:**
 
-- `initiated_by` → `nex.entity` (one; owner: Nex Identity)
-- `addressed_to` → `nex.entity` (optional_many; owner: Communication Loop contract)
-- `awaiting_response_from` → `nex.entity` (optional_many; owner: Communication Loop contract)
-- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
-- `has_commitment` → `moonsleep.commitment` (optional_many; owner: General Commitment contract)
-- `supersedes_communication_loop` → `moonsleep.communication_loop` (optional_one; owner: Communication Loop contract)
+- `resolves_to_loop` → `nex.loop` (one; owner: Nex Loops and MoonSleep migration custody)
 
-**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `open response loop`, `response loop`, `communication obligation`.
+**Aliases and legacy names:** `MoonSleep Communication Loop`, `communication_loop_id`.
 
-**Do not recreate:** Customer Communication Loop subtype table; Partner Communication Loop subtype table; Supplier Communication Loop subtype table; Claims Communication Loop subtype table; provider thread treated as a Communication Loop; reply treated as operational completion.
+**Do not recreate:** new MoonSleep-owned Loop semantic history; Customer Loop subtype table; Partner Loop subtype table; provider thread treated as a Loop.
+
+**Open questions:** Existing deployed IDs require a bounded exact crosswalk or deterministic identity-preserving adoption into Nex Loop.
 
 **Source contracts:**
 
-- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md` — Canonical cross-domain model merged in PR #1774
-- `moonsleep-v1:infra/ops-analytics/sql/reviewed_communication_loop_foundation_v1_postgres.sql` — Canonical deployed storage merged in PR #1774
-- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py` — Exact loop joins corrected in PR #1775; terminal receipt timestamps canonicalized in PR #1780
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+- `moonsleep-v1:infra/ops-analytics/sql/reviewed_communication_loop_foundation_v1_postgres.sql` — Existing compatibility storage merged in PR #1774
+- `moonsleep-v1:infra/ops-analytics/scripts/operate_reviewed_interpretation_resource_projection.py`
 
 ## Nex communications
 
@@ -2388,6 +2389,81 @@ Non-routable evidence or history view over an exact membership of native Channel
 
 - `nex-core:src/storage/migrations/memory/helpers.ts`
 - `moonsleep-v1:infra/ops-analytics/sql/claims_reviewed_projection_v1_postgres.sql`
+
+## Nex domain extensions
+
+| Object | Class | Status | Canonical owner | Stable identity | Observation target |
+| --- | --- | --- | --- | --- | --- |
+| [Facet Attachment](#nexfacet_attachment) | nex_primitive | planned | Nex Facets for attachment identity; defining domain for values and semantics | Facet Definition plus subject identity plus domain scope and definition-declared attachment slot | direct |
+| [Facet Definition](#nexfacet_definition) | nex_primitive | planned | Nex Facets for contract custody; defining domain for semantics | facet definition ID plus immutable definition version | not_applicable |
+
+<a id="nexfacet_attachment"></a>
+
+### Facet Attachment
+
+`nex.facet_attachment` · nex_primitive · planned
+
+Application of one exact Facet Definition version to one exact core object or domain Resource, carrying the domain-specific typed values and relationships without duplicating the subject identity.
+
+**Stable identity:** Facet Definition plus subject identity plus domain scope and definition-declared attachment slot
+
+**Revision identity:** Effective-dated immutable revisions and explicit supersession under the Facet Definition
+
+**Canonical storage/read custody:**
+
+- Nex: `planned facet attachments, revisions, and typed relationships` (planned; identity `facet_attachment_id`)
+
+**Key fields:** `facet_attachment_id`, `facet_definition_id`, `definition_version`, `subject_object_type`, `subject_object_id`, `domain_scope`, `attachment_slot`, `effective_from`, `effective_through`, `values`, `relationships`, `observation_refs`.
+
+**Relationships:**
+
+- `defined_by` → `nex.facet_definition` (one; owner: Nex Facets)
+- `extends_entity` → `nex.entity` (optional_one; owner: Nex Identity and defining domain)
+- `extends_place` → `nex.place` (optional_one; owner: Nex Places and defining domain)
+- `extends_loop` → `nex.loop` (optional_one; owner: Nex Loops and defining domain)
+- `extends_commitment` → `nex.commitment` (optional_one; owner: Nex Commitments and defining domain)
+
+**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+
+**Aliases and legacy names:** `business role`, `role profile`, `typed profile`, `facet profile`, `supplier`, `carrier`, `creator`, `lender`, `media contact`, `service provider`.
+
+**Do not recreate:** domain-local copy of the subject Entity or Place; unregistered free-form profile used as canonical typed state.
+
+**Source contracts:**
+
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+
+<a id="nexfacet_definition"></a>
+
+### Facet Definition
+
+`nex.facet_definition` · nex_primitive · planned
+
+Versioned domain-owned extension contract declaring compatible subject classes, typed attributes and relationships, validation, evidence, cardinality, effective-time, rendering, and mutation boundaries.
+
+**Stable identity:** facet definition ID plus immutable definition version
+
+**Revision identity:** A contract change creates a new definition version with explicit migration rules
+
+**Canonical storage/read custody:**
+
+- Nex: `planned facet definitions and versions` (planned; identity `facet_definition_id,definition_version`)
+
+**Key fields:** `facet_definition_id`, `definition_version`, `name`, `domain_scope`, `compatible_subject_types`, `attribute_contract`, `relationship_contract`, `validation_contract`, `renderer_contract`, `authority_contract`, `definition_sha256`.
+
+**Relationships:**
+
+- `has_attachment` → `nex.facet_attachment` (optional_many; owner: Nex Facets)
+
+**Projection/action boundary:** Observation target `not_applicable`; projection authority `false`; implicit action authority `false`.
+
+**Aliases and legacy names:** `facet contract`, `domain extension definition`, `typed profile interface`.
+
+**Do not recreate:** ad hoc domain profile schema without a registered definition; separate role, profile, and interface storage models.
+
+**Source contracts:**
+
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
 
 ## Nex evidence
 
@@ -2507,7 +2583,8 @@ Immutable capture of one exact provider payload version, including content diges
 | [Contact](#nexcontact) | nex_primitive | deployed | Nex Identity | platform plus space_id plus contact_id, represented by immutable Contact row ID | direct |
 | [Contact Observation](#nexcontact_observation) | evidence_custody | deployed | Nex Identity | Contact observation ID | not_applicable |
 | [Entity](#nexentity) | nex_primitive | deployed | Nex Identity | Nex entity ID | direct |
-| [Entity Role](#nexentity_role) | typed_supporting_object | deployed | Nex Identity and owning business domain | Entity ID plus active role/tag value | direct |
+| [Entity Role Tag Compatibility](#nexentity_role) | compatibility_alias | compatibility | Nex Facets with legacy Nex Identity tag custody | legacy Entity ID plus active tag value | compatibility_only |
+| [Place](#nexplace) | nex_primitive | planned | Nex Places | Nex place ID | direct |
 
 <a id="nexcontact"></a>
 
@@ -2599,6 +2676,8 @@ Cross-platform identity for a person, organization, agent, or other identity-bea
 
 - `represented_by_contact` → `nex.contact` (optional_many; owner: Nex Identity)
 - `participates_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `has_facet` → `nex.facet_attachment` (optional_many; owner: Nex Facets and defining domain)
+- `related_to_place` → `nex.place` (optional_many; owner: Nex Identity and defining relationship contract)
 
 **Projection/action boundary:** Observation target `direct`; projection authority `false`; implicit action authority `false`.
 
@@ -2612,35 +2691,71 @@ Cross-platform identity for a person, organization, agent, or other identity-bea
 
 <a id="nexentity_role"></a>
 
-### Entity Role
+### Entity Role Tag Compatibility
 
-`nex.entity_role` · typed_supporting_object · deployed
+`nex.entity_role` · compatibility_alias · compatibility
 
-Effective role classification attached to an Entity, such as Customer, Shopify, supplier, carrier, or partner. A role does not create a second Entity.
+Compatibility entry for the deployed lightweight Entity tag representation. Domain roles with typed fields, relationships, validation, and lifecycle use a Facet Definition and Facet Attachment; a role never creates a second Entity.
 
-**Stable identity:** Entity ID plus active role/tag value
+**Stable identity:** legacy Entity ID plus active tag value
 
-**Revision identity:** Append/delete role history
+**Revision identity:** Legacy append/delete tag history; typed successors use Facet Attachment revision history
 
 **Canonical storage/read custody:**
 
-- Nex: `entity_tags` (canonical; identity `id`)
+- Nex: `entity_tags` (compatibility; identity `id`)
 
 **Key fields:** `id`, `entity_id`, `tag`, `created_at`, `deleted_at`.
 
 **Relationships:**
 
-- `classifies` → `nex.entity` (one; owner: Nex Identity)
+- `classifies` → `nex.entity` (one; owner: Nex Identity compatibility)
+- `resolves_to_facet` → `nex.facet_attachment` (optional_many; owner: Nex Facets and defining domain)
 
-**Projection/action boundary:** Observation target `direct`; projection authority `false`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `entity tag`, `business role`.
+**Aliases and legacy names:** `entity tag`, `role tag`.
 
-**Do not recreate:** standalone Customer identity when Customer is an Entity role.
+**Do not recreate:** standalone Customer identity when Customer is an Entity Facet; untyped tag used as a substitute for a required Facet contract.
 
 **Source contracts:**
 
 - `nex-core:src/storage/migrations/identity/helpers.ts`
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+
+<a id="nexplace"></a>
+
+### Place
+
+`nex.place` · nex_primitive · planned
+
+Durable physical-place identity for a site, building, room, dock, warehouse, factory, store, office, or other real-world location. Addresses and coordinates describe a Place but do not alone define its identity.
+
+**Stable identity:** Nex place ID
+
+**Revision identity:** Explicit Place update, merge, relationship, and address history
+
+**Canonical storage/read custody:**
+
+- Nex: `planned places and place relationships` (planned; identity `place_id`)
+
+**Key fields:** `place_id`, `display_name`, `place_type`, `parent_place_id`, `address`, `coordinates`, `created_at`, `updated_at`, `merged_into`, `deleted_at`.
+
+**Relationships:**
+
+- `contained_by` → `nex.place` (optional_one; owner: Nex Places)
+- `operated_by` → `nex.entity` (optional_many; owner: Nex Places and defining relationship contract)
+- `has_facet` → `nex.facet_attachment` (optional_many; owner: Nex Facets and defining domain)
+
+**Projection/action boundary:** Observation target `direct`; projection authority `false`; implicit action authority `false`.
+
+**Aliases and legacy names:** `physical place`, `location identity`, `site identity`.
+
+**Do not recreate:** address text treated as durable Place identity; Facility row used as a universal physical identity.
+
+**Source contracts:**
+
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
 
 ## Nex orchestration
 
@@ -3064,14 +3179,103 @@ Sorted immutable Fact membership and digest used as the complete bounded input t
 
 - `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
 
+## Nex work semantics
+
+| Object | Class | Status | Canonical owner | Stable identity | Observation target |
+| --- | --- | --- | --- | --- | --- |
+| [Commitment](#nexcommitment) | nex_primitive | planned | Nex Commitments; accepting domain owns satisfaction evidence | Nex commitment ID | direct |
+| [Loop](#nexloop) | nex_primitive | planned | Nex Loops; interpreting domain owns closure evidence | Nex loop ID | direct |
+
+<a id="nexcommitment"></a>
+
+### Commitment
+
+`nex.commitment` · nex_primitive · planned
+
+Evidenced promise, accepted responsibility, or policy-implied duty owed by one Entity to another Entity or defined beneficiary. It is distinct from a Loop, task, plan, shipment, payment, or provider status.
+
+**Stable identity:** Nex commitment ID
+
+**Revision identity:** Explicit supersedes_commitment relationship; satisfaction requires exact owning-domain evidence
+
+**Canonical storage/read custody:**
+
+- Nex: `planned commitments, parties, evidence links, concern links, and satisfaction receipts` (planned; identity `commitment_id`)
+
+**Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `action_authority`.
+
+**Relationships:**
+
+- `committed_by` → `nex.entity` (one; owner: Nex Identity)
+- `committed_to` → `nex.entity` (one; owner: Nex Identity)
+- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `supported_by_revision` → `nex.record_revision` (optional_many; owner: Nex Records)
+- `concerns_loop` → `nex.loop` (optional_many; owner: Nex Loops and Commitments)
+- `supersedes_commitment` → `nex.commitment` (optional_one; owner: Nex Commitments)
+
+**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+
+**Aliases and legacy names:** `operational obligation`, `customer obligation`, `promise`, `accepted responsibility`, `policy-implied duty`.
+
+**Do not recreate:** Customer Commitment subtype store; Issue-required Commitment; Loop treated as a Commitment; promise treated as satisfied without exact completion evidence.
+
+**Source contracts:**
+
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+
+<a id="nexloop"></a>
+
+### Loop
+
+`nex.loop` · nex_primitive · planned
+
+One material unresolved expectation for a contribution in an interaction: a response, answer, clarification, decision, confirmation, or other communicative next step. It is distinct from a native Channel, every message, a generic task, and a Commitment.
+
+**Stable identity:** Nex loop ID
+
+**Revision identity:** Explicit supersedes_loop relationship; split or merged interpretations receive new IDs with exact reviewed provenance
+
+**Canonical storage/read custody:**
+
+- Nex: `planned loops, loop participants, evidence links, and concern links` (planned; identity `loop_id`)
+
+**Key fields:** `loop_id`, `loop_category`, `expected_contribution_summary`, `opened_at`, `loop_state`, `closed_at`, `closure_basis`, `action_authority`.
+
+**Relationships:**
+
+- `initiated_by` → `nex.entity` (one; owner: Nex Identity)
+- `addressed_to` → `nex.entity` (optional_many; owner: Nex Loops)
+- `awaiting_contribution_from` → `nex.entity` (optional_many; owner: Nex Loops)
+- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `supported_by_revision` → `nex.record_revision` (optional_many; owner: Nex Records)
+- `has_commitment` → `nex.commitment` (optional_many; owner: Nex Loops and Commitments)
+- `supersedes_loop` → `nex.loop` (optional_one; owner: Nex Loops)
+
+**Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
+
+**Aliases and legacy names:** `Communication Loop`, `open loop`, `open response loop`, `response loop`, `response expectation`, `open thread`, `communication obligation`.
+
+**Do not recreate:** Customer Loop subtype store; Partner Loop subtype store; provider thread treated as a Loop; every message treated as a Loop; reply treated as operational completion.
+
+**Source contracts:**
+
+- `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+
 ## Open gap register
 
 | Gap | Status | Owner | Decision | Affected objects |
 | --- | --- | --- | --- | --- |
-| `shopify-record-revision-custody-chapter1` Seven historical Shopify Records lack canonical Record Revision registration | open | Nex Records | Keep the existing Records and Orders. Register immutable revisions from the durable source payloads through the canonical registrar before using them as Episode members; no provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
+| `shopify-record-revision-custody-chapter1` Historical Shopify Records have canonical Record Revision registration | resolved | Nex Records | The separate terminal Record Repair completed the immutable revision prerequisite. Keep the existing Records and Orders; no provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
+| `shopify-universal-contact-entity-enforcement` Shopify universal Contact source is deployed but the historical Entity-enforcement repair has not started | open | Nex Entity Enforcement Customer and Shopify lane | Accept source commit 8252313b53480a434412fa55dd9c5abb90591ebe as behaviorally unchanged inside deployed runtime source 111649e39c24260f8532545efc1feba26340de14, but do not call history migrated: no canary, checkpoint, bounded-progress, or terminal Shopify history receipt exists. Reconcile that source against the canonical Entity and Facet contract, rederive a fresh standby census, then run provider-free dry run, exact conflict and non-merge plan, 50/500/5000 canaries, bounded stored-Record replay, idempotent replay, post-state census, and live-sync proof. Preserve immutable Shopify customer ID or GID Contact plus normalized universal email and phone Contacts on one canonical Entity; append Contact observations; never replace newer active values; quarantine cross-Entity collisions; repair only mechanically safe legacy customer ID aliases; retain Order links and Customer Facet semantics; never mint a parallel Customer identity or refetch Shopify. Final proof must report exact eligible, promoted, conflicted, unresolved, alias, cursor, and provider-call totals rather than reusing the nonterminal census seed. | `nex.record`, `nex.record_revision`, `nex.entity`, `nex.contact`, `nex.contact_observation`, `nex.facet_attachment`, `moonsleep.customer`, `moonsleep.commerce_order` |
+| `nex-core-place-facet-loop-commitment-foundation` Place, Facet Definition, Facet Attachment, Loop, and Commitment are canonical but not yet deployed in Nex core | open | Nex core foundation | Implement the five planned primitives with immutable migrations, typed relationships, Observation integration, stable APIs, aliases, cleanroom proofs, and no implicit action authority before new golden-corpus projections depend on them. | `nex.place`, `nex.facet_definition`, `nex.facet_attachment`, `nex.loop`, `nex.commitment`, `nex.entity`, `nex.channel`, `nex.observation` |
+| `moonsleep-loop-commitment-core-adoption` Deployed MoonSleep Loop and Commitment projections require bounded identity-preserving adoption into Nex | open | Nex core foundation and MoonSleep reviewed projection owner | Inventory the small exact deployed cohort, preserve evidence and receipts, create exact Nex Loop and Commitment identities, record deterministic crosswalks or aliases, prove read parity, then stop new semantic writes to the MoonSleep compatibility owners. Do not rebuild unrelated workspaces in this transaction. | `nex.loop`, `nex.commitment`, `moonsleep.communication_loop`, `moonsleep.commitment`, `moonsleep.customer_issue` |
+| `entity-facet-enforcement` Domain people and organization roles are not yet uniformly enforced as Facets on canonical Entities | open | Nex Entity Enforcement with each defining domain | Inventory every domain person, organization, role, and party surface; classify it as Entity, Contact, Facet Attachment, domain Resource, read projection, or compatibility alias; add exact crosswalks and collision review; then block creation of duplicate domain-local actor identities. | `nex.entity`, `nex.contact`, `nex.entity_role`, `nex.facet_definition`, `nex.facet_attachment`, `moonsleep.customer`, `moonsleep.partner`, `moonsleep.supply_organization`, `moonsleep.finance_ap_party` |
+| `place-facility-adoption` MoonSleep Facility identity has not yet been separated into Nex Place plus Facility Facet | open | Nex Places, MoonSleep Organizations, Inventory, and Dispatch | After Place and Facets deploy, create evidence-backed Place identities and Facility Facet Attachments, crosswalk existing facility IDs, and update Inventory and Fulfillment Node relationships. Preserve Fulfillment Node as an independent Dispatch Resource. | `nex.place`, `nex.facet_definition`, `nex.facet_attachment`, `moonsleep.facility`, `moonsleep.fulfillment_node`, `moonsleep.inventory_position` |
 | `gmail-native-channel-contact-replay-chapter1` Seven historical Gmail conversations have communication projections but no native Channel/participant Contact materialization | open | Nex Gmail adapter and Identity | Run a bounded historical identity and Channel replay through the current adapter machinery. Do not manually create a MoonSleep thread table or new Customer Entities. | `nex.record`, `nex.channel`, `nex.channel_participant`, `nex.contact`, `moonsleep.customer_thread`, `moonsleep.customer` |
-| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | in_progress | Nex semantic foundation and each owning domain | The v1 shared contract registers native and MoonSleep targets with custody-only writers. Legacy Customer Issue targets remain compatibility-only for migration and aliases. General Communication Loop is now the canonical cross-domain response-cycle Resource and uses the deployed typed reviewed-projection contract; additional owner adapters reuse this protocol and never copy native Contacts, Orders, Entities, Channels, Communication Loops, or legacy issue rows into a parallel Resource store. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.contact`, `nex.channel`, `moonsleep.customer`, `moonsleep.commerce_order`, `moonsleep.customer_issue`, `moonsleep.communication_loop` |
-| `customer-issue-cross-domain-generalization` Customer Issue compatibility migrated to general Communication Loop and Commitment | resolved | General Communication Loop and Commitment contracts with Customer Operations compatibility stewardship | Use canonical Communication Loop for interpreted exchanges awaiting a response, clarification, decision, or confirmation; use general Commitment only for evidenced promises or responsibilities. Keep existing customer_issue_* identities and relationships readable through the compatibility adapter and migration aliases only. No Customer Thread business Resource is created; Entity communication history remains a derived view across native Channels. | `moonsleep.customer_issue`, `moonsleep.communication_loop`, `moonsleep.commitment`, `moonsleep.customer_thread`, `nex.channel`, `nex.entity`, `nex.contact` |
+| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | in_progress | Nex semantic foundation and each owning domain | The shared contract registers native and MoonSleep targets with custody-only writers. New adapters target canonical Nex core objects, Facet Attachments, and domain Resources; read projections and compatibility aliases own no independent Observation head. Additional owner adapters reuse this protocol and never copy native Contacts, Orders, Entities, Places, Channels, Loops, Commitments, or legacy issue rows into parallel owners. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.place`, `nex.contact`, `nex.channel`, `nex.loop`, `nex.commitment`, `nex.facet_attachment`, `moonsleep.commerce_order` |
+| `customer-issue-cross-domain-generalization` Customer Issue is a read projection over Nex Loop, Commitment, and domain Resources | in_progress | Nex Loops and Commitments with Customer Operations read-model stewardship | Use canonical Nex Loop for interpreted exchanges awaiting a contribution and canonical Nex Commitment only for evidenced promises or duties. Customer Issue owns inclusion and closure criteria plus a stable projection handle, not semantic history. Preserve accepted customer_issue aliases for navigation and audit. No Customer Thread Resource is created; Entity communication history remains a derived view across native Channels. | `moonsleep.customer_issue`, `moonsleep.communication_loop`, `moonsleep.commitment`, `moonsleep.customer_thread`, `nex.loop`, `nex.commitment`, `nex.channel`, `nex.entity`, `nex.contact` |
 | `supply-organization-entity-crosswalk` Supply organization compatibility IDs are not yet mandatorily crosswalked to Nex Organization Entities | open | Identity steward and Supply | Add an evidence-backed mandatory reference/crosswalk; do not merge or recreate organizations from provider text. | `moonsleep.supply_organization`, `moonsleep.partner`, `nex.entity`, `nex.contact` |
 | `finance-party-entity-crosswalk` Finance AP party IDs are not yet production-enforced against canonical Nex Organization Entities | open | Identity steward and Finance | Register a typed party-to-Entity relationship with evidence and review; retain AP party as subledger identity without making it a second Organization. | `moonsleep.finance_ap_party`, `moonsleep.invoice`, `moonsleep.partner`, `nex.entity` |
 | `finance-local-observation-compatibility` Finance-local observation tables need explicit compatibility and retirement semantics | open | Finance and Nex semantic foundation | Mark them as references/projections of canonical Nex Observations, define regeneration or retirement, and prohibit an independent predecessor chain. | `moonsleep.finance_observation_compat`, `nex.observation` |

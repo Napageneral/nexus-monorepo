@@ -14,9 +14,9 @@ targets and cardinalities, semantic status, privacy classification, custody
 writer, readback support, and authority. The protocol has no create or update
 operation. A projection writer may append evidence custody and receipts only.
 
-`compatibility_only` preserves existing target identities, aliases, and
-migration/readback custody without declaring the target canonical or granting
-projection authority. A canonical adapter relationship pointing to a
+`compatibility_only` preserves existing target identities, aliases, receipts,
+and migration/readback custody without declaring the target canonical or
+granting projection authority. A canonical adapter relationship pointing to a
 compatibility-only target must mark that relationship the same way.
 
 Run:
@@ -41,8 +41,10 @@ node contracts/observation-target-adapters/v1/registry-tools.mjs
    exists.
 
 Supply's existing typed allowlists, Finance's legacy observation tables, and
-the legacy Customer Issue target are compatibility inputs, not alternate
-semantic histories. The owner adapter may read them, but canonical history
-remains the Nex Observation head and shared projection custody. Customer Issue
-compatibility does not settle the pending cross-domain
-communication-loop/open-response model; general Commitments remain reusable.
+the legacy Customer Issue, MoonSleep Communication Loop, and MoonSleep
+Commitment targets are compatibility inputs, not alternate semantic histories.
+The owner adapter may read them, but canonical history remains the Nex
+Observation head and shared projection custody. New universal open-response
+work targets `nex.loop`; new universal promises and duties target
+`nex.commitment`. Their target adapters are registered only when the core
+foundation is implemented and independently proven.

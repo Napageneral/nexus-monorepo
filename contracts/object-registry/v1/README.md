@@ -5,6 +5,14 @@ object catalog. `registry.schema.json` describes its contract, and
 `registry-tools.mjs` validates identities, relationships, aliases, repository
 pointers, and the permanent prohibition on a schema field named `kind`.
 
+The target model has three layers:
+
+1. Nex core objects own universal identity and semantics;
+2. domain Facet Definitions, Facet Attachments, and independent Resources add
+   business meaning; and
+3. read models and workspaces compose those objects for human use without
+   becoming new authorities.
+
 The human-readable catalog at `docs/object-registry.md` is generated:
 
 ```bash
@@ -29,6 +37,16 @@ A `compatibility_alias` can keep deployed historical identities and read
 surfaces resolvable without declaring them the long-term semantic Resource.
 Its owner records whether it may project into an established canonical owner or
 is readback-only, plus the unresolved generalization or migration decision.
+
+A `read_model` may have a stable route or projection handle, but its fields and
+relationships must resolve to their owning core objects, Facet Attachments, or
+domain Resources. Product nouns such as Customer Issue, Partner, and Customer
+Thread do not become Resources merely because operators need durable views of
+them.
+
+Entries marked `planned` are canonical target objects, not claims that storage
+or APIs are already deployed. The open-gap register owns the work required to
+make those entries real.
 
 Coverage is intentionally additive. Version 1 inventories the Nex foundation
 and the MoonSleep Customer Operations, Commerce, Dispatch, Claims, Supply, and
