@@ -1,0 +1,9 @@
+{
+  "id": "mailchimp",
+  "version": "0.1.0",
+  "displayName": "Mailchimp",
+  "description": "Read-only Mailchimp Marketing and Transactional history ingestion for Nex.",
+  "platform": "mailchimp",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}

@@ -7,6 +7,11 @@ summary: "Discovery entrypoint for adapter authors working inside the Nex monore
 
 This directory contains Nex adapter packages and adapter-related support code.
 
+Implemented provider packages include the read-only
+[Mailchimp adapter](./mailchimp/README.md), which ingests Marketing campaign
+recipient activity and Transactional delivery history without exposing a send
+method.
+
 Use this file when you are working on an adapter package and need to know:
 
 - where adapter-local docs should live
