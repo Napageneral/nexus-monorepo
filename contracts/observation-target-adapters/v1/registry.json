@@ -16,6 +16,20 @@
       "action": false
     }
   },
+  "substrate_deployment_receipts": [
+    {
+      "receipt_id": "moonsleep.observation-target-adapter-foundation.v1.production-schema-20260814",
+      "deployment_state": "implemented_not_live",
+      "repository_id": "moonsleep-v1",
+      "source_revision": "277a3b942980ceed7f72513afb85b212b3852241",
+      "sql_sha256": "e64047b56b8b5c806d64316ec46549205b53046b7b20096a5ab10a5c16669d56",
+      "receipt_sha256": "9a515128874ff7785ca442f4d4b54363f6dcf70aaa77a6cdb3444aceaec7e460",
+      "receipt_path": "/var/lib/moonsleep-workloads/reviewed-interpretation/foundation/observation-target-adapter-v1-277a3b942980ceed7f72513afb85b212b3852241.json",
+      "chapter1_promotion_performed": false,
+      "chapter2_projection_performed": false,
+      "resource_mutation_performed": false
+    }
+  ],
   "entries": [
     {
       "adapter_contract_id": "nex.entity.target-adapter.v1",
@@ -100,7 +114,7 @@
       "projection_writer": "append_custody_only",
       "readback_support": "current",
       "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
-      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
       "deployment_receipts": []
     },
@@ -123,7 +137,7 @@
       "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
       "implementation_refs": [
         { "repository_id": "nex-core", "path": "src/runtime/domains/memory/resource-target-adapters.ts" },
-        { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }
+        { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }
       ],
       "implementation_state": "implemented",
       "deployment_receipts": []
@@ -149,7 +163,7 @@
       "projection_writer": "append_custody_only",
       "readback_support": "current_and_as_of",
       "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
-      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
       "deployment_receipts": []
     },
@@ -177,7 +191,7 @@
       "projection_writer": "append_custody_only",
       "readback_support": "current_and_as_of",
       "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
-      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
       "deployment_receipts": []
     }
