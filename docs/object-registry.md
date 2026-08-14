@@ -1321,7 +1321,7 @@ Existing Supply organization row used by product and procurement tables. It must
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
 | [Customer](#moonsleepcustomer) | business_resource | deployed | MoonSleep Customer Operations over Nex Identity and source-owned customer identities | canonical Nex Entity with Customer role plus reviewed provider identity links | through_owner_adapter |
-| [Customer Issue](#moonsleepcustomer_issue) | business_resource | deployed | MoonSleep Customer Operations | Customer Operations issue ID derived from the exact initiating occurrence and issue-boundary contract | through_owner_adapter |
+| [Customer Issue](#moonsleepcustomer_issue) | business_resource | deployed | MoonSleep Customer Operations | opaque support_episode_ref equal to the verified issue_ref | through_owner_adapter |
 | [Customer Thread](#moonsleepcustomer_thread) | read_model | implemented | Customer Operations over Nex communications | Customer plus preserved native Channel identities; any support-thread identity remains Helpdesk-owned | through_owner_adapter |
 
 <a id="moonsleepcustomer"></a>
@@ -1373,16 +1373,16 @@ Federated business-role view over a canonical Entity, Customer role, native Cont
 
 Canonical support episode for one customer goal, question, exception, or remedy. One Channel may contain several Issues; acknowledgments or general history may create no Issue.
 
-**Stable identity:** Customer Operations issue ID derived from the exact initiating occurrence and issue-boundary contract
+**Stable identity:** opaque support_episode_ref equal to the verified issue_ref
 
 **Revision identity:** Issue lifecycle events and reviewed successors preserve chronology
 
 **Canonical storage/read custody:**
 
-- MoonSleep Ops: `verified Customer Issue and issue lifecycle tables` (canonical; identity `customer_issue_id`)
+- MoonSleep Ops: `ops_verified_customer_issue_review_receipts` (canonical; identity `support_episode_ref`)
 - MoonSleep Ops: `ops_customer_issue_measurement_current` (projection)
 
-**Key fields:** `customer_issue_id`, `initiating_logical_message_id`, `channel_ref`, `customer_ref`, `issue_category`, `conversation_state`, `operational_state`, `created_at`, `updated_at`.
+**Key fields:** `support_episode_ref`, `issue_ref`, `initiating_logical_message_id`, `channel_ref`, `customer_ref`, `issue_category`, `conversation_state`, `operational_state`, `created_at`, `updated_at`.
 
 **Relationships:**
 
@@ -2209,8 +2209,8 @@ General evidenced obligation, promise, accepted responsibility, policy-implied r
 - `involves_customer` → `moonsleep.customer` (optional_one; owner: Customer Operations)
 - `concerns_order` → `moonsleep.commerce_order` (optional_one; owner: Commerce)
 - `belongs_to_issue` → `moonsleep.customer_issue` (optional_one; owner: Customer Operations)
-- `supersedes` → `moonsleep.commitment` (optional_one; owner: Commitment contract)
-- `satisfied_by` → `moonsleep.action_receipt` (optional_many; owner: Owning mutation domain)
+- `supersedes_commitment` → `moonsleep.commitment` (optional_one; owner: Commitment contract)
+- `satisfied_by_event` → `moonsleep.action_receipt` (optional_many; owner: Owning mutation domain)
 
 **Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
 
@@ -3020,7 +3020,7 @@ Sorted immutable Fact membership and digest used as the complete bounded input t
 | --- | --- | --- | --- | --- |
 | `shopify-record-revision-custody-chapter1` Seven historical Shopify Records lack canonical Record Revision registration | open | Nex Records | Keep the existing Records and Orders. Register immutable revisions from the durable source payloads through the canonical registrar before using them as Episode members; no provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
 | `gmail-native-channel-contact-replay-chapter1` Seven historical Gmail conversations have communication projections but no native Channel/participant Contact materialization | open | Nex Gmail adapter and Identity | Run a bounded historical identity and Channel replay through the current adapter machinery. Do not manually create a MoonSleep thread table or new Customer Entities. | `nex.record`, `nex.channel`, `nex.channel_participant`, `nex.contact`, `moonsleep.customer_thread`, `moonsleep.customer` |
-| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | open | Nex semantic foundation and each owning domain | Extend the closed target and relationship registry so Observations can address existing objects in place. Never copy native Contacts, Orders, Entities, Channels, or Issues into a parallel Resource store. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.contact`, `nex.channel`, `moonsleep.customer`, `moonsleep.commerce_order`, `moonsleep.customer_issue` |
+| `observation-target-adapters` Shared reviewed projection needs typed adapters for all registered canonical targets | in_progress | Nex semantic foundation and each owning domain | The v1 shared contract registers the first native and MoonSleep targets with custody-only writers. Additional domain adapters reuse this protocol and never copy native Contacts, Orders, Entities, Channels, or Issues into a parallel Resource store. | `nex.observation`, `nex.resource_attribute_projection`, `nex.resource_relationship_projection`, `nex.entity`, `nex.contact`, `nex.channel`, `moonsleep.customer`, `moonsleep.commerce_order`, `moonsleep.customer_issue` |
 | `supply-organization-entity-crosswalk` Supply organization compatibility IDs are not yet mandatorily crosswalked to Nex Organization Entities | open | Identity steward and Supply | Add an evidence-backed mandatory reference/crosswalk; do not merge or recreate organizations from provider text. | `moonsleep.supply_organization`, `moonsleep.partner`, `nex.entity`, `nex.contact` |
 | `finance-party-entity-crosswalk` Finance AP party IDs are not yet production-enforced against canonical Nex Organization Entities | open | Identity steward and Finance | Register a typed party-to-Entity relationship with evidence and review; retain AP party as subledger identity without making it a second Organization. | `moonsleep.finance_ap_party`, `moonsleep.invoice`, `moonsleep.partner`, `nex.entity` |
 | `finance-local-observation-compatibility` Finance-local observation tables need explicit compatibility and retirement semantics | open | Finance and Nex semantic foundation | Mark them as references/projections of canonical Nex Observations, define regeneration or retirement, and prohibit an independent predecessor chain. | `moonsleep.finance_observation_compat`, `nex.observation` |

@@ -157,6 +157,7 @@
         "action_authority": { "type": "boolean" },
         "source_contracts": { "type": "array", "items": { "$ref": "#/$defs/sourcePointer" } },
         "deployed_release_receipts": { "type": "array", "items": { "type": "string" } },
+        "target_adapter_contracts": { "type": "array", "items": { "type": "string" } },
         "legacy_aliases": { "type": "array", "items": { "type": "string" } },
         "forbidden_parallel_objects": { "type": "array", "items": { "type": "string" } },
         "open_questions": { "type": "array", "items": { "type": "string" } }

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const registryPath = resolve(here, "registry.json");
 const guidePath = resolve(here, "../../../docs/object-registry.md");
+const targetAdapterRegistryPath = resolve(here, "../../observation-target-adapters/v1/registry.json");
 
 function fail(message) {
   throw new Error(`[object-registry] ${message}`);
@@ -36,7 +37,7 @@ function requireArray(value, path) {
   if (!Array.isArray(value)) fail(`${path} must be an array`);
 }
 
-function validate(registry) {
+function validate(registry, targetAdapterRegistry) {
   assertNoForbiddenField(registry);
   requireString(registry.registry_id, "registry_id");
   requireString(registry.schema_version, "schema_version");
@@ -84,6 +85,17 @@ function validate(registry) {
       const prior = aliases.get(alias);
       if (prior && prior !== entry.object_id) fail(`alias ${alias} is claimed by ${prior} and ${entry.object_id}`);
       aliases.set(alias, entry.object_id);
+    }
+  }
+
+  const targetAdapterContracts = new Set(
+    (targetAdapterRegistry.entries ?? []).map((entry) => entry.adapter_contract_id),
+  );
+  for (const entry of registry.entries) {
+    for (const contractId of entry.target_adapter_contracts ?? []) {
+      if (!targetAdapterContracts.has(contractId)) {
+        fail(`${entry.object_id} references unknown target adapter ${contractId}`);
+      }
     }
   }
 
@@ -189,7 +201,8 @@ function render(registry) {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-const registry = validate(JSON.parse(await readFile(registryPath, "utf8")));
+const targetAdapterRegistry = JSON.parse(await readFile(targetAdapterRegistryPath, "utf8"));
+const registry = validate(JSON.parse(await readFile(registryPath, "utf8")), targetAdapterRegistry);
 const rendered = render(registry);
 if (process.argv.includes("--write")) {
   await writeFile(guidePath, rendered, "utf8");

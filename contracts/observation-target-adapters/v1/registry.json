@@ -1,0 +1,203 @@
+{
+  "registry_id": "nex.observation-target-adapters",
+  "schema_version": "1.0.0",
+  "status": "proposed_canonical",
+  "protocol": {
+    "target_domain": "nex.resource-target-adapter",
+    "projection_type": "observation-target",
+    "projection_version": "1.0.0",
+    "unknown_target": "fail_closed",
+    "writer": "append_custody_only",
+    "authority": {
+      "observation_target": true,
+      "projection": true,
+      "resource_mutation": false,
+      "implicit_creation": false,
+      "action": false
+    }
+  },
+  "entries": [
+    {
+      "adapter_contract_id": "nex.entity.target-adapter.v1",
+      "canonical_object_id": "nex.entity",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "Nex Identity",
+      "identity_format": "opaque Nex Entity row ID",
+      "read_surface": "entities.get plus entities.tags.list for role-qualified reads",
+      "allowed_attribute_paths": ["created_at", "deleted_at", "merged_into", "name", "normalized", "origin", "type", "updated_at"],
+      "allowed_relationships": [
+        { "relationship_id": "represented_by_contact", "target_object_ids": ["nex.contact"], "cardinality": "set_valued" },
+        { "relationship_id": "participates_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "restricted_identity",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current",
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "nex-core", "path": "src/runtime/domains/memory/resource-target-adapters.ts" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "nex.contact.target-adapter.v1",
+      "canonical_object_id": "nex.contact",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "Nex Identity",
+      "identity_format": "opaque immutable Contact row ID",
+      "read_surface": "contacts.get",
+      "allowed_attribute_paths": ["avatar_url", "contact_id", "contact_name", "created_at", "deleted_at", "entity_id", "last_observed_at", "origin", "platform", "space_id"],
+      "allowed_relationships": [
+        { "relationship_id": "represents", "target_object_ids": ["nex.entity"], "cardinality": "one" },
+        { "relationship_id": "participates_in", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "restricted_identity",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current",
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "nex-core", "path": "src/runtime/domains/memory/resource-target-adapters.ts" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "nex.channel.target-adapter.v1",
+      "canonical_object_id": "nex.channel",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "Nex Channels",
+      "identity_format": "opaque current Channel row ID with logical provider identity retained in readback",
+      "read_surface": "channels.get",
+      "allowed_attribute_paths": ["connection_id", "container_id", "container_kind", "created_at", "deleted_at", "metadata_json", "platform", "space_id", "thread_id"],
+      "allowed_relationships": [
+        { "relationship_id": "has_participant", "target_object_ids": ["nex.contact", "nex.entity"], "cardinality": "set_valued" },
+        { "relationship_id": "contains_record", "target_object_ids": ["nex.record"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "restricted_communications",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current",
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "nex-core", "path": "src/runtime/domains/memory/resource-target-adapters.ts" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "moonsleep.customer.target-adapter.v1",
+      "canonical_object_id": "moonsleep.customer",
+      "decision": "generalize",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "MoonSleep Customer Operations over Nex Identity",
+      "identity_format": "canonical Nex Entity ID with active customer role",
+      "read_surface": "entities.get plus entities.tags.list; no separate Customer row",
+      "allowed_attribute_paths": ["contact_refs", "customer_role", "identity_resolution_state", "latest_customer_activity_at", "latest_moonsleep_activity_at", "source_customer_refs"],
+      "allowed_relationships": [
+        { "relationship_id": "represented_by_entity", "target_object_ids": ["nex.entity"], "cardinality": "one" },
+        { "relationship_id": "has_contact", "target_object_ids": ["nex.contact"], "cardinality": "set_valued" },
+        { "relationship_id": "participates_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" },
+        { "relationship_id": "placed_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "set_valued" },
+        { "relationship_id": "has_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "restricted_identity",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current",
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "moonsleep.commerce-order.target-adapter.v1",
+      "canonical_object_id": "moonsleep.commerce_order",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "Commerce provider with Nex canonical commerce readback",
+      "identity_format": "platform plus space_id plus provider order_id",
+      "read_surface": "commerce.orders.get",
+      "allowed_attribute_paths": ["cancelled_at", "closed_at", "currency", "customer_contact_id", "customer_entity_id", "financial_status", "fulfillment_status", "order_id", "order_name", "platform", "processed_at", "space_id", "subtotal_price", "total_price"],
+      "allowed_relationships": [
+        { "relationship_id": "placed_by", "target_object_ids": ["moonsleep.customer", "nex.entity"], "cardinality": "optional_one" },
+        { "relationship_id": "has_line", "target_object_ids": ["moonsleep.commerce_order_line"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "internal",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current",
+      "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [
+        { "repository_id": "nex-core", "path": "src/runtime/domains/memory/resource-target-adapters.ts" },
+        { "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }
+      ],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "moonsleep.customer-issue.target-adapter.v1",
+      "canonical_object_id": "moonsleep.customer_issue",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "MoonSleep Customer Operations",
+      "identity_format": "opaque support_episode_ref equal to issue_ref",
+      "read_surface": "ops_verified_customer_issue_current",
+      "allowed_attribute_paths": ["conversation_state", "created_at", "customer_ref", "evidence_readiness", "issue_category", "operational_state", "review_action", "updated_at"],
+      "allowed_relationships": [
+        { "relationship_id": "belongs_to_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "one" },
+        { "relationship_id": "initiated_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "one" },
+        { "relationship_id": "concerns_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "set_valued" },
+        { "relationship_id": "has_commitment", "target_object_ids": ["moonsleep.commitment"], "cardinality": "set_valued" }
+      ],
+      "privacy_default": "restricted_communications",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current_and_as_of",
+      "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    },
+    {
+      "adapter_contract_id": "moonsleep.commitment.target-adapter.v1",
+      "canonical_object_id": "moonsleep.commitment",
+      "decision": "reuse",
+      "adapter_version": "1.0.0",
+      "implementation_owner": "General MoonSleep Commitment contract",
+      "identity_format": "commitment_id",
+      "read_surface": "public.commitments and its three canonical relationship tables",
+      "allowed_attribute_paths": ["action_authority", "breach_state", "committed_at", "committed_by_entity_id", "committed_to_entity_id", "commitment_basis", "commitment_category", "commitment_id", "commitment_state", "commitment_statement", "completed_at", "completion_evidence_state", "due_at", "due_condition", "supersedes_commitment_id"],
+      "allowed_relationships": [
+        { "relationship_id": "committed_by", "target_object_ids": ["nex.entity"], "cardinality": "one" },
+        { "relationship_id": "committed_to", "target_object_ids": ["nex.entity"], "cardinality": "one" },
+        { "relationship_id": "evidenced_in_channel", "target_object_ids": ["nex.channel"], "cardinality": "set_valued" },
+        { "relationship_id": "involves_customer", "target_object_ids": ["moonsleep.customer"], "cardinality": "optional_one" },
+        { "relationship_id": "concerns_order", "target_object_ids": ["moonsleep.commerce_order"], "cardinality": "optional_one" },
+        { "relationship_id": "belongs_to_issue", "target_object_ids": ["moonsleep.customer_issue"], "cardinality": "optional_one" },
+        { "relationship_id": "concerns_resource", "target_object_ids": ["moonsleep.carrier_case", "moonsleep.carrier_incident", "moonsleep.fulfillment_package", "moonsleep.sample_article"], "cardinality": "set_valued" },
+        { "relationship_id": "satisfied_by_event", "target_object_ids": ["moonsleep.action_receipt", "moonsleep.carrier_case_event", "moonsleep.sample_article_status"], "cardinality": "set_valued" },
+        { "relationship_id": "supersedes_commitment", "target_object_ids": ["moonsleep.commitment"], "cardinality": "optional_one" }
+      ],
+      "privacy_default": "internal",
+      "projection_writer": "append_custody_only",
+      "readback_support": "current_and_as_of",
+      "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/observation_target_adapters.py" }],
+      "implementation_state": "implemented",
+      "deployment_receipts": []
+    }
+  ],
+  "compatibility_rules": [
+    {
+      "compatibility_id": "moonsleep.supply.chapter2-typed-allowlists",
+      "owner": "MoonSleep Supply",
+      "rule": "Reuse the deployed Chapter 2 typed contract and state views as owner readbacks; do not create a second semantic chain and do not route new target events through implicit Resource creation.",
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }]
+    },
+    {
+      "compatibility_id": "moonsleep.finance.ap-observations",
+      "owner": "MoonSleep Finance",
+      "rule": "Treat finance.ap_observations as compatibility-only; canonical new semantic history is the Nex Observation head and shared custody links.",
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/finance_accounts_payable_postgres.sql" }]
+    },
+    {
+      "compatibility_id": "moonsleep.claims.chapter1-projector",
+      "owner": "MoonSleep Claims",
+      "rule": "Keep the separately authorized Chapter 1 projector outside the shared target protocol because it mutates operational Resources; foundation validation never executes it.",
+      "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/operate_claims_chapter1_resource_projection.py" }]
+    }
+  ]
+}
