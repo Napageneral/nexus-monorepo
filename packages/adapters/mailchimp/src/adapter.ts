@@ -244,6 +244,20 @@ function requireClient(ctx: DefinedAdapterContext<MailchimpClient>): MailchimpCl
   return ctx.client;
 }
 
+function connectionIdentity(client: MailchimpClient) {
+  return {
+    id: client.connectionId,
+    display_name: client.accountLabel,
+    account: client.accountLabel,
+    account_contact: {
+      platform: PLATFORM,
+      space_id: client.connectionId,
+      contact_id: client.connectionId,
+    },
+    status: "ready" as const,
+  };
+}
+
 function payloadRecord(value: { payload?: UnknownRecord }): UnknownRecord {
   return value.payload ?? {};
 }
@@ -748,6 +762,7 @@ export const __test__ = {
   transactionalRecord,
   transactionalExportRecord,
   transactionalDeliveryState,
+  connectionIdentity,
 };
 
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
@@ -793,7 +808,7 @@ export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   connection: {
     connections: async (ctx) => {
       const client = requireClient(ctx);
-      return [{ id: client.connectionId, display_name: client.accountLabel, status: "ready" }];
+      return [connectionIdentity(client)];
     },
     health: async (ctx) => await health(requireClient(ctx)),
   },
