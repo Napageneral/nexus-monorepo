@@ -38,6 +38,7 @@ const objectIds = new Set();
 const allowedDecisions = new Set(["reuse", "generalize", "create"]);
 const allowedCardinalities = new Set(["one", "optional_one", "set_valued"]);
 const allowedPrivacy = new Set(["internal", "restricted_identity", "restricted_communications", "restricted_finance"]);
+const allowedSemanticStatuses = new Set(["canonical", "compatibility_only"]);
 
 if (registry.protocol?.target_domain !== "nex.resource-target-adapter") fail("target domain differs");
 if (registry.protocol?.projection_type !== "observation-target") fail("projection type differs");
@@ -68,6 +69,10 @@ for (const entry of registry.entries ?? []) {
   const objectEntry = objectEntries.get(entry.canonical_object_id);
   if (!objectEntry) fail(`${entry.adapter_contract_id} references unknown object ${entry.canonical_object_id}`);
   if (!allowedDecisions.has(entry.decision)) fail(`${entry.adapter_contract_id} has invalid decision`);
+  if (!allowedSemanticStatuses.has(entry.semantic_status)) fail(`${entry.adapter_contract_id} has invalid semantic status`);
+  if ((entry.semantic_status === "compatibility_only") !== (objectEntry.observation_target === "compatibility_only")) {
+    fail(`${entry.adapter_contract_id} semantic status differs from object registry`);
+  }
   if (entry.projection_writer !== "append_custody_only") fail(`${entry.adapter_contract_id} writer is unsafe`);
   if (!allowedPrivacy.has(entry.privacy_default)) fail(`${entry.adapter_contract_id} privacy is invalid`);
   if (entry.authority?.resource_mutation !== false || entry.authority?.implicit_creation !== false || entry.authority?.action !== false) {
@@ -86,8 +91,15 @@ for (const entry of registry.entries ?? []) {
     if (relationshipIds.has(relationship.relationship_id)) fail(`${entry.adapter_contract_id} repeats relationship ${relationship.relationship_id}`);
     relationshipIds.add(relationship.relationship_id);
     if (!allowedCardinalities.has(relationship.cardinality)) fail(`${entry.adapter_contract_id}.${relationship.relationship_id} cardinality is invalid`);
+    if (relationship.semantic_status !== undefined && !allowedSemanticStatuses.has(relationship.semantic_status)) {
+      fail(`${entry.adapter_contract_id}.${relationship.relationship_id} semantic status is invalid`);
+    }
     for (const target of relationship.target_object_ids ?? []) {
       if (!objectEntries.has(target)) fail(`${entry.adapter_contract_id}.${relationship.relationship_id} targets unknown ${target}`);
+      const targetEntry = objectEntries.get(target);
+      if (entry.semantic_status === "canonical" && targetEntry.observation_target === "compatibility_only" && relationship.semantic_status !== "compatibility_only") {
+        fail(`${entry.adapter_contract_id}.${relationship.relationship_id} must mark compatibility-only target semantics`);
+      }
     }
   }
   if (!Array.isArray(entry.deployment_receipts)) fail(`${entry.adapter_contract_id} deployment receipts must be an array`);

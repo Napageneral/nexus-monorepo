@@ -25,6 +25,11 @@ Before proposing a new Resource, projection, or relationship:
 The registry points to owning contracts. It does not copy their schemas or
 become a second operational database model.
 
+A `compatibility_alias` can keep deployed historical identities and read
+surfaces resolvable without declaring them the long-term semantic Resource.
+Its owner records whether it may project into an established canonical owner or
+is readback-only, plus the unresolved generalization or migration decision.
+
 Coverage is intentionally additive. Version 1 inventories the Nex foundation
 and the MoonSleep Customer Operations, Commerce, Dispatch, Claims, Supply, and
 Finance objects exercised by the reviewed-interpretation tracks. A table or
