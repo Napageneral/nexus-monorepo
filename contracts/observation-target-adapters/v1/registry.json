@@ -1,7 +1,7 @@
 {
   "registry_id": "nex.observation-target-adapters",
-  "schema_version": "1.0.0",
-  "status": "proposed_canonical",
+  "schema_version": "1.1.0",
+  "status": "canonical",
   "protocol": {
     "target_domain": "nex.resource-target-adapter",
     "projection_type": "observation-target",
@@ -104,8 +104,8 @@
       "adapter_version": "1.0.0",
       "semantic_status": "canonical",
       "implementation_owner": "MoonSleep Customer Operations over Nex Identity",
-      "identity_format": "canonical Nex Entity ID with active customer role",
-      "read_surface": "entities.get plus entities.tags.list; no separate Customer row",
+      "identity_format": "canonical Nex Entity ID with active Customer Facet or legacy customer role compatibility",
+      "read_surface": "entities.get plus Facet Attachment readback; legacy entities.tags.list remains compatibility input and there is no separate Customer identity row",
       "allowed_attribute_paths": ["contact_refs", "customer_role", "identity_resolution_state", "latest_customer_activity_at", "latest_moonsleep_activity_at", "source_customer_refs"],
       "allowed_relationships": [
         { "relationship_id": "represented_by_entity", "target_object_ids": ["nex.entity"], "cardinality": "one" },
@@ -176,12 +176,12 @@
     {
       "adapter_contract_id": "moonsleep.commitment.target-adapter.v1",
       "canonical_object_id": "moonsleep.commitment",
-      "decision": "reuse",
+      "decision": "generalize",
       "adapter_version": "1.0.0",
-      "semantic_status": "canonical",
-      "implementation_owner": "General MoonSleep Commitment contract",
-      "identity_format": "commitment_id",
-      "read_surface": "public.commitments and its three canonical relationship tables",
+      "semantic_status": "compatibility_only",
+      "implementation_owner": "MoonSleep Commitment compatibility custody resolving to Nex Commitments",
+      "identity_format": "existing MoonSleep commitment_id plus required canonical Nex Commitment crosswalk",
+      "read_surface": "public.commitments and its three relationship tables for compatibility readback only",
       "allowed_attribute_paths": ["action_authority", "breach_state", "committed_at", "committed_by_entity_id", "committed_to_entity_id", "commitment_basis", "commitment_category", "commitment_id", "commitment_state", "commitment_statement", "completed_at", "completion_evidence_state", "due_at", "due_condition", "supersedes_commitment_id"],
       "allowed_relationships": [
         { "relationship_id": "committed_by", "target_object_ids": ["nex.entity"], "cardinality": "one" },
@@ -197,7 +197,7 @@
       "privacy_default": "internal",
       "projection_writer": "append_custody_only",
       "readback_support": "current_and_as_of",
-      "authority": { "observation_target": true, "projection": true, "resource_mutation": false, "implicit_creation": false, "action": false },
+      "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
       "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
       "deployment_receipts": []
@@ -207,8 +207,17 @@
     {
       "compatibility_id": "moonsleep.customer-issue.legacy-target",
       "owner": "MoonSleep Customer Operations compatibility",
-      "rule": "Resolve existing Customer Issue identities, aliases, attributes, and relationships for migration/readback only. This adapter has no projection authority. General Communication Loop is the canonical cross-domain response-cycle Resource, and general Commitment remains the only promise/responsibility Resource.",
+      "rule": "Resolve existing Customer Issue identities, aliases, attributes, and relationships for migration/readback only. This adapter has no projection authority. The workspace now composes canonical Nex Loops and Nex Commitments; it does not own either semantic history.",
       "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-observation-target-adapter-foundation.md" }, { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }]
+    },
+    {
+      "compatibility_id": "moonsleep.loop-and-commitment.legacy-targets",
+      "owner": "Nex core adoption with MoonSleep reviewed-projection custody",
+      "rule": "Preserve exact existing MoonSleep Communication Loop and Commitment IDs, evidence, Observations, aliases, and receipts while resolving their semantic successors to nex.loop and nex.commitment. New universal Loop or Commitment writes must not target the MoonSleep compatibility owners.",
+      "source_contracts": [
+        { "repository_id": "nexus-umbrella", "path": "docs/specs/core-real-world-graph-and-domain-facets.md" },
+        { "repository_id": "moonsleep-v1", "path": "docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md" }
+      ]
     },
     {
       "compatibility_id": "moonsleep.supply.chapter2-typed-allowlists",
