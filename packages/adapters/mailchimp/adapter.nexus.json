@@ -5,5 +5,71 @@
   "description": "Read-only Mailchimp Marketing and Transactional history ingestion for Nex.",
   "platform": "mailchimp",
   "command": "./dist/index.js",
-  "skill": "./SKILL.md"
+  "skill": "./SKILL.md",
+  "methods": {
+    "mailchimp.marketing.campaigns.list": {
+      "description": "List sent Mailchimp Marketing campaigns without mutating provider state.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.marketing.campaign.content.get": {
+      "description": "Read the exact stored content for one Marketing campaign.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.marketing.campaign.recipients.list": {
+      "description": "List recipient activity for one Marketing campaign.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.messages.search": {
+      "description": "Search recent Transactional message activity.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.message.info": {
+      "description": "Read one Transactional message by provider id.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.exports.list": {
+      "description": "List read-only Transactional activity export jobs.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.export.info": {
+      "description": "Read one Transactional activity export job.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.templates.list": {
+      "description": "List Transactional templates for historical interpretation.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    }
+  }
 }
