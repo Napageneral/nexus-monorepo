@@ -734,7 +734,7 @@ async function monitor(
   }
 }
 
-async function health(client: MailchimpClient): Promise<{ connected: boolean; details?: UnknownRecord; error?: string }> {
+async function health(client: MailchimpClient) {
   try {
     const [marketing, transactional] = await Promise.all([
       marketingGet(client, "/ping"),
@@ -742,6 +742,9 @@ async function health(client: MailchimpClient): Promise<{ connected: boolean; de
     ]);
     return {
       connected: true,
+      connection_id: client.connectionId,
+      account: client.accountLabel,
+      account_contact: connectionIdentity(client).account_contact,
       details: {
         marketing: asRecord(marketing),
         transactional: asRecord(transactional),
@@ -763,6 +766,7 @@ export const __test__ = {
   transactionalExportRecord,
   transactionalDeliveryState,
   connectionIdentity,
+  health,
 };
 
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
