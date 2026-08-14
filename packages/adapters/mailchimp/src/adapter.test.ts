@@ -25,6 +25,23 @@ describe("Mailchimp read-only evidence adapter", () => {
     });
   });
 
+  it("returns the same authoritative account contact from provider health", async () => {
+    const result = await __test__.health({
+      ...client,
+      fetchFn: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    });
+    expect(result).toMatchObject({
+      connected: true,
+      connection_id: "moon-mailchimp",
+      account: "MoonSleep Mailchimp",
+      account_contact: {
+        platform: "mailchimp",
+        space_id: "moon-mailchimp",
+        contact_id: "moon-mailchimp",
+      },
+    });
+  });
+
   it("derives the Marketing datacenter from the key suffix", () => {
     expect(__test__.marketingDatacenter("abc-us20")).toBe("us20");
     expect(__test__.marketingDatacenter("abc-us20", "us99")).toBe("us99");
