@@ -39,7 +39,7 @@
       "semantic_status": "canonical",
       "implementation_owner": "Nex Identity",
       "identity_format": "opaque Nex Entity row ID",
-      "read_surface": "entities.get plus entities.tags.list for role-qualified reads",
+      "read_surface": "entities.get; role-qualified domain reads resolve through registered Facet Attachments",
       "allowed_attribute_paths": ["created_at", "deleted_at", "merged_into", "name", "normalized", "origin", "type", "updated_at"],
       "allowed_relationships": [
         { "relationship_id": "represented_by_contact", "target_object_ids": ["nex.contact"], "cardinality": "set_valued" },

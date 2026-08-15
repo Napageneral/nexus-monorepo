@@ -71,6 +71,9 @@ function validate(registry, targetAdapterRegistry) {
     if (!observationTargets.has(entry.observation_target)) fail(`${entry.object_id}.observation_target is invalid`);
     requireBoolean(entry.projection_authority, `${entry.object_id}.projection_authority`);
     requireBoolean(entry.action_authority, `${entry.object_id}.action_authority`);
+    if (entry.registry_class === "compatibility_alias" && entry.projection_authority !== false) {
+      fail(`${entry.object_id}.projection_authority must be false for a compatibility alias`);
+    }
     for (const field of ["canonical_storage", "key_fields", "relationships", "source_contracts", "legacy_aliases", "forbidden_parallel_objects", "open_questions"]) {
       requireArray(entry[field], `${entry.object_id}.${field}`);
     }

@@ -1312,7 +1312,7 @@ Existing Supply organization row used by product and procurement tables. It must
 - `resolves_to_entity` → `nex.entity` (one; owner: Nex Identity and Supply)
 - `resolves_to_supplier_facet` → `nex.facet_attachment` (optional_one; owner: Supply)
 
-**Projection/action boundary:** Observation target `compatibility_only`; projection authority `true`; implicit action authority `false`.
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
 
 **Aliases and legacy names:** `supplier organization`.
 

@@ -519,7 +519,7 @@
       "canonical_storage": [{ "system": "MoonSleep Ops", "surface": "public.supply_organizations", "identity_field": "organization_id", "status": "compatibility" }],
       "read_surfaces": ["Supply reviewed projection"], "key_fields": ["organization_id"],
       "relationships": [{ "relationship_id": "resolves_to_entity", "target_object_id": "nex.entity", "cardinality": "one", "owner": "Nex Identity and Supply" }, { "relationship_id": "resolves_to_supplier_facet", "target_object_id": "nex.facet_attachment", "cardinality": "optional_one", "owner": "Supply" }],
-      "evidence_inputs": ["reviewed supplier identity"], "observation_target": "compatibility_only", "observation_head_rule": "New supplier facts target the canonical Entity or its Supplier Facet Attachment once crosswalked.", "projection_authority": true, "action_authority": false,
+      "evidence_inputs": ["reviewed supplier identity"], "observation_target": "compatibility_only", "observation_head_rule": "New supplier facts target the canonical Entity or its Supplier Facet Attachment once crosswalked.", "projection_authority": false, "action_authority": false,
       "source_contracts": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/sql/reviewed_interpretation_nex_projection_v3_postgres.sql" }], "deployed_release_receipts": [], "legacy_aliases": ["supplier organization"], "forbidden_parallel_objects": ["second supplier company identity"], "open_questions": ["Mandatory supply_organization to Nex Entity crosswalk is not production-enforced"]
     },
     {
