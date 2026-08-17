@@ -198,7 +198,7 @@ func shopifyProjection() *nexadapter.AdapterProjection {
 			ThreadsSupported: true,
 		},
 		RecordIDs: &nexadapter.AdapterProjectionRecordIDs{
-			Record:    "shop_domain + family provider identity + revision_hash",
+			Record:    "family + provider identity; snapshot fingerprint is checkpoint-only",
 			Container: "family",
 			Thread:    "shop_domain + per-family provider identity",
 		},

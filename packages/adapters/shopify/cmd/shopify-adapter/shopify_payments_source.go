@@ -170,7 +170,12 @@ func buildShopifyPaymentsRecord(
 	spec shopifyPaymentsPageRequest,
 	raw json.RawMessage,
 	sourceRequest shopifySourceRequest,
-) (nexadapter.AdapterInboundRecord, error) {
+) (record nexadapter.AdapterInboundRecord, err error) {
+	defer func() {
+		if err == nil {
+			record = bindShopifyImmutableRecord(state, record)
+		}
+	}()
 	row, err := decodeProviderJSONObject(raw)
 	if err != nil {
 		return nexadapter.AdapterInboundRecord{}, err
@@ -184,7 +189,7 @@ func buildShopifyPaymentsRecord(
 		return nexadapter.AdapterInboundRecord{}, err
 	}
 	digest := sha256.Sum256(raw)
-	revision := hex.EncodeToString(digest[:])
+	fingerprint := hex.EncodeToString(digest[:])
 	threadID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, spec.ContainerID, nexadapter.SafeIDToken(providerID))
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
@@ -210,17 +215,17 @@ func buildShopifyPaymentsRecord(
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), spec.ContainerID, nexadapter.SafeIDToken(providerID), revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), spec.ContainerID, nexadapter.SafeIDToken(providerID), fingerprint),
 			Timestamp:        providerTimestamp(row, spec.TimestampKeys).UnixMilli(),
 			Content:          fmt.Sprintf("%s %s", spec.ContainerID, providerID),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(raw, row, row),
 			Metadata: map[string]any{
-				"connection_id":  connectionID,
-				"adapter_id":     platformID,
-				"family":         spec.Family,
-				"logical_row_id": fmt.Sprintf("%s:%s", state.ShopDomain, providerID),
-				"revision_hash":  revision,
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      spec.Family,
+				"logical_row_id":              fmt.Sprintf("%s:%s", state.ShopDomain, providerID),
+				"snapshot_fingerprint_sha256": fingerprint,
 				"provider_ids": map[string]any{
 					"shop_domain": state.ShopDomain,
 					"provider_id": providerID,
