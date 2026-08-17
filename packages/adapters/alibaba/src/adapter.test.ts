@@ -473,7 +473,9 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     config(root),
     "conn-alibaba",
   );
-  assert.equal(record.payload.external_record_id, "alibaba:conn-alibaba:message-v3:m-1");
+  assert.equal(record.payload.external_record_id, "message:m-1");
+  assert.equal(record.payload.source_record_type, "alibaba.message");
+  assert.equal(record.routing.provider_account_ref, "moonsleep-alibaba");
   assert.equal(record.routing.container_id, "surewal-thread");
   assert.equal(record.routing.receiver_id, "conn-alibaba");
   assert.equal(record.payload.recipients, undefined);
@@ -488,8 +490,8 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   assert.equal(record.payload.payload?.source_snapshot_id, undefined);
   assert.equal(record.payload.payload?.source_snapshot_receipt_sha256, undefined);
   assert.equal(record.payload.payload?.source_projection_messages_sha256, undefined);
-  assert.equal(record.payload.metadata?.snapshot_id, snapshot.ref.id);
-  assert.equal(record.payload.metadata?.snapshot_receipt_sha256, snapshot.ref.complete_sha256);
+  assert.equal(record.payload.metadata?.snapshot_id, undefined);
+  assert.equal(record.payload.metadata?.snapshot_receipt_sha256, undefined);
   const attachmentRecord = __test__.buildAttachmentRecord(
     snapshot.attachments[0]!,
     snapshot,
@@ -497,13 +499,14 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
     "conn-alibaba",
   );
   assert.equal(attachmentRecord.payload.attachments?.[0]?.local_path, attachmentPath);
+  assert.equal(attachmentRecord.payload.source_record_type, "alibaba.attachment");
   assert.equal(attachmentRecord.payload.attachments?.[0]?.mime_type, "application/pdf");
   assert.match(attachmentRecord.payload.attachments?.[0]?.content_hash ?? "", /^[a-f0-9]{64}$/);
   assert.match(attachmentRecord.payload.content, /Vessel booking and ETA/);
-  const sourceAttachment = String(attachmentRecord.payload.payload?.provider_attachment_json ?? "");
+  const sourceAttachment = String(attachmentRecord.payload.payload?.provider_object_json ?? "");
   assert.equal(
     createHash("sha256").update(sourceAttachment).digest("hex"),
-    attachmentRecord.payload.payload?.provider_attachment_sha256,
+    attachmentRecord.payload.payload?.provider_object_sha256,
   );
   assert.doesNotMatch(sourceAttachment, /localPath|objectPath|retired-capture-root/);
   assert.doesNotThrow(() => AdapterInboundRecordSchema.parse(record));
@@ -511,7 +514,7 @@ test("record preserves exact sanitized source JSON and excludes raw credentials"
   assert.doesNotMatch(JSON.stringify(record), /clouddisk\.alibaba\.com/);
 });
 
-test("byte-derived MIME normalization preserves attachment identity and revision custody", () => {
+test("byte-derived MIME normalization preserves attachment identity and snapshot custody", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
   const attachment = snapshot.attachments[0]!;
@@ -531,7 +534,10 @@ test("byte-derived MIME normalization preserves attachment identity and revision
   assert.equal(generic.payload.attachments?.[0]?.mime_type, "application/pdf");
   assert.equal(generic.payload.external_record_id, explicit.payload.external_record_id);
   assert.equal(generic.payload.metadata?.logical_record_id, explicit.payload.metadata?.logical_record_id);
-  assert.equal(generic.payload.metadata?.revision_hash, explicit.payload.metadata?.revision_hash);
+  assert.equal(
+    generic.payload.metadata?.snapshot_fingerprint_sha256,
+    explicit.payload.metadata?.snapshot_fingerprint_sha256,
+  );
 });
 
 test("attachment custody fails on byte-count or digest but ignores misleading provider MIME", () => {
@@ -596,11 +602,7 @@ test("capture-level provenance cannot change immutable message identity or paylo
   );
   assert.equal(refreshed.payload.external_record_id, original.payload.external_record_id);
   assert.deepEqual(refreshed.payload.payload, original.payload.payload);
-  assert.notEqual(refreshed.payload.metadata?.snapshot_id, original.payload.metadata?.snapshot_id);
-  assert.notEqual(
-    refreshed.payload.metadata?.snapshot_receipt_sha256,
-    original.payload.metadata?.snapshot_receipt_sha256,
-  );
+  assert.deepEqual(refreshed.payload.metadata, original.payload.metadata);
 });
 
 test("capture-local attachment paths cannot change immutable message identity or payload", () => {
@@ -743,7 +745,7 @@ test("backfill selection fails closed on an unselected or altered snapshot ident
   );
 });
 
-test("exact v2 state authorization selects a mixed missing revision set", () => {
+test("exact v2 state authorization selects a mixed missing snapshot set", () => {
   const { root } = fixture();
   const stateDir = mkdtempSync(join(tmpdir(), "nexus-alibaba-state-"));
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
@@ -871,7 +873,7 @@ test("attachment-only deltas retain exact parent direction, speaker, timestamp, 
   assert.equal(record.payload.metadata?.timestamp_basis, "provider_message_timestamp");
 });
 
-test("changed attachment bytes create a new revision without changing the parent message", () => {
+test("changed attachment bytes create a new snapshot without changing the parent message", () => {
   const { root, attachmentPath } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
   const messageBefore = __test__.buildRecord(
@@ -914,8 +916,8 @@ test("changed attachment bytes create a new revision without changing the parent
   );
   assert.equal(attachmentAfter.payload.external_record_id, attachmentBefore.payload.external_record_id);
   assert.notEqual(
-    attachmentAfter.payload.metadata?.revision_hash,
-    attachmentBefore.payload.metadata?.revision_hash,
+    attachmentAfter.payload.metadata?.snapshot_fingerprint_sha256,
+    attachmentBefore.payload.metadata?.snapshot_fingerprint_sha256,
   );
   assert.equal(
     attachmentAfter.payload.metadata?.logical_record_id,
@@ -934,17 +936,17 @@ test("provider attachment rows without a captured parent message remain explicit
     (row) => row.payload.payload?.source_coverage_disposition === "orphan_attachment_evidence",
   );
   assert.ok(orphan);
-  assert.match(orphan.payload.external_record_id, /^alibaba:conn-alibaba:attachment-v3:/);
+  assert.match(orphan.payload.external_record_id, /^attachment:/);
   assert.equal(orphan.payload.payload?.source_snapshot_id, undefined);
   assert.equal(orphan.payload.payload?.source_snapshot_receipt_sha256, undefined);
   assert.equal(orphan.payload.payload?.source_projection_attachments_sha256, undefined);
   assert.match(orphan.payload.content, /Unlinked sample evidence/);
   assert.equal(orphan.routing.metadata?.source_attribution, "unresolved_attachment_evidence");
   assert.equal(orphan.payload.metadata?.source_connection_id, "conn-alibaba");
-  const exact = String(orphan.payload.payload?.provider_attachment_json ?? "");
+  const exact = String(orphan.payload.payload?.provider_object_json ?? "");
   assert.equal(
     createHash("sha256").update(exact).digest("hex"),
-    orphan.payload.payload?.provider_attachment_sha256,
+    orphan.payload.payload?.provider_object_sha256,
   );
 });
 
