@@ -101,19 +101,19 @@ func mercuryProjection() *nexadapter.AdapterProjection {
 	return &nexadapter.AdapterProjection{
 		Platform: platformID,
 		Families: []nexadapter.AdapterProjectionFamily{
-			{Name: "account_snapshot", Description: "Immutable Mercury account state revisions"},
-			{Name: "transaction_revision", Description: "Immutable Mercury transaction revisions"},
-			{Name: "recipient_revision", Description: "Immutable Mercury recipient revisions"},
-			{Name: "approval_request_revision", Description: "Immutable approval-request revisions"},
-			{Name: "payment_revision", Description: "Immutable payment-state revisions"},
+			{Name: "account_snapshot", Description: "Complete Mercury account snapshots"},
+			{Name: "transaction_snapshot", Description: "Complete Mercury transaction snapshots"},
+			{Name: "recipient_snapshot", Description: "Complete Mercury recipient snapshots"},
+			{Name: "approval_request_snapshot", Description: "Complete approval-request snapshots"},
+			{Name: "payment_snapshot", Description: "Complete payment-state snapshots"},
 			{Name: "scheduled_payment_observation", Description: "Observed scheduled-payment state"},
-			{Name: "statement_revision", Description: "Immutable statement revisions"},
-			{Name: "attachment_revision", Description: "Immutable attachment revisions"},
+			{Name: "statement_snapshot", Description: "Complete statement snapshots"},
+			{Name: "attachment_snapshot", Description: "Complete attachment snapshots"},
 			{Name: "api_capture_receipt", Description: "Hash-bound provider capture receipts"},
 		},
 		Backfill: &nexadapter.AdapterProjectionSync{
 			Supported: true,
-			Strategy:  "bounded provider API pages projected as immutable record revisions",
+			Strategy:  "bounded provider API pages projected as complete provider snapshots",
 			Cursor:    "provider-created timestamp for transactions; exact-content replay for state snapshots",
 		},
 		Monitor: &nexadapter.AdapterProjectionSync{
@@ -133,7 +133,7 @@ func mercuryProjection() *nexadapter.AdapterProjection {
 			Thread:    "provider_object_id",
 		},
 		Normalization: &nexadapter.AdapterProjectionNormalize{
-			Content:     "exact provider page retained with SHA-256 receipt; object revisions use deterministic canonical JSON",
+			Content:     "exact provider page retained with SHA-256 receipt; objects use deterministic complete snapshots",
 			Attachments: true,
 		},
 	}

@@ -49,6 +49,21 @@ It does not own:
 - provider API behavior
 - one adapter package's workplan or validation ladder
 
+## Immutable Record ingestion
+
+`ExternalRecordID` is provider-native object or event identity. It is never a
+canonical Nex Record ID. Set `ProviderAccountRef`, `SourceRecordType`, and
+`ProviderVersionRef` when the provider supplies that provenance.
+
+Mutable sources must emit a complete snapshot whenever observed state changes.
+Call `CompleteProviderSnapshot(exactProviderJSON, additionalEvidence)`, handle its
+error, and pass the result through `CompleteProviderSnapshot` on
+`MessageRecordOptions`. Nex independently verifies the snapshot and owns canonical
+Record identity.
+
+Provider cursors, ETags, and fingerprints remain adapter checkpoint cache. Never
+use them as canonical identity or as a substitute for a complete snapshot.
+
 ## Validation
 
 When changing this SDK:

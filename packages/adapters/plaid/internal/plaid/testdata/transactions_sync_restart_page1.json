@@ -1,0 +1,27 @@
+{
+  "added": [
+    {
+      "transaction_id": "posted-transaction-001",
+      "account_id": "account-amex-synthetic",
+      "pending": false,
+      "pending_transaction_id": "pending-transaction-001",
+      "date": "2026-07-17",
+      "authorized_date": "2026-07-16",
+      "datetime": "2026-07-17T12:00:00Z",
+      "name": "Posted Merchant",
+      "merchant_name": "Posted Merchant",
+      "amount": 396.15,
+      "iso_currency_code": "USD",
+      "unofficial_currency_code": null
+    }
+  ],
+  "modified": [],
+  "removed": [
+    {
+      "transaction_id": "pending-transaction-001"
+    }
+  ],
+  "next_cursor": "cursor-restart-1",
+  "has_more": true,
+  "request_id": "req-sync-restart-page1"
+}

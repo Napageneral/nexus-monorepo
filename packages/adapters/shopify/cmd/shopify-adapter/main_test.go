@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,18 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	if record.Routing.ContainerID != "order" {
 		t.Fatalf("unexpected container id: %q", record.Routing.ContainerID)
 	}
+	if record.Payload.ExternalRecordID != "order:101" {
+		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
+	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.order" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
+	}
+	if record.Routing.ProviderAccountRef == nil || *record.Routing.ProviderAccountRef != "moonsleepco.myshopify.com" {
+		t.Fatalf("provider_account_ref: %#v", record.Routing.ProviderAccountRef)
+	}
+	if record.Payload.ProviderVersionRef != nil {
+		t.Fatalf("provider_version_ref must not reuse snapshot fingerprint: %#v", record.Payload.ProviderVersionRef)
+	}
 
 	metadata := record.Payload.Metadata
 	if metadata["family"] != "order" {
@@ -73,6 +86,61 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	}
 	if bridge["utm_source"] != "google" {
 		t.Fatalf("unexpected utm_source: %#v", bridge["utm_source"])
+	}
+}
+
+func TestShopifySnapshotFingerprintStoreRoundTrip(t *testing.T) {
+	t.Setenv(shopifyAdapterStateDirEnv, t.TempDir())
+	store, err := openShopifySnapshotFingerprintStore("shopify-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.close() })
+	duplicate, err := store.isDuplicate("order", "moonsleep:101", "fingerprint-1")
+	if err != nil || duplicate {
+		t.Fatalf("initial duplicate=%t err=%v", duplicate, err)
+	}
+	if err := store.put("order", "moonsleep:101", "fingerprint-1"); err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err = store.isDuplicate("order", "moonsleep:101", "fingerprint-1")
+	if err != nil || !duplicate {
+		t.Fatalf("stored duplicate=%t err=%v", duplicate, err)
+	}
+	duplicate, err = store.isDuplicate("order", "moonsleep:101", "fingerprint-2")
+	if err != nil || duplicate {
+		t.Fatalf("changed duplicate=%t err=%v", duplicate, err)
+	}
+}
+
+func TestShopifySnapshotFingerprintStoreMigratesLegacyCheckpoint(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv(shopifyAdapterStateDirEnv, stateDir)
+	dbPath := filepath.Join(stateDir, "shopify", "shopify-primary", "monitor-revisions.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE monitor_revisions (family TEXT NOT NULL, logical_row_id TEXT NOT NULL, revision_hash TEXT NOT NULL, updated_ts INTEGER NOT NULL, PRIMARY KEY (family, logical_row_id))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO monitor_revisions VALUES ('order', 'moonsleep:101', 'legacy-fingerprint', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openShopifySnapshotFingerprintStore("shopify-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.close() })
+	duplicate, err := store.isDuplicate("order", "moonsleep:101", "legacy-fingerprint")
+	if err != nil || !duplicate {
+		t.Fatalf("migrated duplicate=%t err=%v", duplicate, err)
 	}
 }
 
@@ -109,7 +177,7 @@ func TestBuildLineItemRecord(t *testing.T) {
 	if record.Routing.Adapter != platformID {
 		t.Fatalf("unexpected adapter id: %q", record.Routing.Adapter)
 	}
-	if !strings.Contains(record.Payload.ExternalRecordID, ":line_item:101:501:") {
+	if record.Payload.ExternalRecordID != "line_item:101:501" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
 	}
 }

@@ -441,7 +441,6 @@ function selectedBackfillRows(
   }
   const externalRecordIds = selection.externalRecordIds;
   const expectedRecordCount = selection.expectedRecordCount;
-  const identityRoot = `alibaba:${safeIdToken(connection)}:`;
   const selectedFamilies = legacySelection
     ? ["attachment"]
     : Array.isArray(selection.recordFamilies)
@@ -476,8 +475,8 @@ function selectedBackfillRows(
   }
   const identities = externalRecordIds.map((value) => textValue(value));
   const familyForIdentity = (value: string): string | null => {
-    if (value.startsWith(`${identityRoot}message-v3:`)) return "message";
-    if (value.startsWith(`${identityRoot}attachment-v3:`)) return "attachment";
+    if (/^message:[A-Za-z0-9._-]+$/.test(value)) return "message";
+    if (/^attachment:[a-f0-9]{64}$/.test(value)) return "attachment";
     return null;
   };
   if (
@@ -1032,8 +1031,6 @@ function normalizeAttachment(
     content_hash: contentHash,
     metadata: {
       evidence_status: textValue(attachment.status) ?? "unknown",
-      snapshot_id: snapshot.ref.id,
-      snapshot_receipt_sha256: snapshot.ref.complete_sha256,
       provider_object_sha256: attachment.provider_object_sha256,
     },
   };
@@ -1101,7 +1098,7 @@ function buildRecord(
   if (!timestamp) throw new Error(`Alibaba message ${message.messageId} has no timestamp`);
 
   const content = textValue(message.text) ?? "[Alibaba message without a text body]";
-  const revisionHash = sha256Bytes(Buffer.from(stableJson({
+  const snapshotFingerprint = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: message.provider_object_sha256,
     content,
   }), "utf8"));
@@ -1113,6 +1110,7 @@ function buildRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
+      provider_account_ref: config.account_id,
       sender_id: actualSenderId,
       sender_name: incoming
         ? textValue(message.senderName) ?? textValue(senderPerson?.display_name)
@@ -1152,10 +1150,8 @@ function buildRecord(
       },
     },
     payload: {
-      // Nex keys the canonical record by external_record_id and derives immutable
-      // revisions from later payload changes. Keep the provider message identity
-      // stable here; the exact provider/payload digest remains in revision_hash.
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:message-v3:${safeIdToken(message.messageId)}`,
+      external_record_id: `message:${safeIdToken(message.messageId)}`,
+      source_record_type: "alibaba.message",
       timestamp,
       content,
       content_type: "text",
@@ -1173,14 +1169,11 @@ function buildRecord(
         source_connection_id: connectionId,
         family: "message",
         logical_record_id: logicalMessageId,
-        revision_hash: revisionHash,
+        snapshot_fingerprint_sha256: snapshotFingerprint,
         message_id: message.messageId,
         conversation_id: message.cid,
         message_type: textValue(message.msgType) ?? null,
         direction: incoming ? "incoming" : "outgoing",
-        snapshot_id: snapshot.ref.id,
-        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
         identity_contract: snapshot.ref.complete.schemaVersion === 2
           ? IDENTITY_DIRECTORY_CONTRACT
@@ -1258,7 +1251,7 @@ function buildAttachmentRecord(
     ...(extracted ? [extracted.slice(0, config.attachment_text_limit)] : []),
   ].join("\n\n");
   const timestamp = attachmentTimestamp(attachment, snapshot);
-  const revisionHash = sha256Bytes(Buffer.from(stableJson({
+  const snapshotFingerprint = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: attachment.provider_object_sha256,
     content_hash: normalized.content_hash ?? null,
     extraction_sha256: extracted ? sha256Bytes(Buffer.from(extracted, "utf8")) : null,
@@ -1274,6 +1267,7 @@ function buildAttachmentRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
+      provider_account_ref: config.account_id,
       sender_id: linkedToProviderMessage
         ? incoming ? supplierId : config.account_id
         : `${config.account_id}:evidence-capture`,
@@ -1302,17 +1296,15 @@ function buildAttachmentRecord(
       },
     },
     payload: {
-      // Attachment content and extraction changes belong to the same canonical
-      // record. The logical provider identity is stable while revision_hash binds
-      // the exact bytes/extraction state for Nex revision custody.
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-v3:${sourceIdentity}`,
+      external_record_id: `attachment:${sourceIdentity}`,
+      source_record_type: "alibaba.attachment",
       timestamp,
       content,
       content_type: "text",
       ...(!incoming && linkedToProviderMessage ? { recipients: [supplierId] } : {}),
       payload: {
-        provider_attachment_json: attachment.provider_object_json,
-        provider_attachment_sha256: attachment.provider_object_sha256,
+        provider_object_json: attachment.provider_object_json,
+        provider_object_sha256: attachment.provider_object_sha256,
         source_message_id: textValue(attachment.messageId) ?? null,
         source_conversation_id: textValue(attachment.cid) ?? null,
         source_coverage_disposition: sourceCoverageDisposition,
@@ -1324,12 +1316,8 @@ function buildAttachmentRecord(
         source_system: "alibaba_messenger",
         source_connection_id: connectionId,
         family: "attachment",
-        source_record_type: "alibaba_attachment",
         logical_record_id: `attachment:${sourceIdentity}`,
-        revision_hash: revisionHash,
-        snapshot_id: snapshot.ref.id,
-        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        snapshot_captured_at: snapshot.ref.captured_at,
+        snapshot_fingerprint_sha256: snapshotFingerprint,
         evidence_boundary: "sanitized_normalized_export",
         source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
         timestamp_basis: parentMessage || parseTimestamp(attachment.parentMessageTimestamp)
@@ -1372,7 +1360,7 @@ function stableJson(value: unknown): string {
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
-      throw new Error("Alibaba revision input contains an unsafe number");
+      throw new Error("Alibaba snapshot input contains an unsafe number");
     }
     return JSON.stringify(value);
   }
@@ -1384,7 +1372,7 @@ function stableJson(value: unknown): string {
       .map((key) => `${JSON.stringify(key)}:${stableJson(row[key])}`)
       .join(",")}}`;
   }
-  throw new Error("Alibaba revision input is not JSON-safe");
+  throw new Error("Alibaba snapshot input is not JSON-safe");
 }
 
 function recordsForWindow(

@@ -1,6 +1,39 @@
 package nexadapter
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"time"
+)
+
+var completeProviderSnapshotReservedKeys = map[string]struct{}{
+	"provider_object":        {},
+	"provider_object_json":   {},
+	"provider_object_sha256": {},
+}
+
+// CompleteProviderSnapshot preserves exact provider JSON and a verification
+// digest. Nex independently verifies this digest and owns canonical Record
+// identity.
+func CompleteProviderSnapshot(providerObjectJSON string, additional map[string]any) (map[string]any, error) {
+	var providerObject map[string]any
+	if err := json.Unmarshal([]byte(providerObjectJSON), &providerObject); err != nil || providerObject == nil {
+		return nil, errors.New("provider_object_json must contain one non-null top-level object")
+	}
+	snapshot := make(map[string]any, len(additional)+2)
+	for key, value := range additional {
+		if _, reserved := completeProviderSnapshotReservedKeys[key]; reserved {
+			return nil, errors.New("complete provider snapshot additional fields contain a reserved key")
+		}
+		snapshot[key] = value
+	}
+	digest := sha256.Sum256([]byte(providerObjectJSON))
+	snapshot["provider_object_json"] = providerObjectJSON
+	snapshot["provider_object_sha256"] = hex.EncodeToString(digest[:])
+	return snapshot, nil
+}
 
 // RecordBuilder provides a fluent API for constructing canonical
 // record.ingest envelopes. Use NewRecord() to start building.
@@ -74,6 +107,26 @@ func (b *RecordBuilder) WithConnection(connectionID string) *RecordBuilder {
 	return b
 }
 
+func (b *RecordBuilder) WithProviderAccountRef(providerAccountRef string) *RecordBuilder {
+	b.record.Routing.ProviderAccountRef = &providerAccountRef
+	return b
+}
+
+func (b *RecordBuilder) WithSourceRecordType(sourceRecordType string) *RecordBuilder {
+	b.record.Payload.SourceRecordType = &sourceRecordType
+	return b
+}
+
+func (b *RecordBuilder) WithProviderVersionRef(providerVersionRef string) *RecordBuilder {
+	b.record.Payload.ProviderVersionRef = &providerVersionRef
+	return b
+}
+
+func (b *RecordBuilder) WithCompleteProviderSnapshot(snapshot map[string]any) *RecordBuilder {
+	b.record.Payload.Payload = snapshot
+	return b
+}
+
 func (b *RecordBuilder) WithThread(threadID string) *RecordBuilder {
 	b.record.Routing.ThreadID = threadID
 	return b
@@ -121,29 +174,33 @@ func (b *RecordBuilder) Build() AdapterInboundRecord {
 }
 
 type MessageRecordOptions struct {
-	Platform         string
-	ConnectionID     string
-	ExternalRecordID string
-	SenderID         string
-	SenderName       string
-	ReceiverID       string
-	ReceiverName     string
-	SpaceID          string
-	SpaceName        string
-	ContainerID      string
-	ContainerKind    string
-	ContainerName    string
-	ThreadID         string
-	ThreadName       string
-	ReplyToID        string
-	Timestamp        time.Time
-	TimestampUnixMs  int64
-	Content          string
-	ContentType      string
-	Attachments      []Attachment
-	Recipients       []string
-	Metadata         map[string]any
-	RoutingMetadata  map[string]any
+	Platform                 string
+	ConnectionID             string
+	ProviderAccountRef       string
+	ExternalRecordID         string
+	SourceRecordType         string
+	ProviderVersionRef       string
+	SenderID                 string
+	SenderName               string
+	ReceiverID               string
+	ReceiverName             string
+	SpaceID                  string
+	SpaceName                string
+	ContainerID              string
+	ContainerKind            string
+	ContainerName            string
+	ThreadID                 string
+	ThreadName               string
+	ReplyToID                string
+	Timestamp                time.Time
+	TimestampUnixMs          int64
+	Content                  string
+	ContentType              string
+	Attachments              []Attachment
+	Recipients               []string
+	Metadata                 map[string]any
+	CompleteProviderSnapshot map[string]any
+	RoutingMetadata          map[string]any
 }
 
 func MessageRecord(options MessageRecordOptions) AdapterInboundRecord {
@@ -152,6 +209,19 @@ func MessageRecord(options MessageRecordOptions) AdapterInboundRecord {
 		WithSender(options.SenderID, options.SenderName).
 		WithContainer(options.ContainerID, options.ContainerKind).
 		WithContent(options.Content)
+
+	if options.ProviderAccountRef != "" {
+		builder.WithProviderAccountRef(options.ProviderAccountRef)
+	}
+	if options.SourceRecordType != "" {
+		builder.WithSourceRecordType(options.SourceRecordType)
+	}
+	if options.ProviderVersionRef != "" {
+		builder.WithProviderVersionRef(options.ProviderVersionRef)
+	}
+	if options.CompleteProviderSnapshot != nil {
+		builder.WithCompleteProviderSnapshot(options.CompleteProviderSnapshot)
+	}
 
 	if options.ContentType != "" {
 		builder.WithContentType(options.ContentType)

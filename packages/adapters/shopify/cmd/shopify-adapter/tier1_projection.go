@@ -1251,7 +1251,8 @@ func fetchMarketingActivitiesSince(ctx context.Context, state *shopifyState, sin
 	return activities, sourceRequest, latestUpdatedAt, nil
 }
 
-func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify customer build: %v", err)
@@ -1264,7 +1265,7 @@ func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, s
 	}
 	customerID := shopifyGIDIdentityToken(customerGID)
 	row := normalizedCustomerRow(state.ShopDomain, customer)
-	revision := revisionHash(providerRevisionInput(customer.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(customer.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, customerGID)
 	threadID := fmt.Sprintf("%s:customer:%s", state.ShopDomain, customerID)
 	threadName := firstNonBlank(customer.DisplayName, customer.Email, customerID)
@@ -1298,27 +1299,28 @@ func buildCustomerRecord(state *shopifyState, customer shopifyGraphQLCustomer, s
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:customer:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), customerID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:customer:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), customerID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(customer.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("customer %s email=%s state=%s", threadName, firstNonBlank(customer.Email, "unknown"), firstNonBlank(customer.State, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(customer.rawProviderJSON, customer.rawProviderPayload, customer),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "customer",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "customer",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify product build: %v", err)
@@ -1331,7 +1333,7 @@ func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sour
 	}
 	productID := shopifyGIDIdentityToken(productGID)
 	row := normalizedProductRow(state.ShopDomain, product)
-	revision := revisionHash(providerRevisionInput(product.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(product.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, productGID)
 	threadID := fmt.Sprintf("%s:product:%s", state.ShopDomain, productID)
 	threadName := firstNonBlank(product.Title, product.Handle, productID)
@@ -1366,27 +1368,28 @@ func buildProductRecord(state *shopifyState, product shopifyGraphQLProduct, sour
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:product:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), productID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:product:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), productID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(product.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("product %s handle=%s status=%s", threadName, firstNonBlank(product.Handle, "unknown"), firstNonBlank(product.Status, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(product.rawProviderJSON, product.rawProviderPayload, product),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "product",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "product",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollection, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollection, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify collection build: %v", err)
@@ -1399,7 +1402,7 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 	}
 	collectionID := shopifyGIDIdentityToken(collectionGID)
 	row := normalizedCollectionRow(state.ShopDomain, collection)
-	revision := revisionHash(providerRevisionInput(collection.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(collection.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, collectionGID)
 	threadID := fmt.Sprintf("%s:collection:%s", state.ShopDomain, collectionID)
 	threadName := firstNonBlank(collection.Title, collection.Handle, collectionID)
@@ -1434,27 +1437,32 @@ func buildCollectionRecord(state *shopifyState, collection shopifyGraphQLCollect
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:collection:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), collectionID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:collection:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), collectionID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(collection.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("collection %s handle=%s products=%d", threadName, firstNonBlank(collection.Handle, "unknown"), collection.ProductsCount.Count),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(collection.rawProviderJSON, collection.rawProviderPayload, collection),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "collection",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "collection",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem, sourceRequest shopifySourceRequest) []nexadapter.AdapterInboundRecord {
+func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem, sourceRequest shopifySourceRequest) (records []nexadapter.AdapterInboundRecord) {
+	defer func() {
+		for index := range records {
+			records[index] = bindShopifyImmutableRecord(state, records[index])
+		}
+	}()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify inventory build: %v", err)
@@ -1480,7 +1488,7 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 			variantIDs = append(variantIDs, variantID)
 		}
 	}
-	records := make([]nexadapter.AdapterInboundRecord, 0, len(item.InventoryLevels.Edges))
+	records = make([]nexadapter.AdapterInboundRecord, 0, len(item.InventoryLevels.Edges))
 	for _, levelEdge := range item.InventoryLevels.Edges {
 		level := levelEdge.Node
 		levelGID := strings.TrimSpace(level.ID)
@@ -1488,7 +1496,7 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 			continue
 		}
 		row := normalizedInventoryRow(state.ShopDomain, item, level)
-		revision := revisionHash(providerRevisionInput(item.rawProviderPayload, row))
+		fingerprint := snapshotFingerprint(providerSnapshotInput(item.rawProviderPayload, row))
 		logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, itemGID, levelGID)
 		providerIDs := map[string]any{
 			"shop_domain":         state.ShopDomain,
@@ -1524,21 +1532,21 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 				},
 			},
 			Payload: nexadapter.AdapterInboundPayload{
-				ExternalRecordID: fmt.Sprintf("%s:%s:inventory:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), itemID, nexadapter.SafeIDToken(levelGID), revision),
+				ExternalRecordID: fmt.Sprintf("%s:%s:inventory:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), itemID, nexadapter.SafeIDToken(levelGID), fingerprint),
 				Timestamp:        shopifyUpdatedAtOrNow(firstNonBlank(level.UpdatedAt, item.UpdatedAt)).UnixMilli(),
 				Content:          fmt.Sprintf("inventory item=%s location=%s available=%d tracked=%t", threadName, firstNonBlank(level.Location.Name, "unknown"), inventoryQuantity(level, "available"), item.Tracked),
 				ContentType:      "text",
 				Payload:          providerPayloadEnvelope(item.rawProviderJSON, item.rawProviderPayload, item),
 				Metadata: map[string]any{
-					"connection_id":     connectionID,
-					"adapter_id":        platformID,
-					"family":            "inventory",
-					"logical_row_id":    logicalRowID,
-					"revision_hash":     revision,
-					"provider_ids":      providerIDs,
-					"row":               row,
-					"bridge_attributes": map[string]any{},
-					"source_request":    sourceRequest.metadata(),
+					"connection_id":               connectionID,
+					"adapter_id":                  platformID,
+					"family":                      "inventory",
+					"logical_row_id":              logicalRowID,
+					"snapshot_fingerprint_sha256": fingerprint,
+					"provider_ids":                providerIDs,
+					"row":                         row,
+					"bridge_attributes":           map[string]any{},
+					"source_request":              sourceRequest.metadata(),
 				},
 			},
 		}
@@ -1547,7 +1555,8 @@ func buildInventoryRecords(state *shopifyState, item shopifyGraphQLInventoryItem
 	return records
 }
 
-func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfillmentOrder, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfillmentOrder, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify fulfillment build: %v", err)
@@ -1560,7 +1569,7 @@ func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfi
 	}
 	fulfillmentID := shopifyGIDIdentityToken(fulfillmentGID)
 	row := normalizedFulfillmentRow(state.ShopDomain, fulfillment)
-	revision := revisionHash(providerRevisionInput(fulfillment.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(fulfillment.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, fulfillmentGID)
 	threadID := fmt.Sprintf("%s:fulfillment:%s", state.ShopDomain, fulfillmentID)
 	threadName := firstNonBlank(fulfillment.OrderName, fulfillmentID)
@@ -1596,27 +1605,28 @@ func buildFulfillmentRecord(state *shopifyState, fulfillment shopifyGraphQLFulfi
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:fulfillment:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), fulfillmentID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:fulfillment:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), fulfillmentID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(fulfillment.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("fulfillment %s status=%s request_status=%s", threadName, firstNonBlank(fulfillment.Status, "unknown"), firstNonBlank(fulfillment.RequestStatus, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(fulfillment.rawProviderJSON, fulfillment.rawProviderPayload, fulfillment),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "fulfillment",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "fulfillment",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRecord, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRecord, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify discount build: %v", err)
@@ -1629,7 +1639,7 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 	}
 	discountID := shopifyGIDIdentityToken(discountGID)
 	row := normalizedDiscountRow(state.ShopDomain, discount)
-	revision := revisionHash(providerRevisionInput(discount.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(discount.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, discountGID)
 	threadID := fmt.Sprintf("%s:discount:%s", state.ShopDomain, discountID)
 	threadName := firstNonBlank(discount.Title, discountID)
@@ -1664,27 +1674,28 @@ func buildDiscountRecord(state *shopifyState, discount shopifyGraphQLDiscountRec
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:discount:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), discountID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:discount:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), discountID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(discount.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("discount %s status=%s class=%s", threadName, firstNonBlank(discount.Status, "unknown"), firstNonBlank(discount.DiscountType, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(discount.rawProviderJSON, discount.rawProviderPayload, discount),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "discount",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "discount",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingActivity, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingActivity, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify marketing build: %v", err)
@@ -1697,7 +1708,7 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 	}
 	activityID := shopifyGIDIdentityToken(activityGID)
 	row := normalizedMarketingRow(state.ShopDomain, activity)
-	revision := revisionHash(providerRevisionInput(activity.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(activity.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, activityGID)
 	threadID := fmt.Sprintf("%s:marketing:%s", state.ShopDomain, activityID)
 	threadName := firstNonBlank(activity.Title, activityID)
@@ -1732,21 +1743,21 @@ func buildMarketingRecord(state *shopifyState, activity shopifyGraphQLMarketingA
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:marketing:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), activityID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:marketing:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), activityID, fingerprint),
 			Timestamp:        shopifyUpdatedAtOrNow(activity.UpdatedAt).UnixMilli(),
 			Content:          fmt.Sprintf("marketing %s status=%s channel=%s tactic=%s", threadName, firstNonBlank(activity.Status, "unknown"), firstNonBlank(activity.MarketingChannel, "unknown"), firstNonBlank(activity.Tactic, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(activity.rawProviderJSON, activity.rawProviderPayload, activity),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "marketing",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "marketing",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}

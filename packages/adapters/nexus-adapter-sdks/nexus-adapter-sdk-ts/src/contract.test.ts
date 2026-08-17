@@ -61,7 +61,8 @@ describe("adapter protocol contract (active Nex docs)", () => {
 
     const inboundRecord = loadJSON(path.join(fixturesDir, "inbound_record.json"));
     expect(get("AdapterInboundRecord")(inboundRecord)).toBe(true);
-    AdapterInboundRecordSchema.parse(inboundRecord);
+    const parsedInboundRecord = AdapterInboundRecordSchema.parse(inboundRecord);
+    expect(get("AdapterCompleteProviderSnapshot")(parsedInboundRecord.payload.payload)).toBe(true);
 
     const health = loadJSON(path.join(fixturesDir, "adapter_health.json"));
     expect(get("AdapterHealth")(health)).toBe(true);
@@ -127,7 +128,9 @@ describe("adapter protocol contract (active Nex docs)", () => {
       AdapterInboundRecordSchema.parse(value),
     );
     roundTrip("AdapterHealth", "adapter_health.json", (value) => AdapterHealthSchema.parse(value));
-    roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) => AdapterConnectionIdentitySchema.parse(value));
+    roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) =>
+      AdapterConnectionIdentitySchema.parse(value),
+    );
   });
 });
 
@@ -149,14 +152,14 @@ describe("opaque record payload", () => {
         content: "sanitized supplier message",
         content_type: "text",
         payload: {
-          provider_object_json: "{\"messageId\":\"1\"}",
+          provider_object_json: '{"messageId":"1"}',
           provider_object_sha256: "a".repeat(64),
         },
       },
     });
 
     expect(parsed.payload.payload).toEqual({
-      provider_object_json: "{\"messageId\":\"1\"}",
+      provider_object_json: '{"messageId":"1"}',
       provider_object_sha256: "a".repeat(64),
     });
   });

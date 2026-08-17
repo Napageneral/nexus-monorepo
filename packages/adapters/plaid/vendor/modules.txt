@@ -1,0 +1,4 @@
+# github.com/nexus-project/adapter-sdk-go v0.0.0 => ../nexus-adapter-sdks/nexus-adapter-sdk-go
+## explicit; go 1.23
+github.com/nexus-project/adapter-sdk-go
+# github.com/nexus-project/adapter-sdk-go => ../nexus-adapter-sdks/nexus-adapter-sdk-go

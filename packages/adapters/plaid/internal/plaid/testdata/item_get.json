@@ -1,0 +1,19 @@
+{
+  "item": {
+    "item_id": "item-synthetic-001",
+    "institution_id": "ins_synthetic_card",
+    "available_products": ["auth"],
+    "billed_products": ["transactions", "liabilities"],
+    "products": ["transactions", "liabilities"],
+    "consent_expiration_time": "2027-07-17T00:00:00Z",
+    "update_type": "background",
+    "error": null,
+    "status": {
+      "transactions": {
+        "last_successful_update": "2026-07-17T16:30:00Z",
+        "last_failed_update": ""
+      }
+    }
+  },
+  "request_id": "req-item-synthetic"
+}
