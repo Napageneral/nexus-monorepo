@@ -1,0 +1,158 @@
+{
+  "id": "plaid",
+  "version": "0.3.1",
+  "displayName": "Plaid Read-Only Financial Data",
+  "description": "Cleanroom-first Plaid adapter for institution coverage, Items, accounts, real-time balances, credit liabilities, and cursor-based transaction changes.",
+  "platform": "plaid",
+  "command": "./scripts/plaid-adapter-launcher.sh",
+  "skill": "./SKILL.md",
+  "methods": {
+    "plaid.institutions.coverage": {
+      "description": "Probe Plaid institution product coverage by institution id or search query without an Item credential.",
+      "action": "read",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "institution_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 100 },
+          "query": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "country_codes": { "type": "array", "items": { "type": "string" }, "maxItems": 100 },
+          "requested_products": { "type": "array", "items": { "type": "string" }, "maxItems": 100 },
+          "count": { "type": "integer", "minimum": 1, "maximum": 10 }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "institutions": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        },
+        "required": ["credential_bindings", "institutions"],
+        "additionalProperties": true
+      }
+    },
+    "plaid.item.get": {
+      "description": "Read the Plaid Item and transaction update status for the bound connection.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": false },
+      "response": {
+        "type": "object",
+        "properties": {
+          "evidence": { "type": "object", "additionalProperties": true },
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "item": { "type": "object", "additionalProperties": true },
+          "raw": {}
+        },
+        "required": ["evidence", "credential_bindings", "item", "raw"],
+        "additionalProperties": true
+      }
+    },
+    "plaid.accounts.list": {
+      "description": "Read accounts and provider-reported balances for the bound Plaid Item.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": false },
+      "response": {
+        "type": "object",
+        "properties": {
+          "evidence": { "type": "object", "additionalProperties": true },
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "raw": {}
+        },
+        "required": ["evidence", "credential_bindings", "accounts", "raw"],
+        "additionalProperties": true
+      }
+    },
+    "plaid.accounts.balance.get": {
+      "description": "Request a real-time balance snapshot for all or selected provider accounts.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "provider_account_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 100 }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "evidence": { "type": "object", "additionalProperties": true },
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "accounts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "raw": {}
+        },
+        "required": ["evidence", "credential_bindings", "accounts", "raw"],
+        "additionalProperties": true
+      }
+    },
+    "plaid.liabilities.get": {
+      "description": "Read credit-card liability facts for all or selected provider accounts.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "provider_account_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 100 }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "evidence": { "type": "object", "additionalProperties": true },
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "credit": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "raw": {}
+        },
+        "required": ["evidence", "credential_bindings", "credit", "raw"],
+        "additionalProperties": true
+      }
+    },
+    "plaid.transactions.sync": {
+      "description": "Read transaction changes after a cursor, restart concurrent provider mutations, and return explicit non-committable terminal evidence on any fetched-page failure.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "cursor": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1, "maximum": 500 },
+          "max_pages": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "max_restarts": { "type": "integer", "minimum": 0, "maximum": 10 }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "credential_bindings": { "type": "object", "additionalProperties": true },
+          "completion_state": { "type": "string", "enum": ["complete", "terminal_error"] },
+          "cursor_commit_allowed": { "type": "boolean" },
+          "next_cursor": { "type": "string" },
+          "pages": { "type": "integer", "minimum": 0 },
+          "restarts": { "type": "integer", "minimum": 0 },
+          "added": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "modified": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "removed": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "changes": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "page_evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "raw_pages": { "type": "array", "items": {} },
+          "restart_evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "terminal_error": { "type": ["object", "null"], "additionalProperties": true }
+        },
+        "required": ["credential_bindings", "completion_state", "cursor_commit_allowed", "next_cursor", "pages", "restarts", "added", "modified", "removed", "changes", "page_evidence", "raw_pages", "restart_evidence", "terminal_error"],
+        "additionalProperties": true
+      }
+    }
+  }
+}

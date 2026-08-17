@@ -1,0 +1,9 @@
+{
+  "institution": {
+    "institution_id": "ins_synthetic_card",
+    "name": "Synthetic Card Institution",
+    "country_codes": ["US"],
+    "products": ["auth", "balance", "identity", "liabilities", "transactions"]
+  },
+  "request_id": "req-institution-synthetic"
+}

@@ -1,0 +1,8 @@
+{
+  "display_message": null,
+  "documentation_url": "https://plaid.com/docs/errors/transactions/",
+  "error_code": "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+  "error_message": "Synthetic concurrent transaction mutation",
+  "error_type": "TRANSACTIONS_ERROR",
+  "request_id": "req-sync-mutation"
+}

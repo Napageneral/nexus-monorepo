@@ -1,0 +1,27 @@
+{
+  "added": [],
+  "modified": [
+    {
+      "transaction_id": "modified-transaction-002",
+      "account_id": "account-chase-synthetic",
+      "pending": false,
+      "pending_transaction_id": null,
+      "date": "2026-07-17",
+      "authorized_date": "2026-07-17",
+      "datetime": "2026-07-17T13:00:00Z",
+      "name": "Corrected Merchant",
+      "merchant_name": "Corrected Merchant",
+      "amount": 0.1,
+      "iso_currency_code": "USD",
+      "unofficial_currency_code": null
+    }
+  ],
+  "removed": [
+    {
+      "transaction_id": "removed-transaction-003"
+    }
+  ],
+  "next_cursor": "cursor-final",
+  "has_more": false,
+  "request_id": "req-sync-restart-page2"
+}
