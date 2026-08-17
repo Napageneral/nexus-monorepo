@@ -20,14 +20,17 @@ durable closed-window cursor with a five-minute restart overlap. Marketing
 campaign content is stored once; per-recipient delivery evidence refers to that
 campaign record instead of repeating HTML thousands of times.
 
-All Transactional ingestion uses Mailchimp's complete activity export. The
-export job id is checkpointed in the private adapter state directory, so a
-restart resumes the same export rather than requesting another. The normal
-message-search endpoint remains an explicit low-latency read method, but its
-1,000-result ceiling is never used as completeness proof.
+Transactional current-tail ingestion uses a durable overlapping cursor.
+Mailchimp caps each recent search response at 1,000 messages and its date
+filters are day-granular, so a capped response is admitted only when its oldest
+message still overlaps the previous durable cursor. A lost overlap fails closed
+without advancing the cursor. A first-run capped tail may establish a current
+high-water, but the receipt explicitly records the inaccessible historical
+portion as backfill debt instead of claiming it complete. Stable provider
+message and revision identity deduplicates the overlapping reads.
 
 Every ingestion attempt writes an immutable sanitized history receipt with its
-exact window, export id, candidate/emitted/deduplicated counts, result class,
+exact window, cap/continuity/debt/candidate/emitted/deduplicated counts, result class,
 and output digest. Receipts never include recipient addresses, message bodies,
 credentials, or raw provider error text.
 
