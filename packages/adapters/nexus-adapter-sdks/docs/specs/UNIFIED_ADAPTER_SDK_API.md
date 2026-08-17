@@ -64,6 +64,7 @@ readReplyToTarget(...)
 sleepWithSignal(...)
 withRetry(...)
 messageRecord(...)
+completeProviderSnapshot(...)
 ```
 
 Canonical authoring shape:
@@ -85,6 +86,19 @@ export default defineAdapter({
 ```
 
 There is no top-level `delivery` section in the target-state SDK API.
+
+## Immutable Record ingress
+
+`external_record_id` is provider object or provider event identity, not a Nex
+Record ID. The inbound contract also carries nullable `provider_account_ref`,
+`source_record_type`, and `provider_version_ref` provenance without allowing an
+adapter to supply canonical Record identity or snapshot digests.
+
+Mutable sources use `completeProviderSnapshot(exactProviderJson,
+additionalEvidence)` and emit the returned value as the inbound `payload`. The
+runtime independently verifies that evidence and constructs canonical Record
+identity. Provider cursors, ETags, and fingerprints remain mutable adapter cache
+and never substitute for a complete snapshot.
 
 ## `defineAdapter(...)`
 

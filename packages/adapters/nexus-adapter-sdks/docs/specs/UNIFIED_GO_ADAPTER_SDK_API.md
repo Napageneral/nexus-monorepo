@@ -63,7 +63,21 @@ ReadReplyToTarget(...)
 SleepContext(...)
 WithRetry(...)
 MessageRecord(...)
+CompleteProviderSnapshot(...)
 ```
+
+## Immutable Record ingress
+
+`ExternalRecordID` is provider object or provider event identity, not a Nex
+Record ID. The inbound contract also carries nullable `ProviderAccountRef`,
+`SourceRecordType`, and `ProviderVersionRef` provenance without allowing an
+adapter to supply canonical Record identity or snapshot digests.
+
+Mutable sources call `CompleteProviderSnapshot(exactProviderJSON,
+additionalEvidence)`, handle the returned error, and emit the snapshot through
+`MessageRecordOptions`. The runtime independently verifies that evidence and
+constructs canonical Record identity. Provider cursors, ETags, and fingerprints
+remain mutable adapter cache and never substitute for a complete snapshot.
 
 ## `DefineAdapter(...)`
 

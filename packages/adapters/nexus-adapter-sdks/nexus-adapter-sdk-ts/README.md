@@ -51,6 +51,21 @@ The canonical runtime context and adapter protocol contract live in:
 
 - `/Users/tyler/nexus/home/projects/nexus/nex/docs/specs/adapters/contract/`
 
+## Immutable Record ingestion
+
+`external_record_id` is provider-native object or event identity. It is never a
+canonical Nex Record ID. Use `providerAccountRef`, `sourceRecordType`, and
+`providerVersionRef` for source provenance when the provider supplies them.
+
+Mutable sources must emit a complete snapshot whenever observed state changes.
+Use `completeProviderSnapshot(exactProviderJson, additionalEvidence)` and pass the
+result as `completeProviderSnapshot` to `messageRecord()`. The helper preserves the
+exact provider JSON and computes a verification digest; Nex independently verifies
+the snapshot and owns canonical Record identity.
+
+Provider cursors, ETags, and fingerprints remain adapter checkpoint cache. Never
+place them in a canonical ID field or use them instead of a complete snapshot.
+
 ## Adapter CLI Skeleton
 
 ```ts

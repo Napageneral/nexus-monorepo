@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const AdapterOperationSchema = z.enum([
@@ -203,6 +204,7 @@ export const AdapterInboundRoutingSchema = z.object({
   adapter: z.string().optional(),
   platform: z.string(),
   connection_id: z.string(),
+  provider_account_ref: z.string().trim().min(1).nullable().optional(),
   sender_id: z.string(),
   sender_name: z.string().optional(),
   receiver_id: z.string().optional(),
@@ -216,12 +218,76 @@ export const AdapterInboundRoutingSchema = z.object({
   thread_name: z.string().optional(),
   reply_to_id: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+}).strict();
 
 export type AdapterInboundRouting = z.infer<typeof AdapterInboundRoutingSchema>;
 
+export const CompleteProviderSnapshotSchema = z
+  .record(z.string(), z.unknown())
+  .superRefine((value, context) => {
+    if (
+      typeof value.provider_object_json !== "string" ||
+      typeof value.provider_object_sha256 !== "string"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "complete provider snapshots require provider_object_json and provider_object_sha256",
+      });
+      return;
+    }
+    if (!/^[0-9a-f]{64}$/.test(value.provider_object_sha256)) {
+      context.addIssue({
+        code: "custom",
+        message: "provider_object_sha256 must be a lowercase SHA-256 digest",
+      });
+      return;
+    }
+    if (Object.hasOwn(value, "provider_object")) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "complete provider snapshots must preserve exact JSON, not decoded provider_object",
+      });
+      return;
+    }
+    const actual = createHash("sha256").update(value.provider_object_json, "utf8").digest("hex");
+    if (actual !== value.provider_object_sha256) {
+      context.addIssue({
+        code: "custom",
+        message: "provider_object_sha256 does not match provider_object_json",
+      });
+    }
+  });
+
+export type CompleteProviderSnapshot = z.infer<typeof CompleteProviderSnapshotSchema>;
+
+export function completeProviderSnapshot(
+  providerObjectJson: string,
+  additional: Record<string, unknown> = {},
+): CompleteProviderSnapshot {
+  if (
+    Object.hasOwn(additional, "provider_object") ||
+    Object.hasOwn(additional, "provider_object_json") ||
+    Object.hasOwn(additional, "provider_object_sha256")
+  ) {
+    throw new TypeError("complete provider snapshot additional fields contain a reserved key");
+  }
+  const parsed = JSON.parse(providerObjectJson) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new TypeError("provider_object_json must contain one non-null top-level object");
+  }
+  return CompleteProviderSnapshotSchema.parse({
+    ...additional,
+    provider_object_json: providerObjectJson,
+    provider_object_sha256: createHash("sha256").update(providerObjectJson, "utf8").digest("hex"),
+  });
+}
+
 export const AdapterInboundPayloadSchema = z.object({
-  external_record_id: z.string(),
+  external_record_id: z.string().trim().min(1),
+  source_record_type: z.string().trim().min(1).nullable().optional(),
+  provider_version_ref: z.string().trim().min(1).nullable().optional(),
   timestamp: z.number().int(),
   content: z.string(),
   content_type: ContentTypeSchema,
@@ -230,7 +296,7 @@ export const AdapterInboundPayloadSchema = z.object({
   attachments: z.array(AttachmentSchema).optional(),
   recipients: z.array(z.string()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+}).strict();
 
 export type AdapterInboundPayload = z.infer<typeof AdapterInboundPayloadSchema>;
 
@@ -238,7 +304,7 @@ export const AdapterInboundRecordSchema = z.object({
   operation: z.literal("record.ingest"),
   routing: AdapterInboundRoutingSchema,
   payload: AdapterInboundPayloadSchema,
-});
+}).strict();
 
 export type AdapterInboundRecord = z.infer<typeof AdapterInboundRecordSchema>;
 

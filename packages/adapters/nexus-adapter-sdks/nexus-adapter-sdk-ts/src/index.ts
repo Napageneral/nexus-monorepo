@@ -36,6 +36,8 @@ export { runAdapter as runAdapterCLI } from "./run.js";
 
 export {
   AdapterConnectionIdentitySchema,
+  CompleteProviderSnapshotSchema,
+  completeProviderSnapshot,
   AdapterAuthFieldSchema,
   AdapterAuthManifestSchema,
   AdapterMethodSchema,
@@ -80,6 +82,7 @@ export {
 
 export type {
   AdapterConnectionIdentity,
+  CompleteProviderSnapshot,
   AdapterAuthField,
   AdapterAuthManifest,
   AdapterMethod,

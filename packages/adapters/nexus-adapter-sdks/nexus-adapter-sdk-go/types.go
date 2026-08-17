@@ -220,33 +220,38 @@ type BackfillWindow struct {
 }
 
 type AdapterInboundRouting struct {
-	Adapter       string         `json:"adapter,omitempty"`
-	Platform      string         `json:"platform"`
-	ConnectionID  string         `json:"connection_id"`
-	SenderID      string         `json:"sender_id"`
-	SenderName    string         `json:"sender_name,omitempty"`
-	ReceiverID    string         `json:"receiver_id,omitempty"`
-	ReceiverName  string         `json:"receiver_name,omitempty"`
-	SpaceID       string         `json:"space_id,omitempty"`
-	SpaceName     string         `json:"space_name,omitempty"`
-	ContainerKind string         `json:"container_kind"`
-	ContainerID   string         `json:"container_id"`
-	ContainerName string         `json:"container_name,omitempty"`
-	ThreadID      string         `json:"thread_id,omitempty"`
-	ThreadName    string         `json:"thread_name,omitempty"`
-	ReplyToID     string         `json:"reply_to_id,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
+	Adapter            string         `json:"adapter,omitempty"`
+	Platform           string         `json:"platform"`
+	ConnectionID       string         `json:"connection_id"`
+	ProviderAccountRef *string        `json:"provider_account_ref,omitempty"`
+	SenderID           string         `json:"sender_id"`
+	SenderName         string         `json:"sender_name,omitempty"`
+	ReceiverID         string         `json:"receiver_id,omitempty"`
+	ReceiverName       string         `json:"receiver_name,omitempty"`
+	SpaceID            string         `json:"space_id,omitempty"`
+	SpaceName          string         `json:"space_name,omitempty"`
+	ContainerKind      string         `json:"container_kind"`
+	ContainerID        string         `json:"container_id"`
+	ContainerName      string         `json:"container_name,omitempty"`
+	ThreadID           string         `json:"thread_id,omitempty"`
+	ThreadName         string         `json:"thread_name,omitempty"`
+	ReplyToID          string         `json:"reply_to_id,omitempty"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
 }
 
 type AdapterInboundPayload struct {
-	ExternalRecordID string         `json:"external_record_id"`
-	Timestamp        int64          `json:"timestamp"`
-	Content          string         `json:"content"`
-	ContentType      string         `json:"content_type"`
-	Payload          map[string]any `json:"payload,omitempty"`
-	Attachments      []Attachment   `json:"attachments,omitempty"`
-	Recipients       []string       `json:"recipients,omitempty"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
+	// ExternalRecordID is provider-native object or event identity. It is never
+	// the canonical Nex Record ID.
+	ExternalRecordID   string         `json:"external_record_id"`
+	SourceRecordType   *string        `json:"source_record_type,omitempty"`
+	ProviderVersionRef *string        `json:"provider_version_ref,omitempty"`
+	Timestamp          int64          `json:"timestamp"`
+	Content            string         `json:"content"`
+	ContentType        string         `json:"content_type"`
+	Payload            map[string]any `json:"payload,omitempty"`
+	Attachments        []Attachment   `json:"attachments,omitempty"`
+	Recipients         []string       `json:"recipients,omitempty"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
 }
 
 // Attachment represents a media attachment on an event.
