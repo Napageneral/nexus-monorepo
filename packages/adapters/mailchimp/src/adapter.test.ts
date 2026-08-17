@@ -85,6 +85,92 @@ describe("Mailchimp read-only evidence adapter", () => {
     expect(JSON.stringify(record)).not.toContain("customer@example.com");
   });
 
+  it("admits a capped current tail only when it overlaps the durable cursor", async () => {
+    const calls: Array<{ date_from: string; date_to: string; limit: number }> = [];
+    const messages = Array.from({ length: 999 }, (_, index) => ({
+      _id: `message-${index}`,
+      email: `customer-${index}@example.com`,
+      state: "sent",
+      ts: 100 + index,
+    }));
+    messages.push({ ...messages[0]! });
+    const cappedClient = {
+      ...client,
+      fetchFn: async (_url: URL | RequestInfo, init?: RequestInit) => {
+        const payload = JSON.parse(String(init?.body)) as {
+          date_from: string;
+          date_to: string;
+          limit: number;
+        };
+        calls.push(payload);
+        return new Response(JSON.stringify(messages));
+      },
+    };
+    const emitted: unknown[] = [];
+    const stats = await __test__.searchTransactionalTail(
+      cappedClient,
+      new Date("2026-08-17T00:00:00Z"),
+      new Date("2026-08-17T04:00:00Z"),
+      (record) => emitted.push(record),
+      new Date(500 * 1000),
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      date_from: "2026-08-17",
+      date_to: "2026-08-17",
+      limit: 1000,
+    });
+    expect(stats).toEqual({
+      capObserved: true,
+      continuityProven: true,
+      historicalGapDetected: false,
+      candidateCount: 1000,
+      emittedCount: 999,
+      deduplicatedCount: 1,
+      oldestMessageAt: "1970-01-01T00:01:40.000Z",
+      newestMessageAt: "1970-01-01T00:18:18.000Z",
+    });
+    expect(emitted).toHaveLength(999);
+    expect(JSON.stringify(emitted)).not.toContain("@example.com");
+  });
+
+  it("records historical debt while establishing a capped monitor bootstrap", async () => {
+    const cappedClient = {
+      ...client,
+      fetchFn: async () => new Response(JSON.stringify(
+        Array.from({ length: 1000 }, (_, index) => ({ _id: `capped-${index}`, ts: 100 + index })),
+      )),
+    };
+    const stats = await __test__.searchTransactionalTail(
+      cappedClient,
+      new Date("2026-08-17T00:00:00Z"),
+      new Date("2026-08-17T04:00:00Z"),
+      () => undefined,
+      undefined,
+      true,
+    );
+    expect(stats.capObserved).toBe(true);
+    expect(stats.continuityProven).toBe(false);
+    expect(stats.historicalGapDetected).toBe(true);
+  });
+
+  it("fails closed when a capped current tail no longer overlaps its cursor", async () => {
+    const cappedClient = {
+      ...client,
+      fetchFn: async () => new Response(JSON.stringify(
+        Array.from({ length: 1000 }, (_, index) => ({ _id: `capped-${index}`, ts: 100 + index })),
+      )),
+    };
+    await expect(__test__.searchTransactionalTail(
+      cappedClient,
+      new Date("2026-08-17T00:00:00Z"),
+      new Date("2026-08-17T04:00:00Z"),
+      () => undefined,
+      new Date(50 * 1000),
+    )).rejects.toThrow("no longer overlaps the durable cursor");
+  });
+
   it("creates stable export evidence without retaining raw recipient email", () => {
     const row = {
       Date: "2026-08-14 12:00:00",

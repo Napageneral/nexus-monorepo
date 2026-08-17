@@ -48,6 +48,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const DEFAULT_EXPORT_POLL_MS = 5_000;
 const DEFAULT_EXPORT_WAIT_MS = 15 * 60 * 1000;
 const MAX_EXPORT_BYTES = 512 * 1024 * 1024;
+const TRANSACTIONAL_SEARCH_LIMIT = 1000;
 const MAX_RETRIES = 5;
 
 function asRecord(value: unknown): UnknownRecord {
@@ -740,29 +741,81 @@ async function exportTransactionalHistory(
   };
 }
 
-async function searchRecentTransactional(
+type TransactionalSearchStats = {
+  capObserved: boolean;
+  continuityProven: boolean;
+  historicalGapDetected: boolean;
+  candidateCount: number;
+  emittedCount: number;
+  deduplicatedCount: number;
+  oldestMessageAt: string | null;
+  newestMessageAt: string | null;
+};
+
+async function searchTransactionalTail(
   client: MailchimpClient,
   since: Date,
   to: Date,
   emit: (record: AdapterInboundRecord) => void,
-): Promise<void> {
+  continuityFloor?: Date,
+  allowIncompleteBootstrap = false,
+): Promise<TransactionalSearchStats> {
+  if (to.getTime() <= since.getTime()) {
+    throw new Error("Mailchimp Transactional search window must have positive duration");
+  }
   const messages = asArray(await transactionalPost(client, "/messages/search.json", {
+    // Mailchimp documents these as dates, not timestamps. The provider ignores
+    // sub-day precision, so current-tail safety comes from overlap continuity,
+    // not from pretending a capped day can be subdivided.
     date_from: since.toISOString().slice(0, 10),
     date_to: to.toISOString().slice(0, 10),
-    limit: 1000,
+    limit: TRANSACTIONAL_SEARCH_LIMIT,
   })).map(asRecord);
-  if (messages.length >= 1000) {
-    throw new Error("Mailchimp Transactional recent search reached its 1000-message completeness cap");
+  const records = new Map<string, AdapterInboundRecord>();
+  const timestamps: number[] = [];
+  for (const message of messages) {
+    const record = transactionalRecord(client, message);
+    timestamps.push(record.payload.timestamp);
+    const identity = stableJson([
+      record.payload.external_record_id,
+      record.payload.metadata?.revision_hash ?? null,
+    ]);
+    records.set(identity, record);
   }
-  for (const message of messages) emit(transactionalRecord(client, message));
-}
+  const capObserved = messages.length >= TRANSACTIONAL_SEARCH_LIMIT;
+  const oldestTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : null;
+  const newestTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : null;
+  let continuityProven = !capObserved;
+  let historicalGapDetected = false;
+  if (capObserved) {
+    if (continuityFloor) {
+      continuityProven = oldestTimestamp !== null
+        && oldestTimestamp <= continuityFloor.getTime();
+      if (!continuityProven) {
+        throw new Error("Mailchimp Transactional capped tail no longer overlaps the durable cursor");
+      }
+    } else if (allowIncompleteBootstrap) {
+      // Establish a current high-water without misrepresenting the inaccessible
+      // portion of the seven-day provider window as complete. A later export
+      // or webhook-backed replay can close this explicitly recorded debt.
+      historicalGapDetected = true;
+    } else {
+      throw new Error("Mailchimp Transactional backfill reached its 1000-message completeness cap");
+    }
+  }
 
-type TransactionalIngestStats = {
-  exportId: string;
-  candidateCount: number;
-  emittedCount: number;
-  deduplicatedCount: number;
-};
+  for (const record of records.values()) emit(record);
+  return {
+    capObserved,
+    continuityProven,
+    historicalGapDetected,
+    candidateCount: messages.length,
+    emittedCount: records.size,
+    deduplicatedCount: messages.length - records.size,
+    oldestMessageAt: oldestTimestamp === null ? null : new Date(oldestTimestamp).toISOString(),
+    newestMessageAt: newestTimestamp === null ? null : new Date(newestTimestamp).toISOString(),
+  };
+}
 
 function writeSanitizedIngestReceipt(
   client: MailchimpClient,
@@ -821,6 +874,7 @@ async function ingestWindow(
   client: MailchimpClient,
   args: Omit<AdapterBackfillWindow, "connection_id">,
   emit: (record: AdapterInboundRecord) => void,
+  options: { continuityFloor?: Date; allowIncompleteBootstrap?: boolean } = {},
 ): Promise<void> {
   // Establish durable state custody before contacting either provider API. A
   // run without checkpoint/cursor/receipt storage is not an admissible ingest.
@@ -829,7 +883,7 @@ async function ingestWindow(
   const to = args.to ?? new Date();
   const outputIdentities: string[] = [];
   let emittedCount = 0;
-  let exportStats: TransactionalIngestStats | undefined;
+  let searchStats: TransactionalSearchStats | undefined;
   const trackedEmit = (record: AdapterInboundRecord) => {
     outputIdentities.push(stableJson([
       record.payload.external_record_id,
@@ -849,39 +903,54 @@ async function ingestWindow(
         trackedEmit(marketingRecipientRecord(client, campaign, activity));
       });
     }
-    // Search remains an explicit low-latency read method, but it is no longer
-    // admitted as a completeness proof. Every ingest window is closed by the
-    // checkpointed activity export, which has no 1,000-message result ceiling.
-    exportStats = await exportTransactionalHistory(client, args.since, to, trackedEmit);
+    // Mailchimp's recent search is day-granular and capped. The monitor admits
+    // a capped tail only when it overlaps its prior durable cursor; explicit
+    // backfills remain fail-closed because they promise historical coverage.
+    searchStats = await searchTransactionalTail(
+      client,
+      args.since,
+      to,
+      trackedEmit,
+      options.continuityFloor,
+      options.allowIncompleteBootstrap,
+    );
     writeSanitizedIngestReceipt(client, {
-      contract_version: "nexus_mailchimp_ingestion_run_v1",
+      contract_version: "nexus_mailchimp_ingestion_run_v2",
       result: "succeeded",
       started_at: startedAt,
       completed_at: new Date().toISOString(),
       window_since: args.since.toISOString(),
       window_through: to.toISOString(),
-      provider_export_id: exportStats.exportId,
-      transactional_candidate_count: exportStats.candidateCount,
-      transactional_emitted_count: exportStats.emittedCount,
-      transactional_deduplicated_count: exportStats.deduplicatedCount,
+      transactional_search_cap_observed: searchStats.capObserved,
+      transactional_tail_continuity_proven: searchStats.continuityProven,
+      transactional_historical_gap_detected: searchStats.historicalGapDetected,
+      transactional_oldest_message_at: searchStats.oldestMessageAt,
+      transactional_newest_message_at: searchStats.newestMessageAt,
+      transactional_candidate_count: searchStats.candidateCount,
+      transactional_emitted_count: searchStats.emittedCount,
+      transactional_deduplicated_count: searchStats.deduplicatedCount,
       total_emitted_count: emittedCount,
       recent_search_cap_hit: false,
       output_digest: sha256(stableJson(outputIdentities.sort())),
     });
   } catch (error) {
     writeSanitizedIngestReceipt(client, {
-      contract_version: "nexus_mailchimp_ingestion_run_v1",
+      contract_version: "nexus_mailchimp_ingestion_run_v2",
       result: "failed",
       started_at: startedAt,
       completed_at: new Date().toISOString(),
       window_since: args.since.toISOString(),
       window_through: to.toISOString(),
-      provider_export_id: exportStats?.exportId ?? null,
-      transactional_candidate_count: exportStats?.candidateCount ?? 0,
-      transactional_emitted_count: exportStats?.emittedCount ?? 0,
-      transactional_deduplicated_count: exportStats?.deduplicatedCount ?? 0,
+      transactional_search_cap_observed: searchStats?.capObserved ?? false,
+      transactional_tail_continuity_proven: searchStats?.continuityProven ?? false,
+      transactional_historical_gap_detected: searchStats?.historicalGapDetected ?? false,
+      transactional_oldest_message_at: searchStats?.oldestMessageAt ?? null,
+      transactional_newest_message_at: searchStats?.newestMessageAt ?? null,
+      transactional_candidate_count: searchStats?.candidateCount ?? 0,
+      transactional_emitted_count: searchStats?.emittedCount ?? 0,
+      transactional_deduplicated_count: searchStats?.deduplicatedCount ?? 0,
       total_emitted_count: emittedCount,
-      recent_search_cap_hit: false,
+      recent_search_cap_hit: true,
       error_class: error instanceof Error ? error.name : "UnknownError",
       output_digest: sha256(stableJson(outputIdentities.sort())),
     });
@@ -903,7 +972,10 @@ async function monitor(
     const to = cursor
       ? new Date(Math.min(closedHead.getTime(), cursor.getTime() + 24 * 60 * 60 * 1000))
       : closedHead;
-    await ingestWindow(client, { since, to }, emit);
+    await ingestWindow(client, { since, to }, emit, {
+      continuityFloor: cursor ? since : undefined,
+      allowIncompleteBootstrap: !cursor,
+    });
     writeMonitorCursor(client, to);
     if (to.getTime() < closedHead.getTime()) continue;
     await new Promise<void>((resolve) => {
@@ -948,6 +1020,7 @@ export const __test__ = {
   transactionalExportRecord,
   transactionalExportStableIdentity,
   transactionalDeliveryState,
+  searchTransactionalTail,
   connectionIdentity,
   health,
 };
@@ -955,7 +1028,7 @@ export const __test__ = {
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   platform: PLATFORM,
   name: "nexus-mailchimp-readonly-adapter",
-  version: "0.2.0",
+  version: "0.2.1",
   multi_account: true,
   credential_service: "mailchimp",
   auth: {
