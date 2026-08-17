@@ -98,4 +98,39 @@ describe("Mailchimp read-only evidence adapter", () => {
     expect(first.payload.metadata?.delivery_state).toBe("verified_delivered");
     expect(JSON.stringify(first)).not.toContain("customer@example.com");
   });
+
+  it("keeps export identity stable across delivery-state revisions", () => {
+    const sent = {
+      Date: "2026-08-14 12:00:00",
+      "Email Address": "customer@example.com",
+      Subject: "Order #1234 update",
+      Status: "sent",
+    };
+    const delivered = { ...sent, Status: "delivered" };
+    const first = __test__.transactionalExportRecord(client, sent, "export-1", 0);
+    const revision = __test__.transactionalExportRecord(
+      client,
+      delivered,
+      "export-2",
+      0,
+    );
+    expect(first.payload.external_record_id).toBe(revision.payload.external_record_id);
+    expect(first.payload.metadata?.revision_hash).not.toBe(
+      revision.payload.metadata?.revision_hash,
+    );
+  });
+
+  it("prefers provider message identity over mutable export fields", () => {
+    const first = __test__.transactionalExportStableIdentity(
+      { "Message ID": "provider-1", Status: "sent" },
+      "recipient-hash",
+      0,
+    );
+    const second = __test__.transactionalExportStableIdentity(
+      { "Message ID": "provider-1", Status: "bounced" },
+      "recipient-hash",
+      0,
+    );
+    expect(first).toBe(second);
+  });
 });

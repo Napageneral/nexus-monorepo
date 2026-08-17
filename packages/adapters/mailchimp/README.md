@@ -15,16 +15,21 @@ The two provider products use separate credential fields:
 - `marketing_api_key` (or `MAILCHIMP_API_KEY`)
 - `transactional_api_key` (or `MAILCHIMP_TRANSACTIONAL_API_KEY`)
 
-The hourly monitor rereads a bounded 48-hour overlap and relies on stable
-provider identities plus revision hashes for idempotent replay. Marketing
+The hourly monitor bootstraps from a bounded 48-hour window, then advances a
+durable closed-window cursor with a five-minute restart overlap. Marketing
 campaign content is stored once; per-recipient delivery evidence refers to that
 campaign record instead of repeating HTML thousands of times.
 
-Historical Transactional ingestion uses Mailchimp's complete activity export
-for windows longer than seven days. The export job id is checkpointed in the
-private adapter state directory, so a restart resumes the same export rather
-than requesting another. Seven-day-or-shorter live windows use the normal
-message search endpoint and fail closed if its 1,000-result ceiling is reached.
+All Transactional ingestion uses Mailchimp's complete activity export. The
+export job id is checkpointed in the private adapter state directory, so a
+restart resumes the same export rather than requesting another. The normal
+message-search endpoint remains an explicit low-latency read method, but its
+1,000-result ceiling is never used as completeness proof.
+
+Every ingestion attempt writes an immutable sanitized history receipt with its
+exact window, export id, candidate/emitted/deduplicated counts, result class,
+and output digest. Receipts never include recipient addresses, message bodies,
+credentials, or raw provider error text.
 
 Provider responses are retried only for throttling and transient server/network
 failures, with bounded exponential backoff and request timeouts. Raw recipient

@@ -11,11 +11,15 @@ state, recipient email SHA-256, and an exact revision hash. Raw recipient email
 addresses are removed before record ingestion.
 
 Marketing emits one campaign-content record and one lightweight recipient
-delivery record per campaign recipient. Transactional live sync searches a
-48-hour overlap. Historical Transactional windows use the provider's activity
-export, whose checkpoint is persisted before polling and reused after restart.
-Every source identity remains replay-stable and Nex owns canonical revision
-deduplication.
+delivery record per campaign recipient. Transactional live sync bootstraps a
+48-hour closed window, then advances a durable cursor with a five-minute replay
+overlap. Every Transactional ingestion window uses the provider's activity
+export; its checkpoint is persisted before polling and reused after restart.
+The capped recent-search method remains read-only and operator-invoked, but is
+never completeness authority. Every source identity remains replay-stable and
+Nex owns canonical revision deduplication. Each run also retains an immutable,
+sanitized receipt containing its window, export id, counts, result class, and
+output digest.
 
 The adapter never converts provider evidence directly into a customer-contact
 clock. A separate MoonSleep projector reads accepted Nex records and creates
