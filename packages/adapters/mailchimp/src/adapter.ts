@@ -42,6 +42,8 @@ const MAX_PAGE_SIZE = 1000;
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MONITOR_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_OVERLAP_MS = 48 * 60 * 60 * 1000;
+const DEFAULT_CURSOR_OVERLAP_MS = 5 * 60 * 1000;
+const DEFAULT_EXPORT_CLOSE_LAG_MS = 2 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const DEFAULT_EXPORT_POLL_MS = 5_000;
 const DEFAULT_EXPORT_WAIT_MS = 15 * 60 * 1000;
@@ -111,6 +113,14 @@ function adapterStateDir(): string | undefined {
   if (!existsSync(absolute)) mkdirSync(absolute, { recursive: true, mode: 0o700 });
   chmodSync(absolute, 0o700);
   return absolute;
+}
+
+function requiredAdapterStateDir(): string {
+  const stateDir = adapterStateDir();
+  if (!stateDir) {
+    throw new Error("Mailchimp ingestion requires NEXUS_ADAPTER_STATE_DIR for durable checkpoints and receipts");
+  }
+  return stateDir;
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -467,7 +477,11 @@ function transactionalExportRecord(
   const email = textValue(row["Email Address"]) ?? textValue(row.email);
   const recipientHash = normalizedEmailHash(email);
   const sanitized = withoutFields(row, ["Email Address", "email"]);
-  const stableIdentity = sha256(stableJson({ row: sanitized, recipientHash, duplicateOrdinal }));
+  const stableIdentity = transactionalExportStableIdentity(
+    row,
+    recipientHash,
+    duplicateOrdinal,
+  );
   const subject = textValue(row.Subject) ?? textValue(row.subject) ?? "Mailchimp Transactional message";
   const providerMessageRef = `export:${stableIdentity}`;
   return {
@@ -510,6 +524,40 @@ function transactionalExportRecord(
       },
     },
   };
+}
+
+function transactionalExportStableIdentity(
+  row: UnknownRecord,
+  recipientHash: string | undefined,
+  duplicateOrdinal: number,
+): string {
+  const providerMessageId = [
+    row["Message ID"], row["Message Id"], row.message_id, row._id, row.id,
+  ].map(textValue).find(Boolean);
+  if (providerMessageId) {
+    return sha256(stableJson({ providerMessageId }));
+  }
+  const metadata = asRecord(row.Metadata ?? row.metadata ?? row["Custom Metadata"]);
+  const moonSleepMessageRef = [
+    metadata.moonsleep_message_ref,
+    metadata.moonsleep_communication_ref,
+    metadata.message_ref,
+  ].map(textValue).find(Boolean);
+  if (moonSleepMessageRef) {
+    return sha256(stableJson({ moonSleepMessageRef }));
+  }
+  // Historical exports may not carry a provider id. Exclude mutable delivery
+  // fields so sent/delivered/bounced revisions converge on one record identity.
+  const identity = {
+    timestamp: textValue(row.Date) ?? textValue(row.date) ?? null,
+    recipientHash: recipientHash ?? null,
+    subject: textValue(row.Subject) ?? textValue(row.subject) ?? null,
+    sender: textValue(row.Sender) ?? textValue(row.sender) ?? textValue(row.From) ?? null,
+    template: textValue(row.Template) ?? textValue(row.template) ?? null,
+    tags: row.Tags ?? row.tags ?? null,
+    duplicateOrdinal,
+  };
+  return sha256(stableJson(identity));
 }
 
 async function listAllCampaigns(
@@ -557,9 +605,8 @@ type ExportCheckpoint = {
   to: string;
 };
 
-function exportCheckpointPath(client: MailchimpClient, since: Date, to: Date): string | undefined {
-  const stateDir = adapterStateDir();
-  if (!stateDir) return undefined;
+function exportCheckpointPath(client: MailchimpClient, since: Date, to: Date): string {
+  const stateDir = requiredAdapterStateDir();
   const name = sha256(`${client.connectionId}\n${since.toISOString()}\n${to.toISOString()}`);
   return join(stateDir, `transactional-export-${name}.json`);
 }
@@ -610,7 +657,7 @@ async function exportTransactionalHistory(
   since: Date,
   to: Date,
   emit: (record: AdapterInboundRecord) => void,
-): Promise<void> {
+): Promise<{ exportId: string; candidateCount: number; emittedCount: number; deduplicatedCount: number }> {
   const checkpointPath = exportCheckpointPath(client, since, to);
   let checkpoint = readExportCheckpoint(checkpointPath);
   if (!checkpoint) {
@@ -659,13 +706,38 @@ async function exportTransactionalHistory(
     skip_empty_lines: true,
   }) as UnknownRecord[];
   const duplicateCounts = new Map<string, number>();
+  const emittedRevisions = new Set<string>();
+  let emittedCount = 0;
+  let deduplicatedCount = 0;
   for (const row of rows) {
     const sanitized = withoutFields(asRecord(row), ["Email Address", "email"]);
     const identity = stableJson({ sanitized, recipientHash: normalizedEmailHash(row["Email Address"] ?? row.email) });
     const ordinal = duplicateCounts.get(identity) ?? 0;
     duplicateCounts.set(identity, ordinal + 1);
-    emit(transactionalExportRecord(client, asRecord(row), checkpoint.export_id, ordinal));
+    const record = transactionalExportRecord(
+      client,
+      asRecord(row),
+      checkpoint.export_id,
+      ordinal,
+    );
+    const revisionKey = stableJson([
+      record.payload.external_record_id,
+      record.payload.metadata?.revision_hash ?? null,
+    ]);
+    if (emittedRevisions.has(revisionKey)) {
+      deduplicatedCount += 1;
+      continue;
+    }
+    emittedRevisions.add(revisionKey);
+    emit(record);
+    emittedCount += 1;
   }
+  return {
+    exportId: checkpoint.export_id,
+    candidateCount: rows.length,
+    emittedCount,
+    deduplicatedCount,
+  };
 }
 
 async function searchRecentTransactional(
@@ -685,33 +757,135 @@ async function searchRecentTransactional(
   for (const message of messages) emit(transactionalRecord(client, message));
 }
 
+type TransactionalIngestStats = {
+  exportId: string;
+  candidateCount: number;
+  emittedCount: number;
+  deduplicatedCount: number;
+};
+
+function writeSanitizedIngestReceipt(
+  client: MailchimpClient,
+  payload: UnknownRecord,
+): void {
+  const stateDir = requiredAdapterStateDir();
+  const historyRoot = join(stateDir, "ingestion-run-history");
+  if (!existsSync(historyRoot)) mkdirSync(historyRoot, { recursive: true, mode: 0o700 });
+  chmodSync(historyRoot, 0o700);
+  const encoded = `${stableJson(payload)}\n`;
+  const digest = sha256(encoded);
+  const startedAt = textValue(payload.started_at) ?? new Date().toISOString();
+  const timestamp = startedAt.replace(/[^0-9]/gu, "").slice(0, 17);
+  const path = join(
+    historyRoot,
+    `${timestamp}-${client.connectionId.replace(/[^A-Za-z0-9._-]/gu, "_")}-${digest}.json`,
+  );
+  writeFileSync(path, encoded, { mode: 0o400, flag: "wx" });
+  chmodSync(path, 0o400);
+}
+
+function monitorCursorPath(client: MailchimpClient): string {
+  return join(
+    requiredAdapterStateDir(),
+    `transactional-monitor-${sha256(client.connectionId)}.json`,
+  );
+}
+
+function readMonitorCursor(client: MailchimpClient): Date | undefined {
+  const path = monitorCursorPath(client);
+  if (!existsSync(path)) return undefined;
+  try {
+    const parsed = asRecord(JSON.parse(readFileSync(path, "utf8")));
+    const through = textValue(parsed.completed_through);
+    if (!through) return undefined;
+    const timestamp = Date.parse(through);
+    return Number.isFinite(timestamp) ? new Date(timestamp) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeMonitorCursor(client: MailchimpClient, completedThrough: Date): void {
+  const path = monitorCursorPath(client);
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(
+    temporary,
+    `${stableJson({ completed_through: completedThrough.toISOString() })}\n`,
+    { mode: 0o600, flag: "wx" },
+  );
+  renameSync(temporary, path);
+  chmodSync(path, 0o600);
+}
+
 async function ingestWindow(
   client: MailchimpClient,
   args: Omit<AdapterBackfillWindow, "connection_id">,
   emit: (record: AdapterInboundRecord) => void,
 ): Promise<void> {
-  const campaigns = await listAllCampaigns(client, args.since, args.to);
-  for (const campaign of campaigns) {
-    const campaignId = textValue(campaign.id);
-    if (!campaignId) continue;
-    const content = asRecord(await marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`));
-    emit(marketingCampaignRecord(client, campaign, content));
-    await emitCampaignActivity(client, campaignId, (activity) => {
-      emit(marketingRecipientRecord(client, campaign, activity));
-    });
-  }
+  // Establish durable state custody before contacting either provider API. A
+  // run without checkpoint/cursor/receipt storage is not an admissible ingest.
+  requiredAdapterStateDir();
+  const startedAt = new Date().toISOString();
   const to = args.to ?? new Date();
-  const useExport = to.getTime() - args.since.getTime() > 7 * 24 * 60 * 60 * 1000;
-  if (useExport) {
-    // Mailchimp's recent-search surface carries the provider message id while
-    // activity exports do not. Keep the newest seven days on recent search so
-    // the periodic overlap monitor reuses the same stable identity instead of
-    // producing a second observation for an exported row.
-    const recentBoundary = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
-    await exportTransactionalHistory(client, args.since, recentBoundary, emit);
-    await searchRecentTransactional(client, recentBoundary, to, emit);
-  } else {
-    await searchRecentTransactional(client, args.since, to, emit);
+  const outputIdentities: string[] = [];
+  let emittedCount = 0;
+  let exportStats: TransactionalIngestStats | undefined;
+  const trackedEmit = (record: AdapterInboundRecord) => {
+    outputIdentities.push(stableJson([
+      record.payload.external_record_id,
+      record.payload.metadata?.revision_hash ?? null,
+    ]));
+    emittedCount += 1;
+    emit(record);
+  };
+  try {
+    const campaigns = await listAllCampaigns(client, args.since, to);
+    for (const campaign of campaigns) {
+      const campaignId = textValue(campaign.id);
+      if (!campaignId) continue;
+      const content = asRecord(await marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`));
+      trackedEmit(marketingCampaignRecord(client, campaign, content));
+      await emitCampaignActivity(client, campaignId, (activity) => {
+        trackedEmit(marketingRecipientRecord(client, campaign, activity));
+      });
+    }
+    // Search remains an explicit low-latency read method, but it is no longer
+    // admitted as a completeness proof. Every ingest window is closed by the
+    // checkpointed activity export, which has no 1,000-message result ceiling.
+    exportStats = await exportTransactionalHistory(client, args.since, to, trackedEmit);
+    writeSanitizedIngestReceipt(client, {
+      contract_version: "nexus_mailchimp_ingestion_run_v1",
+      result: "succeeded",
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      window_since: args.since.toISOString(),
+      window_through: to.toISOString(),
+      provider_export_id: exportStats.exportId,
+      transactional_candidate_count: exportStats.candidateCount,
+      transactional_emitted_count: exportStats.emittedCount,
+      transactional_deduplicated_count: exportStats.deduplicatedCount,
+      total_emitted_count: emittedCount,
+      recent_search_cap_hit: false,
+      output_digest: sha256(stableJson(outputIdentities.sort())),
+    });
+  } catch (error) {
+    writeSanitizedIngestReceipt(client, {
+      contract_version: "nexus_mailchimp_ingestion_run_v1",
+      result: "failed",
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      window_since: args.since.toISOString(),
+      window_through: to.toISOString(),
+      provider_export_id: exportStats?.exportId ?? null,
+      transactional_candidate_count: exportStats?.candidateCount ?? 0,
+      transactional_emitted_count: exportStats?.emittedCount ?? 0,
+      transactional_deduplicated_count: exportStats?.deduplicatedCount ?? 0,
+      total_emitted_count: emittedCount,
+      recent_search_cap_hit: false,
+      error_class: error instanceof Error ? error.name : "UnknownError",
+      output_digest: sha256(stableJson(outputIdentities.sort())),
+    });
+    throw error;
   }
 }
 
@@ -721,9 +895,17 @@ async function monitor(
 ): Promise<void> {
   const client = requireClient(ctx);
   while (!ctx.signal.aborted) {
-    const to = new Date();
-    const since = new Date(to.getTime() - DEFAULT_OVERLAP_MS);
+    const closedHead = new Date(Date.now() - DEFAULT_EXPORT_CLOSE_LAG_MS);
+    const cursor = readMonitorCursor(client);
+    const since = cursor
+      ? new Date(cursor.getTime() - DEFAULT_CURSOR_OVERLAP_MS)
+      : new Date(closedHead.getTime() - DEFAULT_OVERLAP_MS);
+    const to = cursor
+      ? new Date(Math.min(closedHead.getTime(), cursor.getTime() + 24 * 60 * 60 * 1000))
+      : closedHead;
     await ingestWindow(client, { since, to }, emit);
+    writeMonitorCursor(client, to);
+    if (to.getTime() < closedHead.getTime()) continue;
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, DEFAULT_MONITOR_INTERVAL_MS);
       ctx.signal.addEventListener("abort", () => {
@@ -764,6 +946,7 @@ export const __test__ = {
   marketingDeliveryState,
   transactionalRecord,
   transactionalExportRecord,
+  transactionalExportStableIdentity,
   transactionalDeliveryState,
   connectionIdentity,
   health,
