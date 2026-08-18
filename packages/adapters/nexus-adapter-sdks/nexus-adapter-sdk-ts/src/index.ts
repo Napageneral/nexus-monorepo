@@ -20,6 +20,9 @@ export { requireContainerTarget, readReplyToTarget, readThreadTarget } from "./t
 export type { RetryOptions } from "./retry.js";
 export { parseRetryAfterMs, sleepWithSignal, withRetry } from "./retry.js";
 
+export type { OpenApiMethodBuilderConfig } from "./openapi.js";
+export { createOpenApiMethods } from "./openapi.js";
+
 export type {
   AdapterContext,
   AdapterBackfillWindow,
