@@ -7,9 +7,10 @@ function record(id: string) {
     routing: {
       platform: "shopify",
       connection_id: "shopify-production",
+      provider_account_ref: "moonsleepco.myshopify.com",
       sender_id: "store",
       receiver_id: "moonsleep",
-      container_kind: "commerce",
+      container_kind: "group",
       container_id: "order",
     },
     payload: {
@@ -17,6 +18,8 @@ function record(id: string) {
       timestamp: 1,
       content: id,
       content_type: "text",
+      source_record_type: "shopify.order",
+      provider_version_ref: null,
     },
   };
 }
@@ -97,6 +100,27 @@ describe("Shopify source observation job", () => {
       family: "orders.delta",
     });
     expect(test.ingest).toHaveBeenCalledTimes(2);
+    expect(test.ingest).toHaveBeenNthCalledWith(1, {
+      routing: {
+        platform: "shopify",
+        connection_id: "shopify-production",
+        sender_id: "store",
+        receiver_id: "moonsleep",
+        container_kind: "group",
+        container_id: "order",
+        metadata: { provider_account_ref: "moonsleepco.myshopify.com" },
+      },
+      payload: {
+        external_record_id: "record-1",
+        timestamp: 1,
+        content: "record-1",
+        content_type: "text",
+        metadata: {
+          source_record_type: "shopify.order",
+          provider_version_ref: null,
+        },
+      },
+    });
     expect(test.commit).toHaveBeenCalledTimes(1);
     expect(test.abort).not.toHaveBeenCalled();
     expect(test.ingest.mock.invocationCallOrder[1]).toBeLessThan(
@@ -158,5 +182,29 @@ describe("Shopify source observation job", () => {
       "unsupported family",
     );
     expect(test.capture).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when canonical custody disagrees with compatibility metadata", async () => {
+    const test = fixture({ recordCount: 1 });
+    const captured = record("record-1");
+    (captured.payload as Record<string, unknown>).metadata = {
+      source_record_type: "shopify.customer",
+    };
+    test.capture.mockResolvedValueOnce({
+      payload: {
+        version: 1,
+        family: "orders.delta",
+        capture_id: "0123456789abcdef0123456789abcdef",
+        records: [captured],
+        complete: true,
+      },
+    });
+
+    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
+      "source_record_type custody disagrees",
+    );
+    expect(test.ingest).not.toHaveBeenCalled();
+    expect(test.commit).not.toHaveBeenCalled();
+    expect(test.abort).toHaveBeenCalledTimes(1);
   });
 });
