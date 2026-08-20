@@ -177,7 +177,7 @@ Exact provider credit, remittance, or recovery receipt tied to a Carrier Case. P
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Commerce Order](#moonsleepcommerce_order) | business_resource | deployed | Commerce provider with Nex canonical commerce reference | provider platform plus provider order ID, represented by commerce_order ID/order_key | through_owner_adapter |
+| [Commerce Order](#moonsleepcommerce_order) | business_resource | deployed | Commerce provider with Nex canonical commerce reference | provider platform plus space_id plus provider order_id, represented by canonical commerce_order_<sha256> ID | through_owner_adapter |
 | [Commerce Order Line](#moonsleepcommerce_order_line) | business_resource | deployed | Commerce provider | provider line ID represented by line_key | through_owner_adapter |
 | [Refund](#moonsleeprefund) | business_resource | deployed | Commerce provider and Finance readback | provider refund ID/refund_key | through_owner_adapter |
 | [Return Case](#moonsleepreturn_case) | business_resource | deployed | Returns domain | return_case_id | through_owner_adapter |
@@ -190,7 +190,7 @@ Exact provider credit, remittance, or recovery receipt tied to a Carrier Case. P
 
 Provider-native commerce order with stable Nex identity and MoonSleep operational projection. Shopify, Amazon, and TikTok retain provider truth.
 
-**Stable identity:** provider platform plus provider order ID, represented by commerce_order ID/order_key
+**Stable identity:** provider platform plus space_id plus provider order_id, represented by canonical commerce_order_<sha256> ID
 
 **Revision identity:** commerce_order_revisions and provider events
 
@@ -217,6 +217,8 @@ Provider-native commerce order with stable Nex identity and MoonSleep operationa
 
 **Source contracts:**
 
+- `nex-core:src/runtime/domains/memory/resource-target-adapters.ts`
+- `nex-core:src/runtime/domains/moonsleep/core-graph-subject-resolver.ts`
 - `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
 - `moonsleep-v1:docs/specs/moonsleep-order-journey.md`
 
@@ -1389,8 +1391,10 @@ Federated business view over a canonical Entity, MoonSleep Customer Facet, nativ
 
 **Canonical storage/read custody:**
 
-- Nex: `entities and entity_tags` (canonical; identity `entity_id`)
+- Nex: `entities` (canonical; identity `entity_id`)
+- Nex: `Core Graph Facet Definition moonsleep.customer.v1 and active Facet Attachments` (canonical; identity `facet_attachment_id`)
 - Nex: `contacts and contact_observations` (canonical; identity `contact_id`)
+- Nex: `entity_tags` (compatibility; identity `entity_id,tag`) — Customer tags are search and compatibility hints only; they do not establish the Customer role.
 - MoonSleep Ops: `federated Customers object view` (projection)
 
 **Key fields:** `entity_id`, `customer_role`, `contact_refs`, `source_customer_refs`, `identity_resolution_state`, `latest_customer_activity_at`, `latest_moonsleep_activity_at`.
@@ -1406,14 +1410,16 @@ Federated business view over a canonical Entity, MoonSleep Customer Facet, nativ
 
 **Projection/action boundary:** Observation target `through_owner_adapter`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `Customer`, `customer profile`, `Shopify customer`, `Helpdesk roster customer`.
+**Aliases and legacy names:** `Customer`, `customer profile`, `Shopify customer`, `Helpdesk roster customer`, `customer Entity tag`.
 
-**Do not recreate:** synthetic Customer IDs when an Entity and Customer Facet already exist; email-address-only Customer identity.
+**Do not recreate:** synthetic Customer IDs when an Entity and Customer Facet already exist; email-address-only Customer identity; Customer role authority inferred only from an Entity tag.
 
-**Open questions:** Cross-channel equivalence promotion remains reviewable rather than universally automatic; MoonSleep Customer Facet Definition remains to be registered and deployed.
+**Open questions:** Cross-channel equivalence promotion remains reviewable rather than universally automatic.
 
 **Source contracts:**
 
+- `nex-core:src/runtime/domains/moonsleep/customer-facet.ts`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
 - `moonsleep-v1:docs/specs/moonsleep-ops-object-workspace.md`
 - `moonsleep-v1:docs/specs/moonsleep-customer-operations.md`
 
@@ -2213,7 +2219,7 @@ Deployed MoonSleep Commitment storage retained as projection and migration custo
 **Canonical storage/read custody:**
 
 - MoonSleep PostgreSQL: `public.commitments and relationship tables` (compatibility; identity `commitment_id`)
-- Nex: `planned commitments` (planned; identity `commitment_id`)
+- Nex: `Core Graph commitments, immutable revisions, typed relationships, and projection receipts` (canonical; identity `commitment_id`)
 
 **Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `action_authority`.
 
@@ -2251,7 +2257,7 @@ Deployed MoonSleep Communication Loop storage retained as projection and migrati
 **Canonical storage/read custody:**
 
 - MoonSleep PostgreSQL: `public.communication_loops and relationship tables` (compatibility; identity `communication_loop_id`)
-- Nex: `planned loops` (planned; identity `loop_id`)
+- Nex: `Core Graph loops, immutable revisions, typed relationships, and projection receipts` (canonical; identity `loop_id`)
 
 **Key fields:** `communication_loop_id`, `loop_category`, `desired_response_summary`, `opened_at`, `communication_state`, `closed_at`, `closure_basis`, `action_authority`.
 
@@ -2394,14 +2400,14 @@ Non-routable evidence or history view over an exact membership of native Channel
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Facet Attachment](#nexfacet_attachment) | nex_primitive | planned | Nex Facets for attachment identity; defining domain for values and semantics | Facet Definition plus subject identity plus domain scope and definition-declared attachment slot | direct |
-| [Facet Definition](#nexfacet_definition) | nex_primitive | planned | Nex Facets for contract custody; defining domain for semantics | facet definition ID plus immutable definition version | not_applicable |
+| [Facet Attachment](#nexfacet_attachment) | nex_primitive | deployed | Nex Facets for attachment identity; defining domain for values and semantics | Facet Definition plus subject identity plus domain scope and definition-declared attachment slot | direct |
+| [Facet Definition](#nexfacet_definition) | nex_primitive | deployed | Nex Facets for contract custody; defining domain for semantics | facet definition ID plus immutable definition version | not_applicable |
 
 <a id="nexfacet_attachment"></a>
 
 ### Facet Attachment
 
-`nex.facet_attachment` · nex_primitive · planned
+`nex.facet_attachment` · nex_primitive · deployed
 
 Application of one exact Facet Definition version to one exact core object or domain Resource, carrying the domain-specific typed values and relationships without duplicating the subject identity.
 
@@ -2411,7 +2417,7 @@ Application of one exact Facet Definition version to one exact core object or do
 
 **Canonical storage/read custody:**
 
-- Nex: `planned facet attachments, revisions, and typed relationships` (planned; identity `facet_attachment_id`)
+- Nex: `Core Graph facet attachments, immutable revisions, and typed relationships` (canonical; identity `facet_attachment_id`)
 
 **Key fields:** `facet_attachment_id`, `facet_definition_id`, `definition_version`, `subject_object_type`, `subject_object_id`, `domain_scope`, `attachment_slot`, `effective_from`, `effective_through`, `values`, `relationships`, `observation_refs`.
 
@@ -2432,12 +2438,14 @@ Application of one exact Facet Definition version to one exact core object or do
 **Source contracts:**
 
 - `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
+- `nex-core:docs/validation/core-real-world-graph-runtime-validation.md`
 
 <a id="nexfacet_definition"></a>
 
 ### Facet Definition
 
-`nex.facet_definition` · nex_primitive · planned
+`nex.facet_definition` · nex_primitive · deployed
 
 Versioned domain-owned extension contract declaring compatible subject classes, typed attributes and relationships, validation, evidence, cardinality, effective-time, rendering, and mutation boundaries.
 
@@ -2447,7 +2455,7 @@ Versioned domain-owned extension contract declaring compatible subject classes, 
 
 **Canonical storage/read custody:**
 
-- Nex: `planned facet definitions and versions` (planned; identity `facet_definition_id,definition_version`)
+- Nex: `Core Graph facet definitions and immutable definition versions` (canonical; identity `facet_definition_id,definition_version`)
 
 **Key fields:** `facet_definition_id`, `definition_version`, `name`, `domain_scope`, `compatible_subject_types`, `attribute_contract`, `relationship_contract`, `validation_contract`, `renderer_contract`, `authority_contract`, `definition_sha256`.
 
@@ -2464,14 +2472,16 @@ Versioned domain-owned extension contract declaring compatible subject classes, 
 **Source contracts:**
 
 - `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
+- `nex-core:docs/validation/core-real-world-graph-runtime-validation.md`
 
 ## Nex evidence
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
 | [Attachment](#nexattachment) | evidence_custody | deployed | Nex Records | Record ID plus attachment ID; content hash detects exact binary identity | not_applicable |
-| [Record](#nexrecord) | nex_primitive | deployed | Nex Records | Nex record ID plus unique provider platform and provider record ID | not_applicable |
-| [Record Revision](#nexrecord_revision) | evidence_custody | deployed | Nex Records | Nex record_revision_id | not_applicable |
+| [Historical Record Revision Compatibility](#nexrecord_revision) | compatibility_alias | compatibility | Nex Records | preserved historical Record Revision reference resolved exactly to its canonical immutable Record | compatibility_only |
+| [Record](#nexrecord) | nex_primitive | deployed | Nex Records | content-addressed immutable Nex Record ID under exact provider platform, connection, account, provider record identity, and payload custody | not_applicable |
 
 <a id="nexattachment"></a>
 
@@ -2506,75 +2516,74 @@ File or media evidence attached to a source Record, with immutable content ident
 
 - `nex-core:src/storage/migrations/records/helpers.ts`
 
+<a id="nexrecord_revision"></a>
+
+### Historical Record Revision Compatibility
+
+`nex.record_revision` · compatibility_alias · compatibility
+
+Compatibility interpretation for historical record_revision-prefixed references and receipts created before the single immutable Record cutover. New evidence, Episodes, Facts, and graph links reference canonical immutable Records directly.
+
+**Stable identity:** preserved historical Record Revision reference resolved exactly to its canonical immutable Record
+
+**Revision identity:** none; compatibility custody is frozen
+
+**Canonical storage/read custody:**
+
+- Nex PostgreSQL: `legacy record revision and registration receipt custody` (compatibility; identity `id`)
+
+**Key fields:** `historical_record_revision_id`, `canonical_record_id`, `payload_sha256`, `registration_receipt_id`.
+
+**Relationships:**
+
+- `resolves_to_record` → `nex.record` (one; owner: Nex Records)
+
+**Projection/action boundary:** Observation target `compatibility_only`; projection authority `false`; implicit action authority `false`.
+
+**Aliases and legacy names:** `record_revision`, `source revision`.
+
+**Do not recreate:** new Record Revision archive layered over immutable Records; hash-only domain evidence rows presented as canonical evidence.
+
+**Source contracts:**
+
+- `nex-core:src/storage/immutable-records.ts`
+- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
+
 <a id="nexrecord"></a>
 
 ### Record
 
 `nex.record` · nex_primitive · deployed
 
-Stable source-object envelope for one provider record identity. It is evidence, not a business Resource. Exact immutable payload custody belongs to Record Revision.
+Immutable source-evidence object for one exact provider payload and provider identity. It is evidence, not a business Resource, and it is never revised in place.
 
-**Stable identity:** Nex record ID plus unique provider platform and provider record ID
+**Stable identity:** content-addressed immutable Nex Record ID under exact provider platform, connection, account, provider record identity, and payload custody
 
-**Revision identity:** nex.record_revision
+**Revision identity:** none; a changed provider payload creates another immutable Record
 
 **Canonical storage/read custody:**
 
-- Nex: `records` (canonical; identity `id`)
+- Nex: `immutable Record store` (canonical; identity `id`)
 
-**Key fields:** `id`, `record_id`, `platform`, `content_type`, `timestamp`, `received_at`, `sender_entity_id`, `receiver_entity_id`, `sender_contact_id`, `receiver_contact_id`, `container_id`, `thread_id`, `metadata`.
+**Key fields:** `id`, `identity_sha256`, `payload_sha256`, `content_sha256`, `attachment_manifest_sha256`, `platform`, `connection_id`, `provider_account_ref`, `provider_record_id`, `provider_version_ref`, `source_record_type`, `source_timestamp`, `created_at`.
 
 **Relationships:**
 
-- `has_revision` → `nex.record_revision` (many; owner: Nex Records)
 - `has_attachment` → `nex.attachment` (optional_many; owner: Nex Records)
 - `observed_in_channel` → `nex.channel` (optional_one; owner: Nex identity and Channels)
 
 **Projection/action boundary:** Observation target `not_applicable`; projection authority `false`; implicit action authority `false`.
 
-**Aliases and legacy names:** `source_record`, `communication_occurrence`.
+**Aliases and legacy names:** `source_record`, `communication_occurrence`, `Record Revision after the single immutable Record cutover`.
 
-**Do not recreate:** domain-local copies of source messages or provider rows.
-
-**Source contracts:**
-
-- `nex-core:src/storage/migrations/records/helpers.ts`
-- `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
-
-<a id="nexrecord_revision"></a>
-
-### Record Revision
-
-`nex.record_revision` · evidence_custody · deployed
-
-Immutable capture of one exact provider payload version, including content digest, source/capture timing, registration receipt, and attachment revision membership. Episodes bind Record Revisions, not mutable search results.
-
-**Stable identity:** Nex record_revision_id
-
-**Revision identity:** Content-addressed immutable revision; no in-place successor mutation
-
-**Canonical storage/read custody:**
-
-- Nex PostgreSQL: `nex_runtime.record_revisions` (canonical; identity `id`)
-- Nex PostgreSQL: `nex_runtime.record_revision_registration_receipts` (canonical)
-
-**Key fields:** `id`, `record_id`, `content_sha256`, `source_timestamp`, `captured_at`, `registration_receipt_id`, `access_scope`.
-
-**Relationships:**
-
-- `revision_of` → `nex.record` (one; owner: Nex Records)
-- `member_of_episode` → `nex.episode` (optional_many; owner: Nex Memory evidence)
-
-**Projection/action boundary:** Observation target `not_applicable`; projection authority `false`; implicit action authority `false`.
-
-**Aliases and legacy names:** `immutable Record`, `source revision`.
-
-**Do not recreate:** hash-only domain evidence rows presented as canonical revision custody.
+**Do not recreate:** domain-local copies of source messages or provider rows; new Record Revision archive layered over immutable Records.
 
 **Source contracts:**
 
+- `nex-core:src/storage/immutable-records.ts`
+- `nex-core:src/storage/immutable-record-runtime-store.ts`
+- `nex-core:src/api/server-methods/records.ts`
 - `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
-- `moonsleep-v1:infra/ops-analytics/scripts/export_reviewed_interpretation_nex_record_index.py`
 
 ## Nex identity
 
@@ -2584,7 +2593,7 @@ Immutable capture of one exact provider payload version, including content diges
 | [Contact Observation](#nexcontact_observation) | evidence_custody | deployed | Nex Identity | Contact observation ID | not_applicable |
 | [Entity](#nexentity) | nex_primitive | deployed | Nex Identity | Nex entity ID | direct |
 | [Entity Role Tag Compatibility](#nexentity_role) | compatibility_alias | compatibility | Nex Facets with legacy Nex Identity tag custody | legacy Entity ID plus active tag value | compatibility_only |
-| [Place](#nexplace) | nex_primitive | planned | Nex Places | Nex place ID | direct |
+| [Place](#nexplace) | nex_primitive | deployed | Nex Places | Nex place ID | direct |
 
 <a id="nexcontact"></a>
 
@@ -2727,7 +2736,7 @@ Compatibility entry for the deployed lightweight Entity tag representation. Doma
 
 ### Place
 
-`nex.place` · nex_primitive · planned
+`nex.place` · nex_primitive · deployed
 
 Durable physical-place identity for a site, building, room, dock, warehouse, factory, store, office, or other real-world location. Addresses and coordinates describe a Place but do not alone define its identity.
 
@@ -2737,7 +2746,7 @@ Durable physical-place identity for a site, building, room, dock, warehouse, fac
 
 **Canonical storage/read custody:**
 
-- Nex: `planned places and place relationships` (planned; identity `place_id`)
+- Nex: `Core Graph places, immutable revisions, typed relationships, and projection receipts` (canonical; identity `place_id`)
 
 **Key fields:** `place_id`, `display_name`, `place_type`, `parent_place_id`, `address`, `coordinates`, `created_at`, `updated_at`, `merged_into`, `deleted_at`.
 
@@ -2756,6 +2765,8 @@ Durable physical-place identity for a site, building, room, dock, warehouse, fac
 **Source contracts:**
 
 - `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
+- `nex-core:docs/validation/core-real-world-graph-runtime-validation.md`
 
 ## Nex orchestration
 
@@ -2962,7 +2973,7 @@ Durable operating context for an Entity or Agent, including identity and role-fa
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Episode](#nexepisode) | nex_primitive | deployed | Nex Memory evidence | Immutable evidence-set ID returned as episode_id, bound to exact Record Revision membership and sealed scope/member digests | not_applicable |
+| [Episode](#nexepisode) | nex_primitive | deployed | Nex Memory evidence | Immutable evidence-set ID returned as episode_id, bound to exact Record membership and sealed scope/member digests | not_applicable |
 | [Fact](#nexfact) | nex_primitive | deployed | Nex Memory evidence | fact_id | not_applicable |
 | [Observation](#nexobservation) | nex_primitive | deployed | Nex Memory evidence | observation_id and deterministic head key | not_applicable |
 | [Resource Attribute Projection Custody](#nexresource_attribute_projection) | evidence_custody | deployed | Owning Resource domain with Nex Observation authority | attribute projection link and receipt IDs | not_applicable |
@@ -2975,9 +2986,9 @@ Durable operating context for an Entity or Agent, including identity and role-fa
 
 `nex.episode` · nex_primitive · deployed
 
-Immutable bounded set of exact Record Revisions reviewed together for one coherent period or subject.
+Immutable bounded set of exact immutable Records reviewed together for one coherent period or subject.
 
-**Stable identity:** Immutable evidence-set ID returned as episode_id, bound to exact Record Revision membership and sealed scope/member digests
+**Stable identity:** Immutable evidence-set ID returned as episode_id, bound to exact Record membership and sealed scope/member digests
 
 **Revision identity:** Episode membership is immutable; any membership or scope change creates a new Episode with a new episode_id
 
@@ -2985,11 +2996,11 @@ Immutable bounded set of exact Record Revisions reviewed together for one cohere
 
 - Nex Memory evidence: `memory.evidence.episodes` (canonical; identity `episode_id`)
 
-**Key fields:** `episode_id`, `profile_id`, `profile_version`, `subject`, `effective_start`, `effective_end`, `record_revision_count`, `record_set_sha256`, `seal`.
+**Key fields:** `episode_id`, `profile_id`, `profile_version`, `subject`, `effective_start`, `effective_end`, `record_count`, `record_set_sha256`, `seal`.
 
 **Relationships:**
 
-- `contains_revision` → `nex.record_revision` (many; owner: Nex Memory evidence)
+- `contains_record` → `nex.record` (many; owner: Nex Memory evidence)
 - `contains_fact` → `nex.fact` (many; owner: Nex Memory evidence)
 
 **Projection/action boundary:** Observation target `not_applicable`; projection authority `false`; implicit action authority `false`.
@@ -3011,7 +3022,7 @@ Immutable bounded set of exact Record Revisions reviewed together for one cohere
 
 `nex.fact` · nex_primitive · deployed
 
-Immutable typed assertion supported by exact fragments from Record Revisions inside one Episode.
+Immutable typed assertion supported by exact fragments from immutable Records inside one Episode.
 
 **Stable identity:** fact_id
 
@@ -3183,24 +3194,24 @@ Sorted immutable Fact membership and digest used as the complete bounded input t
 
 | Object | Class | Status | Canonical owner | Stable identity | Observation target |
 | --- | --- | --- | --- | --- | --- |
-| [Commitment](#nexcommitment) | nex_primitive | planned | Nex Commitments; accepting domain owns satisfaction evidence | Nex commitment ID | direct |
-| [Loop](#nexloop) | nex_primitive | planned | Nex Loops; interpreting domain owns closure evidence | Nex loop ID | direct |
+| [Commitment](#nexcommitment) | nex_primitive | deployed | Nex Commitments; accepting domain owns satisfaction evidence | Nex commitment ID | direct |
+| [Loop](#nexloop) | nex_primitive | deployed | Nex Loops; interpreting domain owns closure evidence | Nex loop ID | direct |
 
 <a id="nexcommitment"></a>
 
 ### Commitment
 
-`nex.commitment` · nex_primitive · planned
+`nex.commitment` · nex_primitive · deployed
 
 Evidenced promise, accepted responsibility, or policy-implied duty owed by one Entity to another Entity or defined beneficiary. It is distinct from a Loop, task, plan, shipment, payment, or provider status.
 
 **Stable identity:** Nex commitment ID
 
-**Revision identity:** Explicit supersedes_commitment relationship; satisfaction requires exact owning-domain evidence
+**Revision identity:** Immutable Core Graph revisions plus explicit supersession; satisfaction requires exact owning-domain evidence
 
 **Canonical storage/read custody:**
 
-- Nex: `planned commitments, parties, evidence links, concern links, and satisfaction receipts` (planned; identity `commitment_id`)
+- Nex: `Core Graph commitments, immutable revisions, typed relationships, and projection receipts` (canonical; identity `commitment_id`)
 
 **Key fields:** `commitment_id`, `commitment_statement`, `commitment_category`, `commitment_basis`, `committed_at`, `due_at`, `due_condition`, `commitment_state`, `completion_evidence_state`, `completed_at`, `breach_state`, `action_authority`.
 
@@ -3208,10 +3219,11 @@ Evidenced promise, accepted responsibility, or policy-implied duty owed by one E
 
 - `committed_by` → `nex.entity` (one; owner: Nex Identity)
 - `committed_to` → `nex.entity` (one; owner: Nex Identity)
-- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
-- `supported_by_revision` → `nex.record_revision` (optional_many; owner: Nex Records)
+- `beneficiary` → `nex.entity` (optional_many; owner: Nex Commitments)
+- `evidence_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `evidence_record` → `nex.record` (many; owner: Nex Records)
 - `concerns_loop` → `nex.loop` (optional_many; owner: Nex Loops and Commitments)
-- `supersedes_commitment` → `nex.commitment` (optional_one; owner: Nex Commitments)
+- `concerns` → `moonsleep.commerce_order` (optional_many; owner: Nex Commitments and target Resource owner) — The deployed contract accepts any registered target class; Commerce Order is the current corpus-critical target.
 
 **Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
 
@@ -3222,35 +3234,36 @@ Evidenced promise, accepted responsibility, or policy-implied duty owed by one E
 **Source contracts:**
 
 - `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
+- `nex-core:docs/validation/core-real-world-graph-runtime-validation.md`
 - `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
 
 <a id="nexloop"></a>
 
 ### Loop
 
-`nex.loop` · nex_primitive · planned
+`nex.loop` · nex_primitive · deployed
 
 One material unresolved expectation for a contribution in an interaction: a response, answer, clarification, decision, confirmation, or other communicative next step. It is distinct from a native Channel, every message, a generic task, and a Commitment.
 
 **Stable identity:** Nex loop ID
 
-**Revision identity:** Explicit supersedes_loop relationship; split or merged interpretations receive new IDs with exact reviewed provenance
+**Revision identity:** Immutable Core Graph revisions plus explicit supersession; split or merged interpretations receive new IDs with exact reviewed provenance
 
 **Canonical storage/read custody:**
 
-- Nex: `planned loops, loop participants, evidence links, and concern links` (planned; identity `loop_id`)
+- Nex: `Core Graph loops, immutable revisions, typed relationships, and projection receipts` (canonical; identity `loop_id`)
 
 **Key fields:** `loop_id`, `loop_category`, `expected_contribution_summary`, `opened_at`, `loop_state`, `closed_at`, `closure_basis`, `action_authority`.
 
 **Relationships:**
 
 - `initiated_by` → `nex.entity` (one; owner: Nex Identity)
-- `addressed_to` → `nex.entity` (optional_many; owner: Nex Loops)
-- `awaiting_contribution_from` → `nex.entity` (optional_many; owner: Nex Loops)
-- `evidenced_in_channel` → `nex.channel` (optional_many; owner: Nex Channels)
-- `supported_by_revision` → `nex.record_revision` (optional_many; owner: Nex Records)
-- `has_commitment` → `nex.commitment` (optional_many; owner: Nex Loops and Commitments)
-- `supersedes_loop` → `nex.loop` (optional_one; owner: Nex Loops)
+- `participant` → `nex.entity` (many; owner: Nex Loops)
+- `expected_contributor` → `nex.entity` (many; owner: Nex Loops)
+- `evidence_channel` → `nex.channel` (optional_many; owner: Nex Channels)
+- `evidence_record` → `nex.record` (many; owner: Nex Records)
+- `concerns` → `moonsleep.commerce_order` (optional_many; owner: Nex Loops and target Resource owner) — The deployed contract accepts any registered target class; Commerce Order is the current corpus-critical target.
 
 **Projection/action boundary:** Observation target `direct`; projection authority `true`; implicit action authority `false`.
 
@@ -3261,15 +3274,17 @@ One material unresolved expectation for a contribution in an interaction: a resp
 **Source contracts:**
 
 - `nexus-umbrella:docs/specs/core-real-world-graph-and-domain-facets.md`
+- `nex-core:docs/specs/core-real-world-graph-runtime.md`
+- `nex-core:docs/validation/core-real-world-graph-runtime-validation.md`
 - `moonsleep-v1:docs/specs/moonsleep-reviewed-interpretation-projection-pattern.md`
 
 ## Open gap register
 
 | Gap | Status | Owner | Decision | Affected objects |
 | --- | --- | --- | --- | --- |
-| `shopify-record-revision-custody-chapter1` Historical Shopify Records have canonical Record Revision registration | resolved | Nex Records | The separate terminal Record Repair completed the immutable revision prerequisite. Keep the existing Records and Orders; no provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
-| `shopify-universal-contact-entity-enforcement` Shopify universal Contact source is deployed but the historical Entity-enforcement repair has not started | open | Nex Entity Enforcement Customer and Shopify lane | Accept source commit 8252313b53480a434412fa55dd9c5abb90591ebe as behaviorally unchanged inside deployed runtime source 111649e39c24260f8532545efc1feba26340de14, but do not call history migrated: no canary, checkpoint, bounded-progress, or terminal Shopify history receipt exists. Reconcile that source against the canonical Entity and Facet contract, rederive a fresh standby census, then run provider-free dry run, exact conflict and non-merge plan, 50/500/5000 canaries, bounded stored-Record replay, idempotent replay, post-state census, and live-sync proof. Preserve immutable Shopify customer ID or GID Contact plus normalized universal email and phone Contacts on one canonical Entity; append Contact observations; never replace newer active values; quarantine cross-Entity collisions; repair only mechanically safe legacy customer ID aliases; retain Order links and Customer Facet semantics; never mint a parallel Customer identity or refetch Shopify. Final proof must report exact eligible, promoted, conflicted, unresolved, alias, cursor, and provider-call totals rather than reusing the nonterminal census seed. | `nex.record`, `nex.record_revision`, `nex.entity`, `nex.contact`, `nex.contact_observation`, `nex.facet_attachment`, `moonsleep.customer`, `moonsleep.commerce_order` |
-| `nex-core-place-facet-loop-commitment-foundation` Place, Facet Definition, Facet Attachment, Loop, and Commitment are canonical but not yet deployed in Nex core | open | Nex core foundation | Implement the five planned primitives with immutable migrations, typed relationships, Observation integration, stable APIs, aliases, cleanroom proofs, and no implicit action authority before new golden-corpus projections depend on them. | `nex.place`, `nex.facet_definition`, `nex.facet_attachment`, `nex.loop`, `nex.commitment`, `nex.entity`, `nex.channel`, `nex.observation` |
+| `shopify-record-revision-custody-chapter1` Historical Shopify evidence resolves to canonical immutable Records | resolved | Nex Records | The single immutable Record cutover superseded separate Record Revision custody. Keep and resolve the existing immutable Records and Orders; historical record_revision-prefixed values are compatibility references only. No provider refetch or new Order schema is implied. | `nex.record`, `nex.record_revision`, `nex.episode`, `moonsleep.commerce_order` |
+| `shopify-universal-contact-entity-enforcement` Shopify Commerce projection must create canonical Customer identity semantics directly | in_progress | Nex Entity Enforcement Customer and Shopify lane | Use immutable records.scan for historical discovery. The existing MoonSleep Commerce projector creates or reuses the canonical Entity and Contacts, commits the Customer Observation, and attaches moonsleep.customer.v1 directly. Retire the separate Shopify Customer Facet bridge and copied accepted-Observation receipt authority. Entity tags remain compatibility and search hints only. Keep projection jobs and subscriptions disabled until one separately approved canary and an identical idempotent replay pass exact current-state readback; then use resumable bounded replay without provider refetch. | `nex.record`, `nex.entity`, `nex.contact`, `nex.contact_observation`, `nex.facet_attachment`, `moonsleep.customer`, `moonsleep.commerce_order` |
+| `nex-core-place-facet-loop-commitment-foundation` Place, Facet Definition, Facet Attachment, Loop, and Commitment are canonical and deployed in Nex core | resolved | Nex core foundation | Reuse the deployed Core Graph primitives, immutable revisions, exact-generation fencing, typed relationships, Observation or governed-configuration bases, stable APIs, aliases, and literal-false action authority. New golden-corpus projections must emit the deployed relationship vocabulary directly. | `nex.place`, `nex.facet_definition`, `nex.facet_attachment`, `nex.loop`, `nex.commitment`, `nex.entity`, `nex.channel`, `nex.observation` |
 | `moonsleep-loop-commitment-core-adoption` Deployed MoonSleep Loop and Commitment projections require bounded identity-preserving adoption into Nex | open | Nex core foundation and MoonSleep reviewed projection owner | Inventory the small exact deployed cohort, preserve evidence and receipts, create exact Nex Loop and Commitment identities, record deterministic crosswalks or aliases, prove read parity, then stop new semantic writes to the MoonSleep compatibility owners. Do not rebuild unrelated workspaces in this transaction. | `nex.loop`, `nex.commitment`, `moonsleep.communication_loop`, `moonsleep.commitment`, `moonsleep.customer_issue` |
 | `entity-facet-enforcement` Domain people and organization roles are not yet uniformly enforced as Facets on canonical Entities | open | Nex Entity Enforcement with each defining domain | Inventory every domain person, organization, role, and party surface; classify it as Entity, Contact, Facet Attachment, domain Resource, read projection, or compatibility alias; add exact crosswalks and collision review; then block creation of duplicate domain-local actor identities. | `nex.entity`, `nex.contact`, `nex.entity_role`, `nex.facet_definition`, `nex.facet_attachment`, `moonsleep.customer`, `moonsleep.partner`, `moonsleep.supply_organization`, `moonsleep.finance_ap_party` |
 | `place-facility-adoption` MoonSleep Facility identity has not yet been separated into Nex Place plus Facility Facet | open | Nex Places, MoonSleep Organizations, Inventory, and Dispatch | After Place and Facets deploy, create evidence-backed Place identities and Facility Facet Attachments, crosswalk existing facility IDs, and update Inventory and Fulfillment Node relationships. Preserve Fulfillment Node as an independent Dispatch Resource. | `nex.place`, `nex.facet_definition`, `nex.facet_attachment`, `moonsleep.facility`, `moonsleep.fulfillment_node`, `moonsleep.inventory_position` |

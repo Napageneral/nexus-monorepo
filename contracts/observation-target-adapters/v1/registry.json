@@ -104,8 +104,8 @@
       "adapter_version": "1.0.0",
       "semantic_status": "canonical",
       "implementation_owner": "MoonSleep Customer Operations over Nex Identity",
-      "identity_format": "canonical Nex Entity ID with active Customer Facet or legacy customer role compatibility",
-      "read_surface": "entities.get plus Facet Attachment readback; legacy entities.tags.list remains compatibility input and there is no separate Customer identity row",
+      "identity_format": "canonical Nex Entity ID with exactly one active moonsleep.customer.v1 Facet Attachment",
+      "read_surface": "entities.get plus facets.attachments.list; legacy entities.tags.list is a compatibility/search hint only and there is no separate Customer identity row",
       "allowed_attribute_paths": ["contact_refs", "customer_role", "identity_resolution_state", "latest_customer_activity_at", "latest_moonsleep_activity_at", "source_customer_refs"],
       "allowed_relationships": [
         { "relationship_id": "represented_by_entity", "target_object_ids": ["nex.entity"], "cardinality": "one" },
@@ -120,7 +120,7 @@
       "authority": { "observation_target": true, "projection": false, "resource_mutation": false, "implicit_creation": false, "action": false },
       "implementation_refs": [{ "repository_id": "moonsleep-v1", "path": "infra/ops-analytics/scripts/observation_target_adapters.py" }],
       "implementation_state": "implemented",
-      "deployment_receipts": []
+      "deployment_receipts": ["production:/var/lib/moonsleep-workloads/customer-service-c001-adoption-388ea998b427f171f50c2fab158371593d1ce59e/core-graph-1005-v1/terminal.json#sha256=908d4d2d202871807544a68f9cd698d27ff3f464c49315f0e652009be095bcac"]
     },
     {
       "adapter_contract_id": "moonsleep.commerce-order.target-adapter.v1",
@@ -129,7 +129,7 @@
       "adapter_version": "1.0.0",
       "semantic_status": "canonical",
       "implementation_owner": "Commerce provider with Nex canonical commerce readback",
-      "identity_format": "platform plus space_id plus provider order_id",
+      "identity_format": "platform plus space_id plus provider order_id, resolved to canonical commerce_order_<sha256> ID",
       "read_surface": "commerce.orders.get",
       "allowed_attribute_paths": ["cancelled_at", "closed_at", "currency", "customer_contact_id", "customer_entity_id", "financial_status", "fulfillment_status", "order_id", "order_name", "platform", "processed_at", "space_id", "subtotal_price", "total_price"],
       "allowed_relationships": [
