@@ -66,6 +66,54 @@ function requireString(row: RuntimeRow, field: string): string {
   return value;
 }
 
+function exactMetadataField(params: {
+  metadata: RuntimeRow;
+  field: "provider_account_ref" | "source_record_type" | "provider_version_ref";
+  value: unknown;
+}): void {
+  if (params.value === undefined) {
+    return;
+  }
+  const current = params.metadata[params.field];
+  if (current !== undefined && JSON.stringify(current) !== JSON.stringify(params.value)) {
+    throw new Error(`Shopify Record ${params.field} custody disagrees with metadata`);
+  }
+  params.metadata[params.field] = params.value;
+}
+
+function recordIngestParams(record: RuntimeRow): { routing: RuntimeRow; payload: RuntimeRow } {
+  const routing = { ...asRecord(record.routing) };
+  const payload = { ...asRecord(record.payload) };
+  const routingMetadata = { ...asRecord(routing.metadata) };
+  const payloadMetadata = { ...asRecord(payload.metadata) };
+
+  exactMetadataField({
+    metadata: routingMetadata,
+    field: "provider_account_ref",
+    value: routing.provider_account_ref,
+  });
+  exactMetadataField({
+    metadata: payloadMetadata,
+    field: "source_record_type",
+    value: payload.source_record_type,
+  });
+  exactMetadataField({
+    metadata: payloadMetadata,
+    field: "provider_version_ref",
+    value: payload.provider_version_ref,
+  });
+  delete routing.provider_account_ref;
+  delete payload.source_record_type;
+  delete payload.provider_version_ref;
+  if (Object.keys(routingMetadata).length > 0) {
+    routing.metadata = routingMetadata;
+  }
+  if (Object.keys(payloadMetadata).length > 0) {
+    payload.metadata = payloadMetadata;
+  }
+  return { routing, payload };
+}
+
 async function pauseBetweenWriteBatches(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, INGEST_WRITE_BATCH_PAUSE_MS);
@@ -129,8 +177,7 @@ export default async function shopifySourceObservationJob(
       if (asString(record.operation) !== "record.ingest") {
         throw new Error("Shopify source capture returned an unsupported operation");
       }
-      const routing = asRecord(record.routing);
-      const payload = asRecord(record.payload);
+      const { routing, payload } = recordIngestParams(record);
       if (Object.keys(routing).length === 0 || Object.keys(payload).length === 0) {
         throw new Error("Shopify source capture returned an incomplete record envelope");
       }
