@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { assertShopifyRecordFamily } from "./shopify-record-family.js";
+import {
+  assertShopifyRecordFamily,
+  shopifyRecordSourceMetadata,
+} from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -215,7 +218,7 @@ function commonRecord(
   options: { allowLegacyText?: boolean } = {},
 ) {
   const sourceContract = assertShopifyRecordFamily(record, expectedFamily, options);
-  const metadata = asRecord(record.metadata);
+  const metadata = shopifyRecordSourceMetadata(record);
   const row = asRecord(metadata.row);
   const providerIds = asRecord(metadata.provider_ids);
   const shopDomain = requireString(row, "shop_domain");
@@ -519,7 +522,7 @@ export default async function shopifyOrderCommerceJob(
   if (asString(record.platform) !== "shopify") {
     return { projected: false, reason: "not_shopify", record_id: recordId };
   }
-  const family = asString(asRecord(record.metadata).family);
+  const family = asString(shopifyRecordSourceMetadata(record).family);
   if (family === "order") {
     const parsed = parseShopifyOrderRecord(record);
     return {
