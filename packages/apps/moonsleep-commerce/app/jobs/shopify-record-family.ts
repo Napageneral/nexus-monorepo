@@ -14,6 +14,38 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const object = value as RuntimeRow;
+    return `{${Object.keys(object)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+export function shopifyRecordSourceMetadata(recordValue: unknown): RuntimeRow {
+  const record = asRecord(recordValue);
+  const compatibilityMetadata = asRecord(record.metadata);
+  const sourceMetadata = asRecord(asRecord(record.payload).source_metadata);
+
+  for (const field of ["family", "connection_id", "row", "provider_ids"] as const) {
+    if (
+      compatibilityMetadata[field] !== undefined &&
+      sourceMetadata[field] !== undefined &&
+      stableJson(compatibilityMetadata[field]) !== stableJson(sourceMetadata[field])
+    ) {
+      throw new Error(`Shopify Record ${field} metadata disagrees with immutable payload`);
+    }
+  }
+
+  return { ...compatibilityMetadata, ...sourceMetadata };
+}
+
 export function assertShopifyRecordFamily(
   recordValue: unknown,
   family: ShopifyRecordFamily,
@@ -23,7 +55,7 @@ export function assertShopifyRecordFamily(
   if (asString(record.platform) !== "shopify") {
     throw new Error("Shopify projector only accepts Shopify records");
   }
-  const metadata = asRecord(record.metadata);
+  const metadata = shopifyRecordSourceMetadata(record);
   if (asString(metadata.family) !== family) {
     throw new Error(`Shopify projector expected ${family} record`);
   }

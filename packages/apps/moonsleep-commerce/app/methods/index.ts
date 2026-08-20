@@ -16,6 +16,7 @@ import {
   SHOPIFY_SOURCE_SCHEDULES,
   type ShopifySourceFamily,
 } from "../jobs/shopify-source-schedules.js";
+import { shopifyRecordSourceMetadata } from "../jobs/shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -348,7 +349,7 @@ async function discoverShopifyCustomerRecordIds(params: {
       if (asString(record.source_record_type) !== "shopify.customer") {
         throw new Error("Shopify customer scan returned a foreign source Record type");
       }
-      const metadata = asRecord(record.metadata);
+      const metadata = shopifyRecordSourceMetadata(record);
       if (asString(metadata.family) !== "customer") {
         throw new Error("Shopify customer scan returned a foreign family record");
       }
@@ -435,7 +436,7 @@ async function scanShopifyCommerceFamily(params: {
       if (asString(record.source_record_type) !== sourceRecordType) {
         throw new Error("Shopify commerce scan returned a foreign source Record type");
       }
-      if (asString(asRecord(record.metadata).family) !== params.family) {
+      if (asString(shopifyRecordSourceMetadata(record).family) !== params.family) {
         throw new Error("Shopify commerce scan returned a foreign family record");
       }
       if (asString(record.platform) !== "shopify") {
@@ -1393,7 +1394,7 @@ export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
   for (const id of recordIds) {
     const response = unwrapPayload(await ctx.nex.records.get({ id }));
     const record = asRecord(response.record);
-    const family = asString(asRecord(record.metadata).family);
+    const family = asString(shopifyRecordSourceMetadata(record).family);
     const entry =
       family === "order"
         ? parseShopifyOrderRecord(record, { allowLegacyText: true })

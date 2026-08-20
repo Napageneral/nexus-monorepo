@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { assertShopifyRecordFamily } from "./shopify-record-family.js";
+import {
+  assertShopifyRecordFamily,
+  shopifyRecordSourceMetadata,
+} from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -532,7 +535,7 @@ export function buildShopifyCustomerObservation(
 ): ShopifyContactObservation {
   const record = asRecord(recordValue);
   const sourceContract = assertShopifyRecordFamily(record, "customer", options);
-  const metadata = asRecord(record.metadata);
+  const metadata = shopifyRecordSourceMetadata(record);
   const payload = asRecord(record.payload);
   const sourceMetadata = asRecord(payload.source_metadata);
   const providerPayload = asRecord(sourceMetadata.provider_payload);
@@ -663,7 +666,7 @@ export default async function shopifyCustomerIdentityJob(
   if (asString(record.platform) !== "shopify") {
     return { projected: false, reason: "not_shopify", record_id: recordId };
   }
-  if (asString(asRecord(record.metadata).family) !== "customer") {
+  if (asString(shopifyRecordSourceMetadata(record).family) !== "customer") {
     return { projected: false, reason: "not_customer", record_id: recordId };
   }
   const projected = await projectShopifyCustomerIdentity(ctx.nex, record);
