@@ -17,21 +17,29 @@
 - Prove the full PostgreSQL profile atomically dispatches committed
   `record.ingested` events into PostgreSQL work with durable dispatch and
   idempotency receipts, while this production subscription remains dormant.
-- Ingest one customer revision and prove one entity, one contact, two tags, and
-  one observation.
+- Ingest one customer Record and prove one Entity, one Contact, one Record-native
+  Episode/Fact/sealed set/accepted customer-role Observation chain, and one
+  restricted `moonsleep.customer.v1` Customer Facet. Tags are hints only.
 - Invoke `moonsleep-commerce.shopify-customers.project-cohort` with that exact
   committed record ID; require one projected result and zero provider-write
   authority.
 - Replay the same revision and prove no count growth.
-- Ingest a newer revision and prove the same entity/contact binding plus one new
-  observation.
-- Inject wrong shop, wrong GID, bad source hash, altered replay, and missing tag
-  cases and prove fail-closed behavior.
+- Ingest a newer customer Record and prove the same Entity/Contact/Facet binding
+  without duplicate role authority.
+- Inject wrong shop, wrong GID, bad source hash, altered replay, duplicate active
+  Facets, and drifted semantic profiles and prove fail-closed behavior. Missing
+  tags must not revoke a valid Customer Facet.
+- Require each projected Order receipt to expose the canonical
+  `moonsleep.commerce_order` target using the exact `commerce_orders.row_id`
+  returned by `observeCommerceOrder` and adapter contract
+  `moonsleep.commerce-order.target-adapter.v1`; copied Order resources are forbidden.
 - Restart Nex and repeat the readback.
 
 ## Historical backfill
 
-- Bind the exact staged Shopify manifest and all page hashes.
+- Start with the smallest representative customer+Order canary and identical
+  replay. Introduce bounded historical pages only if observed risk warrants it.
+- Bind the exact staged Shopify manifest, immutable scan cursors, and all page hashes.
 - Call `moonsleep-commerce.shopify-customers.inspect-backfill` for the exact
   shop and connection through the runner's `--build-manifest` mode. Require the
   returned sorted IDs, record count, boundaries, and SHA-256 to agree before the
@@ -46,7 +54,12 @@
 - Run the complete customer backfill twice with byte-identical parameters.
 - Require both runs to return the same record-set and projection-result hashes.
 - Require the second run to report zero created entities, zero created contacts,
-  and `replayed == records_projected`.
+  `replayed == records_projected`, adopted existing customer-role Observations,
+  and adopted existing Customer Facets. Require the checkpoint v2 semantic
+  counters to cover every projected Record exactly once.
+- Require exactly one active canonical Customer Facet and zero copied rows in
+  `core_graph_accepted_observation_receipts` after the first run, replay, and
+  restart.
 - Prove cancellation and restart resume at the first uncheckpointed batch; do
   not refetch or re-ingest the immutable Shopify source corpus.
 - Reconcile source unique customer GIDs to active Shopify contacts.
@@ -62,10 +75,12 @@
 - Prove each `customer`, `order`, and `line_item` revision matches exactly one
   subscription and schedules exactly one projector; broad Shopify fanout is
   forbidden.
-- Enable the customer projector only after the bounded cohort, complete
-  two-pass backfill, restart, replay, and rollback gates pass.
+- Keep both projector jobs and all three projection subscriptions disabled until
+  the separately reviewed representative customer+Order canary, identical
+  replay, restart, and rollback gates pass.
 - Create a new Shopify test customer through an approved provider path.
-- Observe a new immutable record, event, job, contact, entity, and tags.
+- Observe a new immutable Record, event, job, Contact, Entity, accepted
+  customer-role Observation, and Customer Facet readback.
 - Update the customer and prove a new observation with the same entity binding.
 - Measure source update to committed projection latency.
 - Stop and restart the runtime, then prove cursor and queue recovery.

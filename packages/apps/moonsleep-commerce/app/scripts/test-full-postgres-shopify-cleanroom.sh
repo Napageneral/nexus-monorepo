@@ -19,10 +19,7 @@ source_tree="$(git -C "${UMBRELLA_ROOT}" rev-parse 'HEAD^{tree}')"
 
 SHOP_DOMAIN="moonsleepco.myshopify.com"
 CONNECTION_ID="shopify-primary"
-CUSTOMER_SOURCE_ID="shopify:shopify-primary:customer:900719925474099312345:synthetic-revision-1"
-ORDER_SOURCE_ID="shopify:shopify-primary:order:900719925474099312346:synthetic-revision-1"
-LINE_SOURCE_ID="shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:synthetic-revision-1"
-
+SYNTHETIC_RECORD_CONNECTION_ID="moonsleepco.myshopify.com"
 for command_name in docker jq openssl shasum; do
   command -v "${command_name}" >/dev/null || {
     echo "required command is unavailable: ${command_name}" >&2
@@ -86,7 +83,7 @@ runtime_call() {
       --json \
       --url ws://127.0.0.1:18789 \
       --token "$token"
-  ' sh "${method}" "${params}" 2>/dev/null
+  ' sh "${method}" "${params}"
 }
 
 runtime_call_verbose() {
@@ -197,9 +194,11 @@ postgres_json() {
 runtime_counts() {
   postgres_json "
     SELECT json_build_object(
-      'records', (SELECT COUNT(*) FROM nex_runtime.records),
-      'receipts', (SELECT COUNT(*) FROM nex_runtime.record_ingest_receipts),
-      'events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
+      'records', (SELECT COUNT(*) FROM nex_runtime_immutable_records_v1.records),
+      'ingest_receipts', (SELECT COUNT(*) FROM nex_runtime_immutable_records_v1.record_ingest_receipts),
+      'legacy_records', (SELECT COUNT(*) FROM nex_runtime.records),
+      'legacy_receipts', (SELECT COUNT(*) FROM nex_runtime.record_ingest_receipts),
+      'legacy_events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
       'entities', (SELECT COUNT(*) FROM nex_runtime.entities),
       'contacts', (SELECT COUNT(*) FROM nex_runtime.contacts),
       'observations', (SELECT COUNT(*) FROM nex_runtime.contact_observations),
@@ -210,7 +209,9 @@ runtime_counts() {
       'commerce_orders', (SELECT COUNT(*) FROM nex_runtime.commerce_orders),
       'commerce_order_revisions', (SELECT COUNT(*) FROM nex_runtime.commerce_order_revisions),
       'commerce_line_items', (SELECT COUNT(*) FROM nex_runtime.commerce_line_items),
-      'commerce_line_item_revisions', (SELECT COUNT(*) FROM nex_runtime.commerce_line_item_revisions)
+      'commerce_line_item_revisions', (SELECT COUNT(*) FROM nex_runtime.commerce_line_item_revisions),
+      'customer_facets', (SELECT COUNT(*) FROM nex_runtime.core_graph_facet_attachments WHERE definition_id = 'moonsleep.customer.v1' AND lifecycle_state = 'active'),
+      'accepted_observation_compatibility_receipts', (SELECT COUNT(*) FROM nex_runtime.core_graph_accepted_observation_receipts)
     )"
 }
 
@@ -220,8 +221,8 @@ build_record_params() {
     customer)
       local provider='{"id":"gid://shopify/Customer/900719925474099312345","displayName":"Synthetic Customer","firstName":"Synthetic","lastName":"Customer","email":"synthetic@example.invalid","addresses":[]}'
       jq -nc --arg provider "${provider}" '{
-        routing:{adapter:"shopify",platform:"shopify",connection_id:"shopify-primary",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"shopify-primary",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"customer",thread_id:"moonsleepco.myshopify.com:customer:900719925474099312345"},
-        payload:{external_record_id:"shopify:shopify-primary:customer:900719925474099312345:synthetic-revision-1",timestamp:1784640000000,content:"customer Synthetic Customer",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:"54f0be03d3397a358786086ec37b985d840a3d3ef23d7251958013e58cc989ae"},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"customer",logical_row_id:"moonsleepco.myshopify.com:900719925474099312345",revision_hash:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",provider_ids:{customer_id:"900719925474099312345",customer_gid:"gid://shopify/Customer/900719925474099312345"},row:{email:"synthetic@example.invalid",phone:"",addresses:[],last_name:"Customer",first_name:"Synthetic",customer_id:"900719925474099312345",shop_domain:"moonsleepco.myshopify.com",customer_gid:"gid://shopify/Customer/900719925474099312345",display_name:"Synthetic Customer",addresses_complete:true},source_request:{path:"/admin/api/2026-01/customers.json",method:"GET"}}}
+        routing:{adapter:"shopify",platform:"shopify",connection_id:"moonsleepco.myshopify.com",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"moonsleepco.myshopify.com",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"customer",thread_id:"moonsleepco.myshopify.com:customer:900719925474099312345"},
+        payload:{external_record_id:"customer:900719925474099312345",timestamp:1784640000000,content:"customer Synthetic Customer",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:"54f0be03d3397a358786086ec37b985d840a3d3ef23d7251958013e58cc989ae"},metadata:{source_record_type:"shopify.customer",connection_id:"moonsleepco.myshopify.com",adapter_id:"shopify",family:"customer",logical_row_id:"moonsleepco.myshopify.com:900719925474099312345",revision_hash:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",provider_ids:{customer_id:"900719925474099312345",customer_gid:"gid://shopify/Customer/900719925474099312345"},row:{email:"synthetic@example.invalid",phone:"",addresses:[],last_name:"Customer",first_name:"Synthetic",customer_id:"900719925474099312345",shop_domain:"moonsleepco.myshopify.com",customer_gid:"gid://shopify/Customer/900719925474099312345",display_name:"Synthetic Customer",addresses_complete:true},source_request:{path:"/admin/api/2026-01/customers.json",method:"GET"}}}
       }'
       ;;
     order)
@@ -229,8 +230,8 @@ build_record_params() {
       local provider_sha256
       provider_sha256="$(printf '%s' "${provider}" | shasum -a 256 | awk '{print $1}')"
       jq -nc --arg provider "${provider}" --arg provider_sha256 "${provider_sha256}" '{
-        routing:{adapter:"shopify",platform:"shopify",connection_id:"shopify-primary",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"shopify-primary",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"order",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
-        payload:{external_record_id:"shopify:shopify-primary:order:900719925474099312346:synthetic-revision-1",timestamp:1784640001000,content:"order #SYNTH-1 total=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"order",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346",revision_hash:"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",customer_id:"900719925474099312345"},row:{name:"#SYNTH-1",currency:"USD",order_id:"900719925474099312346",shop_domain:"moonsleepco.myshopify.com",subtotal_price:"199.00",total_price:"199.00",financial_status:"paid",fulfillment_status:"unfulfilled",customer_id:"900719925474099312345",billing_address:{zip:"78701",city:"Austin",address1:"1 Synthetic Way"},shipping_address:{zip:"78702",city:"Austin",address1:"2 Replay Road"}},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
+        routing:{adapter:"shopify",platform:"shopify",connection_id:"moonsleepco.myshopify.com",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"moonsleepco.myshopify.com",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"order",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
+        payload:{external_record_id:"order:900719925474099312346",timestamp:1784640001000,content:"order #SYNTH-1 total=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{source_record_type:"shopify.order",connection_id:"moonsleepco.myshopify.com",adapter_id:"shopify",family:"order",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346",revision_hash:"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",customer_id:"900719925474099312345"},row:{name:"#SYNTH-1",currency:"USD",order_id:"900719925474099312346",shop_domain:"moonsleepco.myshopify.com",subtotal_price:"199.00",total_price:"199.00",financial_status:"paid",fulfillment_status:"unfulfilled",customer_id:"900719925474099312345",billing_address:{zip:"78701",city:"Austin",address1:"1 Synthetic Way"},shipping_address:{zip:"78702",city:"Austin",address1:"2 Replay Road"}},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
       }'
       ;;
     line_item)
@@ -238,8 +239,8 @@ build_record_params() {
       local provider_sha256
       provider_sha256="$(printf '%s' "${provider}" | shasum -a 256 | awk '{print $1}')"
       jq -nc --arg provider "${provider}" --arg provider_sha256 "${provider_sha256}" '{
-        routing:{adapter:"shopify",platform:"shopify",connection_id:"shopify-primary",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"shopify-primary",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"line_item",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
-        payload:{external_record_id:"shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:synthetic-revision-1",timestamp:1784640002000,content:"line_item order=#SYNTH-1 quantity=1 price=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{connection_id:"shopify-primary",adapter_id:"shopify",family:"line_item",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346:900719925474099312347",revision_hash:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},row:{sku:"SYNTHETIC-SKU",price:"199.00",title:"Synthetic Product",order_id:"900719925474099312346",quantity:1,shop_domain:"moonsleepco.myshopify.com",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
+        routing:{adapter:"shopify",platform:"shopify",connection_id:"moonsleepco.myshopify.com",sender_id:"moonsleepco.myshopify.com",sender_name:"Shopify",receiver_id:"moonsleepco.myshopify.com",space_id:"moonsleepco.myshopify.com",container_kind:"group",container_id:"line_item",thread_id:"moonsleepco.myshopify.com:order:900719925474099312346"},
+        payload:{external_record_id:"line_item:900719925474099312346:900719925474099312347",timestamp:1784640002000,content:"line_item order=#SYNTH-1 quantity=1 price=199.00",content_type:"text",payload:{provider_object_json:$provider,provider_object_sha256:$provider_sha256},metadata:{source_record_type:"shopify.line_item",connection_id:"moonsleepco.myshopify.com",adapter_id:"shopify",family:"line_item",logical_row_id:"moonsleepco.myshopify.com:900719925474099312346:900719925474099312347",revision_hash:"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",provider_ids:{shop_domain:"moonsleepco.myshopify.com",order_id:"900719925474099312346",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},row:{sku:"SYNTHETIC-SKU",price:"199.00",title:"Synthetic Product",order_id:"900719925474099312346",quantity:1,shop_domain:"moonsleepco.myshopify.com",line_item_id:"900719925474099312347",product_id:"900719925474099312348",variant_id:"900719925474099312349"},source_request:{path:"/admin/api/2026-01/orders.json",method:"GET"}}}
       }'
       ;;
     *)
@@ -378,6 +379,27 @@ docker run -d \
   "${NEX_IMAGE}" >/dev/null
 wait_for_runtime
 
+# A fresh database starts with the legacy Commerce source-record foreign keys.
+# This cleanroom proves the post-cutover immutable-Record projector, so prepare
+# the same two FK targets that the governed immutable-Record promotion operator
+# establishes before any projection is attempted.
+docker exec -i "${postgres_container}" psql -X -U postgres -d moonsleep_nex -v ON_ERROR_STOP=1 <<'SQL' >/dev/null
+ALTER TABLE nex_runtime.commerce_order_revisions
+  DROP CONSTRAINT commerce_order_revisions_source_record_id_fkey;
+ALTER TABLE nex_runtime.commerce_order_revisions
+  ADD CONSTRAINT commerce_order_revisions_source_record_id_fkey
+  FOREIGN KEY (source_record_id)
+  REFERENCES nex_runtime_immutable_records_v1.records(id)
+  ON DELETE RESTRICT;
+ALTER TABLE nex_runtime.commerce_line_item_revisions
+  DROP CONSTRAINT commerce_line_item_revisions_source_record_id_fkey;
+ALTER TABLE nex_runtime.commerce_line_item_revisions
+  ADD CONSTRAINT commerce_line_item_revisions_source_record_id_fkey
+  FOREIGN KEY (source_record_id)
+  REFERENCES nex_runtime_immutable_records_v1.records(id)
+  ON DELETE RESTRICT;
+SQL
+
 echo "[cleanroom] install exact adapter and app while every trigger stays dormant"
 install_package adapter shopify "cleanroom-shopify-${adapter_sha256:0:16}" \
   "${ADAPTER_VERSION}" "/artifacts/adapter/shopify-${ADAPTER_VERSION}.tar.gz" "${adapter_artifact}"
@@ -432,13 +454,63 @@ jq -e '
 [[ "$(jq -S -c . <<<"$(runtime_call jobs.list '{}')")" == "$(jq -S -c . <<<"${jobs_before}")" ]]
 [[ "$(jq -S -c . <<<"$(runtime_call schedules.list '{}')")" == "$(jq -S -c . <<<"${schedules_before}")" ]]
 
+echo "[cleanroom] register the canonical authority-free Customer Facet Definition"
+customer_facet_configuration_id="configuration:moonsleep.customer.v1"
+customer_facet_actor_id="entity_moonsleep_ops"
+customer_facet_policy_ref="policy:moonsleep.customer.facet.v1"
+customer_facet_reason="Register the canonical MoonSleep Customer Facet Definition."
+customer_facet_configuration_json="$(jq -S -nc \
+  --arg id "${customer_facet_configuration_id}" \
+  --arg actor "${customer_facet_actor_id}" \
+  --arg policy "${customer_facet_policy_ref}" \
+  --arg reason "${customer_facet_reason}" \
+  '{id:$id,actor_entity_id:$actor,policy_ref:$policy,reason:$reason}')"
+customer_facet_configuration_sha256="$(printf '%s' "${customer_facet_configuration_json}" | shasum -a 256 | awk '{print $1}')"
+customer_facet_configuration_params="$(jq -nc \
+  --arg actor "${customer_facet_actor_id}" \
+  --arg policy "${customer_facet_policy_ref}" \
+  --arg reason "${customer_facet_reason}" \
+  --arg receipt_id "${customer_facet_configuration_id}" \
+  --arg receipt_sha256 "${customer_facet_configuration_sha256}" \
+  '{actor_entity_id:$actor,policy_ref:$policy,reason:$reason,configuration_receipt_id:$receipt_id,configuration_receipt_sha256:$receipt_sha256,idempotency_key:"moonsleep.customer.v1:configuration:register"}')"
+customer_facet_configuration_first="$(runtime_call graph.configurations.register "${customer_facet_configuration_params}")"
+customer_facet_configuration_second="$(runtime_call graph.configurations.register "${customer_facet_configuration_params}")"
+jq -e '.configuration_receipt_id == "configuration:moonsleep.customer.v1" and .replayed == false and .action_authority == false' <<<"${customer_facet_configuration_first}" >/dev/null
+jq -e '.configuration_receipt_id == "configuration:moonsleep.customer.v1" and .replayed == true and .action_authority == false' <<<"${customer_facet_configuration_second}" >/dev/null
+
+customer_facet_source_manifest_json="$(jq -S -nc '{contract_id:"moonsleep.customer.facet-definition.v1",canonical_spec:"docs/specs/core-real-world-graph-runtime.md",source_spec:"docs/specs/identity/shopify-customer-universal-contact-materialization.md",definition_id:"moonsleep.customer.v1",definition_version:1}')"
+customer_facet_source_manifest_sha256="$(printf '%s' "${customer_facet_source_manifest_json}" | shasum -a 256 | awk '{print $1}')"
+customer_facet_registration_id="facet-registration:moonsleep.customer.v1:1"
+customer_facet_registration_json="$(jq -S -nc \
+  --arg id "${customer_facet_registration_id}" \
+  --arg source_manifest_sha256 "${customer_facet_source_manifest_sha256}" \
+  --arg configuration_receipt_id "${customer_facet_configuration_id}" \
+  '{id:$id,facet_definition_id:"moonsleep.customer.v1",definition_version:1,source_manifest_sha256:$source_manifest_sha256,configuration_receipt_id:$configuration_receipt_id}')"
+customer_facet_registration_sha256="$(printf '%s' "${customer_facet_registration_json}" | shasum -a 256 | awk '{print $1}')"
+customer_facet_definition_params="$(jq -nc \
+  --arg actor "${customer_facet_actor_id}" \
+  --arg policy "${customer_facet_policy_ref}" \
+  --arg reason "${customer_facet_reason}" \
+  --arg configuration_receipt_id "${customer_facet_configuration_id}" \
+  --arg configuration_receipt_sha256 "${customer_facet_configuration_sha256}" \
+  --arg source_manifest_sha256 "${customer_facet_source_manifest_sha256}" \
+  --arg registration_receipt_id "${customer_facet_registration_id}" \
+  --arg registration_receipt_sha256 "${customer_facet_registration_sha256}" \
+  '{id:"moonsleep.customer.v1",definition_version:1,predecessor_definition_version:null,name:"MoonSleep Customer",domain_scope:"moonsleep",compatible_subject_classes:["nex.entity"],attachment_cardinality:"optional_one",attachment_slots:["customer"],attribute_contract:[],relationship_contract:[],validation_contract:{required_basis_type:"accepted_observation",required_privacy_class:"restricted",basis_observation_ref_required:true},renderer_contract:{profile_label:"Customer",workspace_ref:"moonsleep.organizations"},authority_contract:{action_authority:false,provider_mutation_authority:false,resource_mutation_authority:false,implicit_creation_authority:false},migration_contract:{},owner_package:"moonsleep",source_manifest_sha256:$source_manifest_sha256,basis:{basis_type:"governed_configuration",actor_entity_id:$actor,policy_ref:$policy,reason:$reason,configuration_receipt_id:$configuration_receipt_id,configuration_receipt_sha256:$configuration_receipt_sha256},registration_receipt_id:$registration_receipt_id,registration_receipt_sha256:$registration_receipt_sha256,idempotency_key:"moonsleep.customer.v1:definition:register"}')"
+customer_facet_definition_first="$(runtime_call facets.definitions.create "${customer_facet_definition_params}")"
+customer_facet_definition_second="$(runtime_call facets.definitions.create "${customer_facet_definition_params}")"
+jq -e '.definition.id == "moonsleep.customer.v1" and .definition.definition_version == 1 and .replayed == false and .action_authority == false' <<<"${customer_facet_definition_first}" >/dev/null
+jq -e '.definition.id == "moonsleep.customer.v1" and .definition.definition_version == 1 and .replayed == true and .action_authority == false' <<<"${customer_facet_definition_second}" >/dev/null
+
 initial_counts="$(runtime_counts)"
 jq -e '
-  .records == 0 and .receipts == 0 and .events == 0 and
-  .entities == 3 and .contacts == 0 and .observations == 0 and
+  .records == 0 and .ingest_receipts == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .entities == 4 and .contacts == 0 and .observations == 0 and
   .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
   .commerce_orders == 0 and .commerce_order_revisions == 0 and
-  .commerce_line_items == 0 and .commerce_line_item_revisions == 0
+  .commerce_line_items == 0 and .commerce_line_item_revisions == 0 and
+  .customer_facets == 0 and .accepted_observation_compatibility_receipts == 0
 ' <<<"${initial_counts}" >/dev/null
 
 seed_params="$(jq -nc --arg shop_domain "${SHOP_DOMAIN}" --arg connection_id "${CONNECTION_ID}" '{shop_domain:$shop_domain,connection_id:$connection_id}')"
@@ -449,7 +521,7 @@ jq -e '.identities_observed == 2 and .created_entities == 0 and .created_contact
 seed_contract_sha256="$(jq -r '.source_identity_contract_sha256' <<<"${seed_first}")"
 [[ "${seed_contract_sha256}" == "$(jq -r '.source_identity_contract_sha256' <<<"${seed_second}")" ]]
 
-echo "[cleanroom] commit exact customer, order, and line-item revisions"
+echo "[cleanroom] commit exact customer, order, and line-item immutable Records"
 customer_params="$(build_record_params customer)"
 order_params="$(build_record_params order)"
 line_params="$(build_record_params line_item)"
@@ -482,12 +554,14 @@ projection_manifest_result="$(docker exec --user 20042:20042 "${runtime_containe
   --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
   --build-manifest \
   --shop-domain "${SHOP_DOMAIN}" \
-  --connection-id "${CONNECTION_ID}" \
+  --connection-id "${SYNTHETIC_RECORD_CONNECTION_ID}" \
   --manifest /var/lib/nex/state/projection-proof/manifest.json \
   --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
+CUSTOMER_SOURCE_ID="$(jq -r '.first_record_id' <<<"${projection_manifest_result}")"
 jq -e --arg id "${CUSTOMER_SOURCE_ID}" '
   .ok == true and .record_count == 1 and
   .first_record_id == $id and .last_record_id == $id and
+  ($id | test("^record_[0-9a-f]{64}$")) and
   (.manifest_sha256 | test("^[0-9a-f]{64}$")) and
   .provider_write_authority == false
 ' <<<"${projection_manifest_result}" >/dev/null
@@ -513,8 +587,23 @@ projection_second="$(docker exec --user 20042:20042 "${runtime_container}" \
   --batch-size 1 \
   --sleep-ms 0 \
   --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
-jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 1 and .totals.created_contacts == 1 and .totals.replayed == 0' <<<"${projection_first}" >/dev/null
-jq -e '.ok == true and .completed == true and .batch_count == 1 and .totals.created_entities == 0 and .totals.created_contacts == 0 and .totals.replayed == 1' <<<"${projection_second}" >/dev/null
+jq -e '
+  .ok == true and .completed == true and .batch_count == 1 and
+  .totals.created_entities == 1 and .totals.created_contacts == 1 and .totals.replayed == 0 and
+  .totals.accepted_customer_observations == 1 and
+  .totals.replayed_customer_observations == 0 and
+  .totals.adopted_customer_observations == 0 and
+  .totals.attached_customer_facets == 1 and .totals.adopted_customer_facets == 0
+' <<<"${projection_first}" >/dev/null
+jq -e '
+  .ok == true and .completed == true and .batch_count == 1 and
+  .totals.created_entities == 0 and .totals.created_contacts == 0 and .totals.replayed == 1 and
+  .totals.accepted_customer_observations == 0 and
+  .totals.replayed_customer_observations == 0 and
+  .totals.adopted_customer_observations == 1 and
+  .totals.attached_customer_facets == 0 and .totals.adopted_customer_facets == 1
+' <<<"${projection_second}" >/dev/null
+echo "[cleanroom] customer projector replay verified"
 
 commerce_manifest_result="$(docker exec --user 20042:20042 "${runtime_container}" \
   python3 /proof-scripts/shopify_commerce_projection_runner.py \
@@ -522,7 +611,7 @@ commerce_manifest_result="$(docker exec --user 20042:20042 "${runtime_container}
   --runtime-token-file /var/lib/nex/state/projection-proof/runtime-token \
   --build-manifest \
   --shop-domain "${SHOP_DOMAIN}" \
-  --connection-id "${CONNECTION_ID}" \
+  --connection-id "${SYNTHETIC_RECORD_CONNECTION_ID}" \
   --manifest /var/lib/nex/state/projection-proof/commerce-manifest.json \
   --io-pressure-file /var/lib/nex/state/projection-proof/io-pressure)"
 jq -e '
@@ -532,6 +621,15 @@ jq -e '
 ' <<<"${commerce_manifest_result}" >/dev/null
 commerce_manifest_sha256="$(jq -r '.manifest_sha256' <<<"${commerce_manifest_result}")"
 commerce_record_set_sha256="$(jq -r '.record_set_sha256' <<<"${commerce_manifest_result}")"
+commerce_manifest="$(docker exec --user 20042:20042 "${runtime_container}" cat /var/lib/nex/state/projection-proof/commerce-manifest.json)"
+ORDER_SOURCE_ID="$(jq -r '.record_ids[0]' <<<"${commerce_manifest}")"
+LINE_SOURCE_ID="$(jq -r '.record_ids[1]' <<<"${commerce_manifest}")"
+jq -e '
+  (.record_ids | length) == 2 and
+  all(.record_ids[]; test("^record_[0-9a-f]{64}$")) and
+  .record_ids[0] != .record_ids[1]
+' <<<"${commerce_manifest}" >/dev/null
+echo "[cleanroom] commerce manifest verified"
 commerce_direct_params="$(jq -nc \
   --arg order_id "${ORDER_SOURCE_ID}" \
   --arg line_id "${LINE_SOURCE_ID}" \
@@ -551,6 +649,7 @@ jq -e '
   .created == 2 and .replayed == 0 and
   .provider_read_authority == false and .provider_write_authority == false
 ' <<<"${commerce_direct_first}" >/dev/null
+echo "[cleanroom] direct commerce projection verified"
 
 set +e
 commerce_first="$(docker exec --user 20042:20042 "${runtime_container}" \
@@ -587,6 +686,7 @@ jq -e '
   .ok == true and .completed == true and .batch_count == 1 and
   .totals.records_projected == 2 and .totals.created == 0 and .totals.replayed == 2
 ' <<<"${commerce_second}" >/dev/null
+echo "[cleanroom] commerce runner replay verified"
 
 order_gid="gid://shopify/Order/900719925474099312346"
 billing_sha256="$(printf '%s' '{"address1":"1 Synthetic Way","city":"Austin","zip":"78701"}' | shasum -a 256 | awk '{print $1}')"
@@ -607,12 +707,64 @@ jq -e \
   .line_items[0].revision.price == "199.00" and
   .line_items[0].revision.currency == "USD"
 ' <<<"${commerce_order_read}" >/dev/null
+echo "[cleanroom] canonical Commerce Order read verified"
+
+customer_entity_id="$(jq -r '.revision.customer_entity_id' <<<"${commerce_order_read}")"
+customer_facet_read="$(runtime_call facets.attachments.list "$(jq -nc --arg entity_id "${customer_entity_id}" '{subject_class:"nex.entity",subject_id:$entity_id,facet_definition_id:"moonsleep.customer.v1",lifecycle_state:"active",limit:2}')")"
+customer_observation_head_key="moonsleep.commerce:shopify-customer:${SHOP_DOMAIN}:gid://shopify/Customer/900719925474099312345"
+customer_observation_head="$(runtime_call memory.evidence.observations.head.get "$(jq -nc --arg head_key "${customer_observation_head_key}" '{headKey:$head_key}')")"
+customer_episodes="$(runtime_call memory.evidence.episodes.list '{"limit":10,"offset":0}')"
+customer_facts="$(runtime_call memory.evidence.facts.list '{"profileId":"commerce.customer.reference_fact.v1","profileVersion":"1.0.0","limit":10,"offset":0}')"
+jq -e --arg entity_id "${customer_entity_id}" '
+  .items[0] as $facet |
+  (.items | length) == 1 and .next_cursor == null and
+  $facet.facet_definition_id == "moonsleep.customer.v1" and
+  $facet.definition_version == 1 and
+  $facet.subject_class == "nex.entity" and $facet.subject_id == $entity_id and
+  $facet.domain_scope == "moonsleep" and $facet.attachment_slot == "customer" and
+  $facet.instance_key == null and $facet.lifecycle_state == "active" and
+  $facet.privacy_class == "restricted" and
+  $facet.basis.basis_type == "accepted_observation" and
+  (
+    ($facet.observation_refs | index($facet.basis.observation_id)) != null or
+    (
+      ($facet.observation_refs | length) == 0 and
+      ($facet.redacted_fields | index("observation_refs")) != null
+    )
+  ) and
+  $facet.values == {} and $facet.relationships == [] and .action_authority == false
+' <<<"${customer_facet_read}" >/dev/null
+echo "[cleanroom] Customer Facet read verified"
+customer_observation_id="$(jq -r '.items[0].basis.observation_id' <<<"${customer_facet_read}")"
+jq -e --arg observation_id "${customer_observation_id}" '
+  .item.head_element_id == $observation_id and .item.observation.id == $observation_id and
+  .item.observation.profile_id == "commerce.customer.current.v1" and
+  .item.observation.profile_version == "1.0.0" and
+  .item.observation.metadata.typed_payload.customer_ref == "gid://shopify/Customer/900719925474099312345" and
+  .item.observation.metadata.typed_payload.current_state == "customer" and
+  .item.observation.metadata.typed_payload.review_state == "source_anchored"
+' <<<"${customer_observation_head}" >/dev/null
+jq -e --arg record_id "${CUSTOMER_SOURCE_ID}" '
+  (.items | length) == 1 and
+  .items[0].source_record_refs == [{record_id:$record_id,payload_sha256:.items[0].source_record_refs[0].payload_sha256}]
+' <<<"${customer_episodes}" >/dev/null
+jq -e '
+  (.items | length) == 1 and
+  .items[0].profile_id == "commerce.customer.reference_fact.v1" and
+  .items[0].profile_version == "1.0.0" and
+  .items[0].metadata.typed_payload.customer_ref == "gid://shopify/Customer/900719925474099312345" and
+  .items[0].metadata.typed_payload.identity_state == "source_anchored"
+' <<<"${customer_facts}" >/dev/null
+echo "[cleanroom] customer semantic evidence read verified"
 
 cohort_params="$(jq -nc --arg id "${CUSTOMER_SOURCE_ID}" '{record_ids:[$id]}')"
 cohort_first="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
 cohort_second="$(runtime_call moonsleep-commerce.shopify-customers.project-cohort "${cohort_params}")"
-jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .provider_write_authority == false' <<<"${cohort_first}" >/dev/null
-jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .provider_write_authority == false' <<<"${cohort_second}" >/dev/null
+echo "[cleanroom] cohort first $(jq -c '{state,records_projected,created_entities,created_contacts,replayed,result:{customer_observation_outcome:.results[0].customer_observation_outcome,customer_facet_outcome:.results[0].customer_facet_outcome},provider_write_authority}' <<<"${cohort_first}")"
+echo "[cleanroom] cohort second $(jq -c '{state,records_projected,created_entities,created_contacts,replayed,result:{customer_observation_outcome:.results[0].customer_observation_outcome,customer_facet_outcome:.results[0].customer_facet_outcome},provider_write_authority}' <<<"${cohort_second}")"
+jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .results[0].customer_observation_outcome == "adopted_existing" and .results[0].customer_facet_outcome == "adopted_existing" and .provider_write_authority == false' <<<"${cohort_first}" >/dev/null
+jq -e '.state == "succeeded" and .records_projected == 1 and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .results[0].customer_observation_outcome == "adopted_existing" and .results[0].customer_facet_outcome == "adopted_existing" and .provider_write_authority == false' <<<"${cohort_second}" >/dev/null
+echo "[cleanroom] direct customer cohort replay verified"
 
 customer_ingest_second="$(runtime_call record.ingest "${customer_params}")"
 order_ingest_second="$(runtime_call record.ingest "${order_params}")"
@@ -620,36 +772,42 @@ line_ingest_second="$(runtime_call record.ingest "${line_params}")"
 jq -e '.ok == true and .status == "skipped"' <<<"${customer_ingest_second}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${order_ingest_second}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${line_ingest_second}" >/dev/null
+echo "[cleanroom] immutable Record replay verified"
 
 counts_before_restart="$(runtime_counts)"
+echo "[cleanroom] pre-restart counts $(jq -c . <<<"${counts_before_restart}")"
 jq -e '
-  .records == 3 and .receipts == 3 and .events == 3 and
-  .entities == 6 and .contacts == 4 and .observations == 4 and .tags == 11 and
+  .records == 3 and .ingest_receipts == 6 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .entities == 7 and .contacts == 4 and .observations == 4 and .tags == 11 and
   .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
   .commerce_orders == 1 and .commerce_order_revisions == 1 and
-  .commerce_line_items == 1 and .commerce_line_item_revisions == 1
+  .commerce_line_items == 1 and .commerce_line_item_revisions == 1 and
+  .customer_facets == 1 and .accepted_observation_compatibility_receipts == 0
 ' <<<"${counts_before_restart}" >/dev/null
+echo "[cleanroom] pre-restart cardinality verified"
 
-event_contract="$(postgres_json "
+record_contract="$(postgres_json "
   SELECT COALESCE(json_agg(row_to_json(contract_row) ORDER BY contract_row.family), '[]'::JSON)
   FROM (
     SELECT
-      records.metadata->>'family' AS family,
-      events.record_id AS event_record_id,
-      events.properties_json->>'platform' AS platform,
-      records.id AS readable_record_id,
-      records.payload->>'provider_object_sha256' AS provider_object_sha256
-    FROM nex_runtime.records records
-    JOIN nex_runtime.durable_events events ON events.record_id = records.id
+      records.payload_json::JSONB#>>'{source_metadata,payload_metadata,family}' AS family,
+      records.id AS record_id,
+      records.platform,
+      records.payload_sha256,
+      records.payload_json::JSONB#>>'{source_metadata,provider_payload,provider_object_sha256}' AS provider_object_sha256
+    FROM nex_runtime_immutable_records_v1.records records
   ) contract_row")"
 jq -e '
   length == 3 and
   all(.[];
     .platform == "shopify" and
-    .event_record_id == .readable_record_id and
+    (.record_id | test("^record_[0-9a-f]{64}$")) and
+    (.payload_sha256 | test("^[0-9a-f]{64}$")) and
     (.provider_object_sha256 | test("^[0-9a-f]{64}$"))
   )
-' <<<"${event_contract}" >/dev/null
+' <<<"${record_contract}" >/dev/null
+echo "[cleanroom] immutable Record contract verified"
 
 while IFS=$'\t' read -r family provider_json declared_sha256; do
   actual_sha256="$(printf '%s' "${provider_json}" | shasum -a 256 | awk '{print $1}')"
@@ -658,11 +816,11 @@ while IFS=$'\t' read -r family provider_json declared_sha256; do
     exit 1
   }
 done < <(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -AtF $'\t' -c \
-  "SELECT metadata->>'family', payload->>'provider_object_json', payload->>'provider_object_sha256' FROM nex_runtime.records ORDER BY metadata->>'family'")
+  "SELECT payload_json::JSONB#>>'{source_metadata,payload_metadata,family}', payload_json::JSONB#>>'{source_metadata,provider_payload,provider_object_json}', payload_json::JSONB#>>'{source_metadata,provider_payload,provider_object_sha256}' FROM nex_runtime_immutable_records_v1.records ORDER BY payload_json::JSONB#>>'{source_metadata,payload_metadata,family}'")
 
-event_customer_id="$(postgres_json "SELECT record_id FROM nex_runtime.durable_events WHERE properties_json->>'container_id' = 'customer' LIMIT 1")"
-[[ "${event_customer_id}" == "${CUSTOMER_SOURCE_ID}" ]]
-event_customer_read="$(runtime_call records.get "$(jq -nc --arg id "${event_customer_id}" '{id:$id}')")"
+customer_record_id="$(postgres_json "SELECT id FROM nex_runtime_immutable_records_v1.records WHERE source_record_type = 'shopify.customer' LIMIT 1")"
+[[ "${customer_record_id}" == "${CUSTOMER_SOURCE_ID}" ]]
+event_customer_read="$(runtime_call records.get "$(jq -nc --arg id "${customer_record_id}" '{id:$id}')")"
 jq -e --arg id "${CUSTOMER_SOURCE_ID}" '.record.id == $id' <<<"${event_customer_read}" >/dev/null
 
 echo "[cleanroom] restart and prove durable package, record, identity, and dormant-work state"
@@ -711,11 +869,25 @@ commerce_replay_after_restart="$(docker exec --user 20042:20042 "${runtime_conta
 jq -e '.ok == true and .status == "skipped"' <<<"${customer_ingest_after_restart}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${order_ingest_after_restart}" >/dev/null
 jq -e '.ok == true and .status == "skipped"' <<<"${line_ingest_after_restart}" >/dev/null
-jq -e '.state == "succeeded" and .created_entities == 0 and .created_contacts == 0 and .replayed == 1' <<<"${cohort_after_restart}" >/dev/null
+jq -e '.state == "succeeded" and .created_entities == 0 and .created_contacts == 0 and .replayed == 1 and .results[0].customer_observation_outcome == "adopted_existing" and .results[0].customer_facet_outcome == "adopted_existing"' <<<"${cohort_after_restart}" >/dev/null
 jq -e '.ok == true and .completed == true and .totals.created == 0 and .totals.replayed == 2' <<<"${commerce_replay_after_restart}" >/dev/null
 
 counts_after_restart="$(runtime_counts)"
-[[ "$(jq -S -c . <<<"${counts_before_restart}")" == "$(jq -S -c . <<<"${counts_after_restart}")" ]]
+jq -e --argjson before "${counts_before_restart}" '
+  .records == $before.records and
+  .ingest_receipts == ($before.ingest_receipts + 3) and
+  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .entities == $before.entities and .contacts == $before.contacts and
+  .observations == $before.observations and .tags == $before.tags and
+  .queue == $before.queue and .dispatch_receipts == $before.dispatch_receipts and
+  .adapter_instances == $before.adapter_instances and
+  .commerce_orders == $before.commerce_orders and
+  .commerce_order_revisions == $before.commerce_order_revisions and
+  .commerce_line_items == $before.commerce_line_items and
+  .commerce_line_item_revisions == $before.commerce_line_item_revisions and
+  .customer_facets == $before.customer_facets and
+  .accepted_observation_compatibility_receipts == 0
+' <<<"${counts_after_restart}" >/dev/null
 [[ -z "$(git -C "${UMBRELLA_ROOT}" status --porcelain=v1 --untracked-files=all)" ]] || {
   echo "cleanroom changed the source worktree" >&2
   exit 1
@@ -745,7 +917,7 @@ jq -n \
   --arg seed_contract_sha256 "${seed_contract_sha256}" \
   --argjson initial_counts "${initial_counts}" \
   --argjson terminal_counts "${counts_after_restart}" \
-  --argjson event_contract "${event_contract}" \
+  --argjson record_contract "${record_contract}" \
   '{
     ok:true,
     finished_at:$finished_at,
@@ -754,8 +926,8 @@ jq -n \
     postgres:{image:$postgres_image,image_id:$postgres_image_id,version:$postgres_version,platform:"linux/amd64"},
     packages:{shopify_adapter_sha256:$adapter_sha256,moonsleep_commerce_sha256:$app_sha256,active_after_restart:true},
     source_identity:{contract_sha256:$seed_contract_sha256,first_create_count:2,second_create_count:0,second_replay_count:2},
-    synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",event_contract:$event_contract},
-    customer_projection:{runner:"bounded_checkpointed_http",batch_limit:250,first_created_entities:1,first_created_contacts:1,replay_created_entities:0,replay_created_contacts:0,replay_observations:1},
+    synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",pre_restart_ingest_receipts:6,post_restart_ingest_receipts:9,record_contract:$record_contract},
+    customer_projection:{runner:"bounded_checkpointed_http",checkpoint_receipt_version:2,batch_limit:250,first_created_entities:1,first_created_contacts:1,first_accepted_customer_observations:1,first_attached_customer_facets:1,replay_created_entities:0,replay_created_contacts:0,replay_adopted_customer_observations:1,replay_adopted_customer_facets:1,accepted_observation_compatibility_receipts:0},
     commerce_projection:{runner:"bounded_checkpointed_http",batch_limit:50,default_batch_size:25,default_batches_per_invocation:1,orders:1,line_items:1,first_created:2,replay_created:0,replay_observations:2,canonical_customer_link:true,address_snapshots_sha256_bound:true},
     work_boundary:{projector_job_count:2,projector_job_status:"inactive",source_job_count:12,source_job_status:"active_for_explicit_invocation",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:false,queue_rows:0,dispatch_receipts:0,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},

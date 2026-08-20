@@ -18,8 +18,12 @@ job ignores non-customer records. For a customer record it:
 2. Verifies the exact provider JSON hash and stable source anchors.
 3. Calls `contacts.observe` with the shop domain and Shopify customer GID.
 4. Calls `entities.resolve` for the observed entity.
-5. Calls `entities.tags.list` and requires `Customer` and `Shopify`.
-6. Returns exact projection identifiers for the durable job receipt.
+5. Treats `Customer` and `Shopify` Entity tags as compatibility/search hints.
+6. Creates or reuses a Record-native Episode, Fact, sealed Fact set, and
+   accepted customer-role Observation through public semantic-ledger operations.
+7. Creates or adopts the one restricted `moonsleep.customer.v1` Customer Facet
+   directly from the accepted Observation basis.
+8. Returns exact projection identifiers for the durable job receipt.
 
 The app also installs twelve independent Shopify source-observation jobs. New
 or unconfigured recurring schedules are disabled on install and upgrade. An
@@ -32,7 +36,8 @@ schedule by editing its row directly. The installed UTC expressions stagger
 each family into its own second/minute slot so activation does not create a
 provider-call burst.
 
-For a full customer run, invoke
+After a reviewed representative customer+Order canary, a larger historical run
+may invoke
 `scripts/shopify_customer_projection_runner.py --build-manifest`. The runner
 calls `shopify-customers.inspect-backfill` and atomically writes its exact
 validated sorted ID set to a new private SHA-256-bound manifest without direct
@@ -54,5 +59,8 @@ require it to create nothing and replay every exact source observation.
 - Do not replace Dispatch fulfillment ownership.
 - Do not enable a production backfill until PostgreSQL runtime, restart, and
   replay gates pass.
-- Do not ingest Shopify records before both source routing contacts resolve to
-  their expected canonical entities and required tags.
+- Do not use Entity tags as customer-role authority; require the Customer Facet.
+- Do not invoke the legacy Shopify Customer Facet bridge or copy accepted
+  Observation receipts into `core_graph_accepted_observation_receipts`.
+- Do not enable either projector job or any projection subscription before a
+  separately reviewed representative customer+Order canary and identical replay.

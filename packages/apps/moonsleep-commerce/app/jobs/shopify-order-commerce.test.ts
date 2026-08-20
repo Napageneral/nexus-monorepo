@@ -13,16 +13,32 @@ function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function recordPayload(raw: string) {
+  return {
+    source_metadata: {
+      provider_payload: {
+        provider_object_json: raw,
+        provider_object_sha256: sha256(raw),
+      },
+    },
+  };
+}
+
 function orderRecord(overrides: Record<string, unknown> = {}) {
   const raw =
     '{"id":900719925474099312346,"name":"#SYNTH-1","customer":{"id":900719925474099312345},"total_price":"199.00"}';
   return {
     id: "record-order-revision-1",
+    payload_sha256: "1".repeat(64),
+    provider_account_ref: "moonsleepco.myshopify.com",
+    provider_record_id: "shopify-order-900719925474099312346",
     record_id: "shopify:shopify-primary:order:900719925474099312346:revision-1",
     timestamp: 1_784_640_001_000,
     platform: "shopify",
+    source_record_type: "shopify.order",
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
-    payload: { provider_object_json: raw, provider_object_sha256: sha256(raw) },
+    payload: recordPayload(raw),
     metadata: {
       family: "order",
       revision_hash: "b".repeat(64),
@@ -53,12 +69,17 @@ function lineItemRecord(overrides: Record<string, unknown> = {}) {
     '{"id":900719925474099312347,"product_id":900719925474099312348,"quantity":1,"price":"199.00"}';
   return {
     id: "record-line-revision-1",
+    payload_sha256: "2".repeat(64),
+    provider_account_ref: "moonsleepco.myshopify.com",
+    provider_record_id: "shopify-line-item-900719925474099312347",
     record_id:
       "shopify:shopify-primary:line_item:900719925474099312346:900719925474099312347:revision-1",
     timestamp: 1_784_640_002_000,
     platform: "shopify",
+    source_record_type: "shopify.line_item",
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
-    payload: { provider_object_json: raw, provider_object_sha256: sha256(raw) },
+    payload: recordPayload(raw),
     metadata: {
       family: "line_item",
       revision_hash: "c".repeat(64),
@@ -83,41 +104,35 @@ function lineItemRecord(overrides: Record<string, unknown> = {}) {
 }
 
 function receipt(sourceRecordId: string) {
+  const sourceRecordPayloadSha256 = sourceRecordId.includes("line")
+    ? "2".repeat(64)
+    : "1".repeat(64);
   return {
     created: true,
     replayed: false,
     became_current: true,
-    row_id: "commerce-row",
+    row_id: `commerce_order_${"a".repeat(64)}`,
     revision_id: "commerce-revision",
     source_record_id: sourceRecordId,
-    source_revision_sha256: "d".repeat(64),
+    source_record_payload_sha256: sourceRecordPayloadSha256,
     projection_payload_sha256: "e".repeat(64),
   };
 }
 
 describe("Shopify order and line-item commerce projection", () => {
-  it("binds legacy 16-hex adapter revision tokens to a domain-separated SHA-256", () => {
-    const revisionToken = "d06a10a943d841b7";
-    const order = orderRecord();
-    (order.metadata as Record<string, unknown>).revision_hash = revisionToken;
-    const parsedOrder = parseShopifyOrderRecord(order);
-    expect(parsedOrder.input.source_revision_sha256).toBe(
-      sha256(`nex-commerce-source-revision-token-v1\0${revisionToken}`),
+  it("requires the canonical immutable Record custody fields", () => {
+    expect(() => parseShopifyOrderRecord(orderRecord({ payload_sha256: "" }))).toThrow(
+      "requires payload_sha256",
     );
-
-    const lineItem = lineItemRecord();
-    (lineItem.metadata as Record<string, unknown>).revision_hash = revisionToken;
-    const parsedLineItem = parseShopifyLineItemRecord(lineItem);
-    if (parsedLineItem.family !== "line_item") throw new Error("expected line item");
-    expect(parsedLineItem.inputWithoutCurrency.source_revision_sha256).toBe(
-      sha256(`nex-commerce-source-revision-token-v1\0${revisionToken}`),
+    expect(() => parseShopifyOrderRecord(orderRecord({ payload_sha256: "not-a-digest" }))).toThrow(
+      "payload_sha256 is malformed",
     );
-
-    for (const malformed of ["d06a10a943d841b", "d06a10a943d841bg", "D06A10A943D841B7"]) {
-      const bad = orderRecord();
-      (bad.metadata as Record<string, unknown>).revision_hash = malformed;
-      expect(() => parseShopifyOrderRecord(bad)).toThrow("revision_hash is malformed");
-    }
+    expect(() => parseShopifyOrderRecord(orderRecord({ provider_record_id: "" }))).toThrow(
+      "requires provider_record_id",
+    );
+    expect(() => parseShopifyOrderRecord(orderRecord({ provider_account_ref: "" }))).toThrow(
+      "requires provider_account_ref",
+    );
   });
 
   it("preserves lossless source binding, customer anchor, and immutable address snapshots", () => {
@@ -129,7 +144,8 @@ describe("Shopify order and line-item commerce projection", () => {
         order_id: "gid://shopify/Order/900719925474099312346",
         customer_shopify_gid: "gid://shopify/Customer/900719925474099312345",
         source_payload_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-        source_revision_sha256: "b".repeat(64),
+        source_record_payload_sha256: "1".repeat(64),
+        source_provider_record_id: "shopify-order-900719925474099312346",
         currency: "USD",
         total_price: "199.00",
       },
@@ -144,10 +160,13 @@ describe("Shopify order and line-item commerce projection", () => {
   });
 
   it("resolves the exact Shopify customer contact before observing the order", async () => {
-    const parsed = parseShopifyOrderRecord(orderRecord());
+    const parsed = parseShopifyOrderRecord(
+      orderRecord({ provider_account_ref: "shopify-account-key" }),
+    );
     if (parsed.family !== "order") throw new Error("expected order");
     const observe = vi.fn(async (input: Record<string, unknown>) => {
       expect(input).toMatchObject({
+        space_id: "shopify-account-key",
         customer_contact_id: "contact-shopify-customer",
         customer_entity_id: "entity-canonical-customer",
       });
@@ -172,7 +191,15 @@ describe("Shopify order and line-item commerce projection", () => {
       },
     } as unknown as ShopifyCommerceClient;
     const result = await projectParsedShopifyOrder(client, parsed);
-    expect(result).toMatchObject({ created: true, source_record_id: "record-order-revision-1" });
+    expect(result).toMatchObject({
+      created: true,
+      source_record_id: "record-order-revision-1",
+      canonical_order_target: {
+        subject_class: "moonsleep.commerce_order",
+        target_id: `commerce_order_${"a".repeat(64)}`,
+        adapter_contract_id: "moonsleep.commerce-order.target-adapter.v1",
+      },
+    });
     expect(client.contacts.resolve).toHaveBeenCalledWith({
       platform: "shopify",
       space_id: "moonsleepco.myshopify.com",
@@ -185,10 +212,7 @@ describe("Shopify order and line-item commerce projection", () => {
     const sourceJson =
       '{"id":900719925474099312346,"name":"#SYNTH-1","customer":{"id":900719925474099312345,"first_name":"Ada","last_name":"Lovelace"},"total_price":"199.00"}';
     const record = orderRecord({
-      payload: {
-        provider_object_json: sourceJson,
-        provider_object_sha256: sha256(sourceJson),
-      },
+      payload: recordPayload(sourceJson),
     });
     const parsed = parseShopifyOrderRecord(record);
     if (parsed.family !== "order") throw new Error("expected order");
@@ -277,10 +301,7 @@ describe("Shopify order and line-item commerce projection", () => {
     expect(() =>
       parseShopifyOrderRecord(
         orderRecord({
-          payload: {
-            provider_object_json: sourceJson,
-            provider_object_sha256: sha256(sourceJson),
-          },
+          payload: recordPayload(sourceJson),
         }),
       ),
     ).toThrow("requires an embedded customer object");
@@ -317,8 +338,25 @@ describe("Shopify order and line-item commerce projection", () => {
 
   it("rejects hash drift, anchor drift, unsafe quantities, and missing parents", async () => {
     expect(() =>
+      parseShopifyOrderRecord(orderRecord({ source_record_type: "shopify.line_item" })),
+    ).toThrow("expected shopify.order Record");
+    expect(() =>
+      parseShopifyLineItemRecord(
+        lineItemRecord({ source_space_id: "foreign-shop.myshopify.com" }),
+      ),
+    ).toThrow("space does not match");
+    expect(() =>
       parseShopifyOrderRecord(
-        orderRecord({ payload: { provider_object_json: "{}", provider_object_sha256: "0".repeat(64) } }),
+        orderRecord({
+          payload: {
+            source_metadata: {
+              provider_payload: {
+                provider_object_json: "{}",
+                provider_object_sha256: "0".repeat(64),
+              },
+            },
+          },
+        }),
       ),
     ).toThrow("hash does not match");
     const anchorDrift = orderRecord();
