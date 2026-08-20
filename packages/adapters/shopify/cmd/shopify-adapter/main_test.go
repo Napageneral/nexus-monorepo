@@ -180,6 +180,9 @@ func TestBuildLineItemRecord(t *testing.T) {
 	if record.Payload.ExternalRecordID != "line_item:101:501" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
 	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.line_item" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
+	}
 }
 
 func TestParseLinkHeader(t *testing.T) {

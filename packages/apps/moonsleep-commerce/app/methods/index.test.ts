@@ -155,9 +155,7 @@ describe("Shopify source schedule configuration", () => {
       } as never),
     ).rejects.toThrow("injected job update failure");
     expect(
-      schedules
-        .filter((row) => row.id !== "foreign-schedule")
-        .every((row) => row.enabled === 0),
+      schedules.filter((row) => row.id !== "foreign-schedule").every((row) => row.enabled === 0),
     ).toBe(true);
     expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
   });
@@ -905,6 +903,49 @@ describe("Complete Shopify customer record-set discovery", () => {
     });
   });
 
+  it("selects one bounded legacy page by exact provider account and literal family prefix", async () => {
+    const legacy = customerRecord("legacy-record-1", "gid://shopify/Customer/1");
+    legacy.source_record_type = "text";
+    legacy.provider_account_ref = "moonsleepco.myshopify.com";
+    legacy.provider_record_id = "shopify:shopify:shopify-primary:customer:1:revision-1";
+    legacy.payload = { source_metadata: {} };
+    (legacy.metadata as Record<string, unknown>).connection_id = "shopify-primary";
+    const scan = vi.fn(async () => ({
+      records: [legacy],
+      next_provider_record_id: legacy.provider_record_id,
+      next_source_timestamp: legacy.timestamp,
+      next_id: legacy.id,
+    }));
+    const inspected = await inspectShopifyCustomerBackfill({
+      params: {
+        shop_domain: "moonsleepco.myshopify.com",
+        connection_id: "shopify-primary",
+        source_contract: "legacy_double_prefix",
+        limit: 2,
+      },
+      nex: { records: { scan } },
+    } as never);
+    expect(inspected).toMatchObject({
+      state: "ready",
+      source_contract: "legacy_double_prefix",
+      family: "customer",
+      record_count: 1,
+      record_ids: ["legacy-record-1"],
+      complete: true,
+      provider_read_authority: false,
+      provider_write_authority: false,
+    });
+    expect(scan).toHaveBeenCalledWith({
+      after_scan_sequence: 0,
+      platform: "shopify",
+      connection_id: "shopify-primary",
+      source_record_type: "text",
+      provider_account_ref: "moonsleepco.myshopify.com",
+      provider_record_id_prefix: "shopify:shopify:shopify-primary:customer:",
+      limit: 3,
+    });
+  });
+
   it("paginates the public record surface and rejects duplicate IDs", async () => {
     const records = Object.fromEntries(
       Array.from({ length: 1001 }, (_, index) => {
@@ -1236,7 +1277,9 @@ describe("Shopify order and line-item bounded backfill", () => {
       commerceRecord("record-y-order", "order"),
     ];
     const scan = vi.fn(async (input: Record<string, unknown>) => {
-      const rows = records.filter((record) => record.source_record_type === input.source_record_type);
+      const rows = records.filter(
+        (record) => record.source_record_type === input.source_record_type,
+      );
       return {
         records: rows.map((record, index) => ({ ...record, scan_sequence: index + 1 })),
         next_scan_sequence: rows.length,

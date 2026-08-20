@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertShopifyRecordFamily } from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -64,9 +65,7 @@ type ShopifyOrderCustomerObservation = {
 };
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
@@ -189,7 +188,10 @@ function orderCustomerName(sourceObject: RuntimeRow, customerGid: string): strin
   return combined || `Shopify customer ${customerGid.replace(/^gid:\/\/shopify\/Customer\//, "")}`;
 }
 
-function exactAddress(value: unknown, field: string): {
+function exactAddress(
+  value: unknown,
+  field: string,
+): {
   address: RuntimeRow | null;
   digest: string | null;
 } {
@@ -207,17 +209,13 @@ function gid(resource: "Customer" | "Order" | "LineItem", numericId: string): st
   return `gid://shopify/${resource}/${numericId}`;
 }
 
-function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item") {
-  if (asString(record.platform) !== "shopify") {
-    throw new Error("Shopify commerce projector only accepts Shopify records");
-  }
-  if (asString(record.source_record_type) !== `shopify.${expectedFamily}`) {
-    throw new Error(`Shopify commerce projector expected shopify.${expectedFamily} Record`);
-  }
+function commonRecord(
+  record: RuntimeRow,
+  expectedFamily: "order" | "line_item",
+  options: { allowLegacyText?: boolean } = {},
+) {
+  const sourceContract = assertShopifyRecordFamily(record, expectedFamily, options);
   const metadata = asRecord(record.metadata);
-  if (asString(metadata.family) !== expectedFamily) {
-    throw new Error(`Shopify commerce projector expected ${expectedFamily} record`);
-  }
   const row = asRecord(metadata.row);
   const providerIds = asRecord(metadata.provider_ids);
   const shopDomain = requireString(row, "shop_domain");
@@ -230,9 +228,10 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
   const providerAccountRef = requireString(record, "provider_account_ref");
   const payload = asRecord(record.payload);
   const sourceMetadata = asRecord(payload.source_metadata);
-  const { sourceObject } = exactProviderEnvelope(
-    asRecord(sourceMetadata.provider_payload),
-  );
+  const sourceObject =
+    sourceContract === "canonical"
+      ? exactProviderEnvelope(asRecord(sourceMetadata.provider_payload)).sourceObject
+      : { customer: { first_name: "", last_name: "" } };
   const observedAt = record.timestamp;
   if (typeof observedAt !== "number" || !Number.isSafeInteger(observedAt) || observedAt < 0) {
     throw new Error("Shopify commerce record timestamp must be a non-negative safe integer");
@@ -245,15 +244,18 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
     sourceRecordId,
     sourceRecordPayloadSha256,
     sourceProviderRecordId,
-    providerAccountRef,
+    commerceSpaceId: sourceContract === "canonical" ? providerAccountRef : shopDomain,
     sourceObject,
     observedAt,
   };
 }
 
-export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyCommerceRecord {
+export function parseShopifyOrderRecord(
+  recordValue: unknown,
+  options: { allowLegacyText?: boolean } = {},
+): ParsedShopifyCommerceRecord {
   const record = asRecord(recordValue);
-  const common = commonRecord(record, "order");
+  const common = commonRecord(record, "order", options);
   const orderNumericId = requireNumericId(common.row.order_id, "order_id");
   if (requireNumericId(common.providerIds.order_id, "provider order_id") !== orderNumericId) {
     throw new Error("Shopify order anchors disagree");
@@ -271,7 +273,7 @@ export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyComm
   }
   const input: RuntimeRow = {
     platform: "shopify",
-    space_id: common.providerAccountRef,
+    space_id: common.commerceSpaceId,
     order_id: gid("Order", orderNumericId),
     order_name: asOptionalString(common.row.name),
     source_record_id: common.sourceRecordId,
@@ -280,7 +282,9 @@ export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyComm
     source_provider_record_id: common.sourceProviderRecordId,
     projector_version: PROJECTOR_VERSION,
     observed_at: common.observedAt,
-    customer_shopify_gid: customerId ? gid("Customer", requireNumericId(customerId, "customer_id")) : null,
+    customer_shopify_gid: customerId
+      ? gid("Customer", requireNumericId(customerId, "customer_id"))
+      : null,
     currency,
     financial_status: asOptionalString(common.row.financial_status),
     fulfillment_status: asOptionalString(common.row.fulfillment_status),
@@ -315,9 +319,12 @@ export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyComm
   };
 }
 
-export function parseShopifyLineItemRecord(recordValue: unknown): ParsedShopifyCommerceRecord {
+export function parseShopifyLineItemRecord(
+  recordValue: unknown,
+  options: { allowLegacyText?: boolean } = {},
+): ParsedShopifyCommerceRecord {
   const record = asRecord(recordValue);
-  const common = commonRecord(record, "line_item");
+  const common = commonRecord(record, "line_item", options);
   const orderNumericId = requireNumericId(common.row.order_id, "order_id");
   const lineNumericId = requireNumericId(common.row.line_item_id, "line_item_id");
   if (
@@ -332,7 +339,7 @@ export function parseShopifyLineItemRecord(recordValue: unknown): ParsedShopifyC
   const sourcePayloadSha256 = sha256(stableJson(common.row));
   const inputWithoutCurrency: RuntimeRow = {
     platform: "shopify",
-    space_id: common.providerAccountRef,
+    space_id: common.commerceSpaceId,
     order_id: gid("Order", orderNumericId),
     line_item_id: gid("LineItem", lineNumericId),
     source_record_id: common.sourceRecordId,
@@ -413,7 +420,8 @@ export async function projectParsedShopifyOrder(
         asString(observedContact.platform) !== observation.platform ||
         asString(observedContact.space_id) !== observation.space_id ||
         asString(observedContact.contact_id) !== observation.contact_id ||
-        asString(committedObservation.source_observation_id) !== observation.source_observation_id ||
+        asString(committedObservation.source_observation_id) !==
+          observation.source_observation_id ||
         !observedEntityId ||
         !canonicalEntityId
       ) {
@@ -423,7 +431,9 @@ export async function projectParsedShopifyOrder(
         await nex.entities.resolve({ entity_id: observedEntityId }),
       );
       if (asString(entityResolution.canonical_id) !== canonicalEntityId) {
-        throw new Error("Nex canonical entity resolution disagrees with order-customer observation");
+        throw new Error(
+          "Nex canonical entity resolution disagrees with order-customer observation",
+        );
       }
       resolved = unwrapPayload(
         await nex.contacts.resolve({
@@ -434,7 +444,11 @@ export async function projectParsedShopifyOrder(
       );
     }
     const contact = asRecord(resolved.contact);
-    if (resolved.found !== true || !asString(contact.id) || !asString(contact.canonical_entity_id)) {
+    if (
+      resolved.found !== true ||
+      !asString(contact.id) ||
+      !asString(contact.canonical_entity_id)
+    ) {
       throw new Error(`Shopify order customer contact is not projected: ${customerGid}`);
     }
     input.customer_contact_id = asString(contact.id);

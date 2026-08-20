@@ -341,9 +341,7 @@ describe("Shopify order and line-item commerce projection", () => {
       parseShopifyOrderRecord(orderRecord({ source_record_type: "shopify.line_item" })),
     ).toThrow("expected shopify.order Record");
     expect(() =>
-      parseShopifyLineItemRecord(
-        lineItemRecord({ source_space_id: "foreign-shop.myshopify.com" }),
-      ),
+      parseShopifyLineItemRecord(lineItemRecord({ source_space_id: "foreign-shop.myshopify.com" })),
     ).toThrow("space does not match");
     expect(() =>
       parseShopifyOrderRecord(
@@ -385,6 +383,21 @@ describe("Shopify order and line-item commerce projection", () => {
       "parent order is not projected",
     );
     expect(lineObserve).not.toHaveBeenCalled();
+  });
+
+  it("parses an exact legacy text order from its immutable normalized row only when enabled", () => {
+    const record = orderRecord({
+      source_record_type: "text",
+      provider_account_ref: "moonsleepco.myshopify.com",
+      provider_record_id: "shopify:shopify:shopify-primary:order:900719925474099312346:revision-1",
+      payload: { source_metadata: {} },
+    });
+    (record.metadata as Record<string, unknown>).connection_id = "shopify-primary";
+    expect(() => parseShopifyOrderRecord(record)).toThrow("expected shopify.order Records");
+    expect(parseShopifyOrderRecord(record, { allowLegacyText: true })).toMatchObject({
+      family: "order",
+      input: { order_name: "#SYNTH-1" },
+    });
   });
 
   it("keeps unrelated durable events out of the dormant commerce job", async () => {

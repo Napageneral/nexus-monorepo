@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -273,7 +273,16 @@
             "type": "string",
             "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
             "maxLength": 128
-          }
+          },
+          "source_contract": {
+            "type": "string",
+            "enum": ["canonical", "legacy_current_prefix", "legacy_double_prefix"],
+            "default": "canonical"
+          },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 99, "default": 99 },
+          "after_provider_record_id": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "after_source_timestamp": { "type": "integer", "minimum": 0 },
+          "after_id": { "type": "string", "minLength": 1, "maxLength": 512 }
         },
         "required": ["shop_domain", "connection_id"],
         "additionalProperties": false
@@ -298,7 +307,17 @@
             "type": "string",
             "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$",
             "maxLength": 128
-          }
+          },
+          "source_contract": {
+            "type": "string",
+            "enum": ["canonical", "legacy_current_prefix", "legacy_double_prefix"],
+            "default": "canonical"
+          },
+          "family": { "type": "string", "enum": ["order", "line_item"] },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 99, "default": 99 },
+          "after_provider_record_id": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "after_source_timestamp": { "type": "integer", "minimum": 0 },
+          "after_id": { "type": "string", "minLength": 1, "maxLength": 512 }
         },
         "required": ["shop_domain", "connection_id"],
         "additionalProperties": false

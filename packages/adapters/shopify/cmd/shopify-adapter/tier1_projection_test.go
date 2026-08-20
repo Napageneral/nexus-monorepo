@@ -43,6 +43,9 @@ func TestBuildCustomerRecord(t *testing.T) {
 	if record.Payload.ExternalRecordID != "customer:44" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
 	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.customer" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
+	}
 	if got := record.Payload.Metadata["family"]; got != "customer" {
 		t.Fatalf("unexpected family metadata: %#v", got)
 	}

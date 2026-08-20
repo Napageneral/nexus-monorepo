@@ -77,7 +77,10 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
       merge_candidate: null,
     },
   }));
-  const resolve = vi.fn(async () => ({ ok: true, payload: { canonical_id: canonicalId, hops: 0 } }));
+  const resolve = vi.fn(async () => ({
+    ok: true,
+    payload: { canonical_id: canonicalId, hops: 0 },
+  }));
   const get = vi.fn(async () => ({ ok: true, payload: { record } }));
   let attachment: Record<string, unknown> | null = options.replayed
     ? {
@@ -210,7 +213,9 @@ describe("Shopify customer identity projection", () => {
 
   it("observes, resolves and verifies the canonical customer entity through public Nex operations", async () => {
     const fixture = nexFixture();
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).resolves.toMatchObject({
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
       projected: true,
       created_entity: true,
       created_contact: true,
@@ -261,7 +266,9 @@ describe("Shopify customer identity projection", () => {
 
   it("replays the same immutable observation without changing entity binding", async () => {
     const fixture = nexFixture({ replayed: true });
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).resolves.toMatchObject({
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
       projected: true,
       replayed: true,
       created_entity: false,
@@ -297,7 +304,12 @@ describe("Shopify customer identity projection", () => {
     fixture.record.metadata = { family: "order" };
     await expect(
       shopifyCustomerIdentityJob({
-        input: { event: { type: "record.ingested", properties: { platform: "shopify", record_id: "record-row-1" } } },
+        input: {
+          event: {
+            type: "record.ingested",
+            properties: { platform: "shopify", record_id: "record-row-1" },
+          },
+        },
         nex: fixture.nex,
       }),
     ).resolves.toEqual({ projected: false, reason: "not_customer", record_id: "record-row-1" });
@@ -306,8 +318,10 @@ describe("Shopify customer identity projection", () => {
 
   it("fails closed when exact provider JSON does not match its bound hash", () => {
     const record = customerRecord();
-    const sourceMetadata = (record.payload as Record<string, unknown>)
-      .source_metadata as Record<string, unknown>;
+    const sourceMetadata = (record.payload as Record<string, unknown>).source_metadata as Record<
+      string,
+      unknown
+    >;
     const providerPayload = sourceMetadata.provider_payload as Record<string, unknown>;
     providerPayload.provider_object_json = JSON.stringify({ id: "other" });
     expect(() => buildShopifyCustomerObservation(record)).toThrow(/hash does not match/);
@@ -354,6 +368,23 @@ describe("Shopify customer identity projection", () => {
     expect(() => buildShopifyCustomerObservation(record)).toThrow(/shopify.customer Records/);
   });
 
+  it("projects an exact legacy text Record from its immutable normalized row only when enabled", () => {
+    const record = customerRecord({
+      source_record_type: "text",
+      provider_account_ref: "moonsleepco.myshopify.com",
+      provider_record_id: "shopify:shopify:shopify-primary:customer:7123456789:revision-1",
+      payload: { source_metadata: {} },
+    });
+    (record.metadata as Record<string, unknown>).connection_id = "shopify-primary";
+    expect(() => buildShopifyCustomerObservation(record)).toThrow(
+      "expected shopify.customer Records",
+    );
+    expect(buildShopifyCustomerObservation(record, { allowLegacyText: true })).toMatchObject({
+      contact_id: "gid://shopify/Customer/7123456789",
+      contact_name: "Rina Alvarez",
+    });
+  });
+
   it("does not merge or anchor customers by email, phone or display name", () => {
     const record = customerRecord();
     const observation = buildShopifyCustomerObservation(record);
@@ -365,7 +396,10 @@ describe("Shopify customer identity projection", () => {
 
   it("fails closed when canonical resolution disagrees with the observation", async () => {
     const fixture = nexFixture({ canonicalId: "entity-canonical" });
-    fixture.calls.resolve.mockResolvedValueOnce({ ok: true, payload: { canonical_id: "entity-other", hops: 1 } });
+    fixture.calls.resolve.mockResolvedValueOnce({
+      ok: true,
+      payload: { canonical_id: "entity-other", hops: 1 },
+    });
     await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).rejects.toThrow(
       /resolution disagrees/,
     );
@@ -373,7 +407,9 @@ describe("Shopify customer identity projection", () => {
 
   it("treats Entity tags as compatibility hints rather than customer-role authority", async () => {
     const fixture = nexFixture();
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).resolves.toMatchObject({
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
       tags: ["Customer", "Shopify"],
       tag_contract: "compatibility_hint",
       customer_facet_outcome: "attached",
