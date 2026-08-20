@@ -24,7 +24,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.2.7"
+	adapterVersion             = "0.2.8"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second

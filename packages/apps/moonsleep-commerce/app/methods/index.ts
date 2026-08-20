@@ -177,6 +177,129 @@ function requireConnectionId(value: unknown): string {
   return connectionId;
 }
 
+type HistoricalSourceContract = "legacy_current_prefix" | "legacy_double_prefix";
+
+function requireSourceContract(value: unknown): "canonical" | HistoricalSourceContract {
+  const sourceContract = value === undefined ? "canonical" : asString(value);
+  if (
+    sourceContract !== "canonical" &&
+    sourceContract !== "legacy_current_prefix" &&
+    sourceContract !== "legacy_double_prefix"
+  ) {
+    throw new Error("source_contract must name an exact supported Shopify Record contract");
+  }
+  return sourceContract;
+}
+
+function requirePageLimit(value: unknown): number {
+  if (value === undefined) return RECORD_SCAN_PAGE_SIZE - 1;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > 99) {
+    throw new Error("limit must be an integer between 1 and 99");
+  }
+  return value;
+}
+
+async function scanLegacyShopifyFamilyPage(params: {
+  nex: unknown;
+  shopDomain: string;
+  connectionId: string;
+  family: "customer" | "order" | "line_item";
+  sourceContract: HistoricalSourceContract;
+  limit: number;
+  cursor: { providerRecordId?: unknown; sourceTimestamp?: unknown; id?: unknown };
+}): Promise<{
+  recordIds: string[];
+  nextProviderRecordId: string | null;
+  nextSourceTimestamp: number | null;
+  nextId: string | null;
+  complete: boolean;
+}> {
+  const cursorValues = [
+    params.cursor.providerRecordId,
+    params.cursor.sourceTimestamp,
+    params.cursor.id,
+  ];
+  const cursorPresent = cursorValues.map((value) => value !== undefined);
+  if (cursorPresent.some(Boolean) && !cursorPresent.every(Boolean)) {
+    throw new Error("legacy provider cursor requires all three exact cursor fields");
+  }
+  const afterProviderRecordId = cursorPresent[0] ? asString(params.cursor.providerRecordId) : "";
+  const afterSourceTimestamp = cursorPresent[0]
+    ? asNonNegativeInteger(params.cursor.sourceTimestamp)
+    : 0;
+  const afterId = cursorPresent[0] ? asString(params.cursor.id) : "";
+  if (cursorPresent[0] && (!afterProviderRecordId || afterSourceTimestamp == null || !afterId)) {
+    throw new Error("legacy provider cursor is invalid");
+  }
+  const providerAccountRef =
+    params.sourceContract === "legacy_current_prefix" ? params.connectionId : params.shopDomain;
+  const providerRecordIdPrefix =
+    params.sourceContract === "legacy_current_prefix"
+      ? `shopify:${params.connectionId}:${params.family}:`
+      : `shopify:shopify:${params.connectionId}:${params.family}:`;
+  const recordsClient = (
+    params.nex as {
+      records: {
+        scan: (input: Record<string, unknown>) => Promise<unknown>;
+      };
+    }
+  ).records;
+  const scanInput: Record<string, unknown> = {
+    after_scan_sequence: 0,
+    platform: "shopify",
+    connection_id: params.connectionId,
+    source_record_type: "text",
+    provider_account_ref: providerAccountRef,
+    provider_record_id_prefix: providerRecordIdPrefix,
+    limit: params.limit + 1,
+  };
+  if (cursorPresent[0]) {
+    scanInput.after_provider_record_id = afterProviderRecordId;
+    scanInput.after_source_timestamp = afterSourceTimestamp;
+    scanInput.after_id = afterId;
+  }
+  const response = unwrapPayload(await recordsClient.scan(scanInput));
+  if (!Array.isArray(response.records)) {
+    throw new Error("records.scan did not return a records array");
+  }
+  const scannedRows = response.records.map(asRecord);
+  const rows = scannedRows.slice(0, params.limit);
+  const recordIds = rows.map((record) => {
+    if (asString(record.source_space_id) !== params.shopDomain) {
+      throw new Error("Legacy Shopify scan returned a foreign shop record");
+    }
+    if (params.family === "customer") {
+      buildShopifyCustomerObservation(record, { allowLegacyText: true });
+    } else if (params.family === "order") {
+      parseShopifyOrderRecord(record, { allowLegacyText: true });
+    } else {
+      parseShopifyLineItemRecord(record, { allowLegacyText: true });
+    }
+    const id = asString(record.id);
+    if (!id || Buffer.byteLength(id, "utf8") > 512) {
+      throw new Error("Legacy Shopify scan returned an invalid record id");
+    }
+    return id;
+  });
+  if (new Set(recordIds).size !== recordIds.length) {
+    throw new Error("Legacy Shopify scan returned duplicate record ids");
+  }
+  const lastRow = rows.at(-1);
+  const nextProviderRecordId = lastRow ? asString(lastRow.provider_record_id) : null;
+  const nextSourceTimestamp = lastRow ? asNonNegativeInteger(lastRow.timestamp) : null;
+  const nextId = lastRow ? asString(lastRow.id) : null;
+  if (rows.length > 0 && (!nextProviderRecordId || nextSourceTimestamp == null || !nextId)) {
+    throw new Error("records.scan returned an invalid provider cursor");
+  }
+  return {
+    recordIds,
+    nextProviderRecordId,
+    nextSourceTimestamp,
+    nextId,
+    complete: scannedRows.length <= params.limit,
+  };
+}
+
 async function discoverShopifyCustomerRecordIds(params: {
   nex: unknown;
   shopDomain: string;
@@ -410,6 +533,43 @@ async function discoverShopifyCommerceRecordIds(params: {
 export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
   const shopDomain = requireShopDomain(ctx.params.shop_domain);
   const connectionId = requireConnectionId(ctx.params.connection_id);
+  const sourceContract = requireSourceContract(ctx.params.source_contract);
+  if (sourceContract !== "canonical") {
+    const page = await scanLegacyShopifyFamilyPage({
+      nex: ctx.nex,
+      shopDomain,
+      connectionId,
+      family: "customer",
+      sourceContract,
+      limit: requirePageLimit(ctx.params.limit),
+      cursor: {
+        providerRecordId: ctx.params.after_provider_record_id,
+        sourceTimestamp: ctx.params.after_source_timestamp,
+        id: ctx.params.after_id,
+      },
+    });
+    if (page.recordIds.length < 1) {
+      throw new Error("Exact legacy Shopify customer page is empty");
+    }
+    return {
+      state: "ready",
+      shop_domain: shopDomain,
+      connection_id: connectionId,
+      source_contract: sourceContract,
+      family: "customer",
+      record_count: page.recordIds.length,
+      record_ids: page.recordIds,
+      record_set_sha256: shopifyCustomerRecordSetSha256(page.recordIds),
+      first_record_id: page.recordIds[0],
+      last_record_id: page.recordIds.at(-1),
+      complete: page.complete,
+      next_provider_record_id: page.nextProviderRecordId,
+      next_source_timestamp: page.nextSourceTimestamp,
+      next_id: page.nextId,
+      provider_read_authority: false,
+      provider_write_authority: false,
+    };
+  }
   const discovery = await discoverShopifyCustomerRecordIds({
     nex: ctx.nex,
     shopDomain,
@@ -433,6 +593,47 @@ export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
 export const inspectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
   const shopDomain = requireShopDomain(ctx.params.shop_domain);
   const connectionId = requireConnectionId(ctx.params.connection_id);
+  const sourceContract = requireSourceContract(ctx.params.source_contract);
+  if (sourceContract !== "canonical") {
+    const family = asString(ctx.params.family);
+    if (family !== "order" && family !== "line_item") {
+      throw new Error("legacy commerce inspection requires exact order or line_item family");
+    }
+    const page = await scanLegacyShopifyFamilyPage({
+      nex: ctx.nex,
+      shopDomain,
+      connectionId,
+      family,
+      sourceContract,
+      limit: requirePageLimit(ctx.params.limit),
+      cursor: {
+        providerRecordId: ctx.params.after_provider_record_id,
+        sourceTimestamp: ctx.params.after_source_timestamp,
+        id: ctx.params.after_id,
+      },
+    });
+    if (page.recordIds.length < 1) {
+      throw new Error("Exact legacy Shopify commerce page is empty");
+    }
+    return {
+      state: "ready",
+      shop_domain: shopDomain,
+      connection_id: connectionId,
+      source_contract: sourceContract,
+      family,
+      record_count: page.recordIds.length,
+      record_ids: page.recordIds,
+      record_set_sha256: shopifyCommerceRecordSetSha256(page.recordIds),
+      first_record_id: page.recordIds[0],
+      last_record_id: page.recordIds.at(-1),
+      complete: page.complete,
+      next_provider_record_id: page.nextProviderRecordId,
+      next_source_timestamp: page.nextSourceTimestamp,
+      next_id: page.nextId,
+      provider_read_authority: false,
+      provider_write_authority: false,
+    };
+  }
   const discovery = await discoverShopifyCommerceRecordIds({
     nex: ctx.nex,
     shopDomain,
@@ -1065,11 +1266,12 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     if (
       subscriptions.length !== target.matches.length ||
       subscriptions.some(
-        (subscription) =>
-          (subscription.enabled === true || subscription.enabled === 1) !== enabled,
+        (subscription) => (subscription.enabled === true || subscription.enabled === 1) !== enabled,
       )
     ) {
-      throw new Error(`Shopify projection ${target.projection} subscriptions failed exact readback`);
+      throw new Error(
+        `Shopify projection ${target.projection} subscriptions failed exact readback`,
+      );
     }
   }
   return { state: "applied", ...plan };
@@ -1085,14 +1287,16 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
   for (const id of recordIds) {
     const response = unwrapPayload(await ctx.nex.records.get({ id }));
     const record = asRecord(response.record);
-    buildShopifyCustomerObservation(record);
+    buildShopifyCustomerObservation(record, { allowLegacyText: true });
     records.push({ id, record });
   }
 
   const results: RuntimeRow[] = [];
   const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
   for (const entry of records) {
-    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record);
+    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record, {
+      allowLegacyText: true,
+    });
     results.push({ record_id: entry.id, ...projected });
   }
 
@@ -1119,7 +1323,7 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
   for (const id of recordIds) {
     const response = unwrapPayload(await ctx.nex.records.get({ id }));
     const record = asRecord(response.record);
-    buildShopifyCustomerObservation(record);
+    buildShopifyCustomerObservation(record, { allowLegacyText: true });
     records.push({ id, record });
   }
 
@@ -1134,19 +1338,18 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
   const resultHash = createHash("sha256");
   const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
   for (const entry of records) {
-    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record);
+    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record, {
+      allowLegacyText: true,
+    });
     createdEntities += projected.created_entity === true ? 1 : 0;
     createdContacts += projected.created_contact === true ? 1 : 0;
     replayed += projected.replayed === true ? 1 : 0;
-    acceptedCustomerObservations +=
-      projected.customer_observation_outcome === "accepted" ? 1 : 0;
-    replayedCustomerObservations +=
-      projected.customer_observation_outcome === "replayed" ? 1 : 0;
+    acceptedCustomerObservations += projected.customer_observation_outcome === "accepted" ? 1 : 0;
+    replayedCustomerObservations += projected.customer_observation_outcome === "replayed" ? 1 : 0;
     adoptedCustomerObservations +=
       projected.customer_observation_outcome === "adopted_existing" ? 1 : 0;
     attachedCustomerFacets += projected.customer_facet_outcome === "attached" ? 1 : 0;
-    adoptedCustomerFacets +=
-      projected.customer_facet_outcome === "adopted_existing" ? 1 : 0;
+    adoptedCustomerFacets += projected.customer_facet_outcome === "adopted_existing" ? 1 : 0;
     resultHash.update(
       [
         entry.id,
@@ -1193,9 +1396,9 @@ export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
     const family = asString(asRecord(record.metadata).family);
     const entry =
       family === "order"
-        ? parseShopifyOrderRecord(record)
+        ? parseShopifyOrderRecord(record, { allowLegacyText: true })
         : family === "line_item"
-          ? parseShopifyLineItemRecord(record)
+          ? parseShopifyLineItemRecord(record, { allowLegacyText: true })
           : null;
     if (!entry) {
       throw new Error(`Shopify commerce batch contains unsupported record family: ${family}`);

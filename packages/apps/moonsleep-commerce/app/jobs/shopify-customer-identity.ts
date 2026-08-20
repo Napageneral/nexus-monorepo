@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertShopifyRecordFamily } from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -78,9 +79,7 @@ export type ShopifyCustomerIdentityContext = {
 };
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
@@ -319,7 +318,8 @@ async function ensureCustomerRoleEvidence(params: {
   const episodePayload = unwrapPayload(
     await params.nex.memory.evidence.episodes.create({
       title: `Shopify customer role evidence ${params.observation.contact_id}`,
-      purpose: "Project one immutable Shopify customer Record into canonical customer-role evidence",
+      purpose:
+        "Project one immutable Shopify customer Record into canonical customer-role evidence",
       sourceRecordRefs: [sourceRef],
       metadata: {
         platform: "shopify",
@@ -526,22 +526,16 @@ function observationName(sourceObject: RuntimeRow, customerGid: string): string 
   return `Shopify customer ${customerGid.replace(/^gid:\/\/shopify\/Customer\//, "")}`;
 }
 
-export function buildShopifyCustomerObservation(recordValue: unknown): ShopifyContactObservation {
+export function buildShopifyCustomerObservation(
+  recordValue: unknown,
+  options: { allowLegacyText?: boolean } = {},
+): ShopifyContactObservation {
   const record = asRecord(recordValue);
-  if (asString(record.platform) !== "shopify") {
-    throw new Error("Shopify customer identity projector only accepts Shopify records");
-  }
-  if (asString(record.source_record_type) !== "shopify.customer") {
-    throw new Error("Shopify customer identity projector only accepts shopify.customer Records");
-  }
+  const sourceContract = assertShopifyRecordFamily(record, "customer", options);
   const metadata = asRecord(record.metadata);
-  if (asString(metadata.family) !== "customer") {
-    throw new Error("Shopify customer identity projector only accepts customer records");
-  }
   const payload = asRecord(record.payload);
   const sourceMetadata = asRecord(payload.source_metadata);
   const providerPayload = asRecord(sourceMetadata.provider_payload);
-  const sourceObject = exactSourceObject(providerPayload);
   const row = asRecord(metadata.row);
   const providerIds = asRecord(metadata.provider_ids);
   const shopDomain = requireString(row, "shop_domain");
@@ -549,7 +543,19 @@ export function buildShopifyCustomerObservation(recordValue: unknown): ShopifyCo
     throw new Error("Shopify customer record space does not match the normalized shop domain");
   }
   const customerGid = requireString(row, "customer_gid");
-  if (asString(providerIds.customer_gid) !== customerGid || asString(sourceObject.id) !== customerGid) {
+  const sourceObject =
+    sourceContract === "canonical"
+      ? exactSourceObject(providerPayload)
+      : {
+          id: customerGid,
+          displayName: asString(row.display_name),
+          firstName: asString(row.first_name),
+          lastName: asString(row.last_name),
+        };
+  if (
+    asString(providerIds.customer_gid) !== customerGid ||
+    asString(sourceObject.id) !== customerGid
+  ) {
     throw new Error("Shopify customer identity anchors disagree");
   }
   const sourceObservationId = requireString(record, "id");
@@ -588,8 +594,9 @@ function eventPlatform(input: RuntimeRow): string {
 export async function projectShopifyCustomerIdentity(
   nex: NexIdentityClient,
   record: unknown,
+  options: { allowLegacyText?: boolean } = {},
 ): Promise<RuntimeRow> {
-  const observation = buildShopifyCustomerObservation(record);
+  const observation = buildShopifyCustomerObservation(record, options);
   const observed = unwrapPayload(await nex.contacts.observe(observation));
   const entity = asRecord(observed.entity);
   const contact = asRecord(observed.contact);

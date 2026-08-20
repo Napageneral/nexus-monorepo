@@ -218,11 +218,36 @@ def _build_manifest(
 ) -> dict[str, Any]:
     shop_domain = common._require_shop_domain(args.shop_domain)
     connection_id = common._require_connection_id(args.connection_id)
+    source_contract = getattr(args, "source_contract", "canonical")
+    family = getattr(args, "family", None)
+    limit = getattr(args, "selector_limit", 99)
+    if source_contract != "canonical" and family not in {"order", "line_item"}:
+        raise ProjectionError("legacy commerce selector requires --family")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 99:
+        raise ProjectionError("selector limit must be between 1 and 99")
+    cursor = {
+        "after_provider_record_id": getattr(args, "after_provider_record_id", None),
+        "after_source_timestamp": getattr(args, "after_source_timestamp", None),
+        "after_id": getattr(args, "after_id", None),
+    }
+    present_cursor = [value is not None for value in cursor.values()]
+    if any(present_cursor) and not all(present_cursor):
+        raise ProjectionError("legacy selector cursor requires all three fields")
     common._resource_gate(args, health_urls)
+    inspection_input: dict[str, Any] = {
+        "shop_domain": shop_domain,
+        "connection_id": connection_id,
+        "source_contract": source_contract,
+        "limit": limit,
+    }
+    if family is not None:
+        inspection_input["family"] = family
+    if all(present_cursor):
+        inspection_input.update(cursor)
     result = common._request_json(
         f"{runtime_url}/runtime/operations/{INSPECT_OPERATION}",
         token,
-        {"shop_domain": shop_domain, "connection_id": connection_id},
+        inspection_input,
         args.timeout_seconds,
     )
     record_ids = _validate_record_ids(result.get("record_ids"), "inspection record_ids")
@@ -239,6 +264,27 @@ def _build_manifest(
         or result.get("provider_write_authority") is not False
     ):
         raise ProjectionError("Nex returned an invalid commerce inspection receipt")
+    selector_receipt: dict[str, Any] = {"source_contract": source_contract}
+    if source_contract != "canonical":
+        if (
+            result.get("source_contract") != source_contract
+            or result.get("family") != family
+            or not isinstance(result.get("complete"), bool)
+            or not isinstance(result.get("next_provider_record_id"), str)
+            or not isinstance(result.get("next_source_timestamp"), int)
+            or isinstance(result.get("next_source_timestamp"), bool)
+            or not isinstance(result.get("next_id"), str)
+        ):
+            raise ProjectionError("Nex returned an invalid legacy selector receipt")
+        selector_receipt.update(
+            {
+                "family": family,
+                "complete": result["complete"],
+                "next_provider_record_id": result["next_provider_record_id"],
+                "next_source_timestamp": result["next_source_timestamp"],
+                "next_id": result["next_id"],
+            }
+        )
     manifest = {
         "receipt_type": MANIFEST_RECEIPT,
         "receipt_version": 1,
@@ -248,7 +294,11 @@ def _build_manifest(
         "record_set_sha256": record_set_sha256,
     }
     _, manifest_sha256 = common._write_new_private_json(Path(args.manifest), manifest)
-    return {**manifest, "manifest_sha256": manifest_sha256}
+    return {
+        **manifest,
+        "manifest_sha256": manifest_sha256,
+        "selector_receipt": selector_receipt,
+    }
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -375,6 +425,16 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--build-manifest", action="store_true")
     value.add_argument("--shop-domain")
     value.add_argument("--connection-id")
+    value.add_argument(
+        "--source-contract",
+        choices=("canonical", "legacy_current_prefix", "legacy_double_prefix"),
+        default="canonical",
+    )
+    value.add_argument("--family", choices=("order", "line_item"))
+    value.add_argument("--selector-limit", type=int, default=99)
+    value.add_argument("--after-provider-record-id")
+    value.add_argument("--after-source-timestamp", type=int)
+    value.add_argument("--after-id")
     value.add_argument("--manifest-sha256")
     value.add_argument("--checkpoint")
     value.add_argument("--batch-size", type=int, default=25)
@@ -407,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
                     "record_set_sha256": result["record_set_sha256"],
                     "first_record_id": result["record_ids"][0],
                     "last_record_id": result["record_ids"][-1],
+                    "selector_receipt": result["selector_receipt"],
                     "provider_read_authority": False,
                     "provider_write_authority": False,
                 },

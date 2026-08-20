@@ -45,6 +45,16 @@ projector, while order and line-item Records schedule only the commerce
 projector. Disabled legacy broad subscriptions are migrated; active or foreign
 subscriptions fail closed.
 
+Historical Shopify Records whose immutable source type is the legacy `text`
+fallback are selected only through the explicit `legacy_current_prefix` or
+`legacy_double_prefix` runner contract. Each inspection requests at most 100
+rows to return at most 99, binds the exact provider account plus literal
+customer/order/line-item provider-ID prefix, and emits the next three-part
+provider cursor. The projector validates that same immutable namespace before
+any semantic write and uses the normalized row already bound by the Record;
+it never refetches Shopify or synthesizes a replacement Record. Live
+`record.ingested` jobs remain canonical-family-only.
+
 The runner unit suite retains large-shape coverage for resumability and resource
 guards. That coverage is not the activation plan and does not authorize a
 cumulative 50/500/5000 rollout; scale only after the representative canary and
