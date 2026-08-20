@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: MoonSleep Commerce App API
-  version: 0.3.7
-  description: Project exact Shopify records into MoonSleep identity and typed
+  version: 0.3.9
+  description: Project exact immutable Shopify Records into MoonSleep identity and typed
     commerce state through public Nex operations.
 servers:
   - url: https://{tenantId}.nexushub.sh
@@ -121,9 +121,9 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-commerce.inspect-backfill:
     post:
       operationId: moonsleep-commerce.shopify-commerce.inspect-backfill
-      summary: Read and validate the exact sorted committed Shopify order and
-        line-item record IDs without calling Shopify or projecting commerce
-        state.
+      summary: Read and validate the dependency-ordered immutable Shopify Order
+        and line-item Record IDs and scan cursors through records.scan without
+        calling Shopify or projecting commerce state.
       tags:
         - MoonSleep Commerce
       security:
@@ -241,8 +241,8 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-commerce.project-backfill:
     post:
       operationId: moonsleep-commerce.shopify-commerce.project-backfill
-      summary: Project one explicit resource-bounded batch of committed Shopify order
-        and line-item records through public Nex commerce operations.
+      summary: Project one explicit resource-bounded batch of immutable Shopify
+        Order and line-item Records through public Nex commerce operations.
       tags:
         - MoonSleep Commerce
       security:
@@ -364,9 +364,9 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-customers.inspect-backfill:
     post:
       operationId: moonsleep-commerce.shopify-customers.inspect-backfill
-      summary: Read, validate, and return the exact sorted committed Shopify customer
-        record IDs and their hash through public records.list without projecting
-        identities.
+      summary: Read, validate, and return the exact sorted immutable Shopify customer
+        Record IDs, scan cursor, and hash through public records.scan without
+        projecting identities.
       tags:
         - MoonSleep Commerce
       security:
@@ -484,9 +484,9 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-customers.project-backfill:
     post:
       operationId: moonsleep-commerce.shopify-customers.project-backfill
-      summary: Project one explicit bounded batch of committed Shopify customer
-        records into Nex identity and return deterministic replay counters and
-        hashes.
+      summary: Project one explicit bounded batch of immutable Shopify customer
+        Records through the unified identity, accepted-Observation, and Customer
+        Facet path and return deterministic replay counters and hashes.
       tags:
         - MoonSleep Commerce
       security:
@@ -608,8 +608,9 @@ paths:
   /runtime/operations/moonsleep-commerce.shopify-customers.project-cohort:
     post:
       operationId: moonsleep-commerce.shopify-customers.project-cohort
-      summary: Project an explicit bounded cohort of committed Shopify customer
-        records into Nex identity using replay-safe public operations.
+      summary: Project an explicit bounded cohort of immutable Shopify customer
+        Records into Nex identity, accepted customer-role evidence, and the canonical
+        Customer Facet using replay-safe public operations.
       tags:
         - MoonSleep Commerce
       security:

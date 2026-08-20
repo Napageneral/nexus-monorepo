@@ -71,8 +71,23 @@ BATCH_FIELDS = {
     "created_entities",
     "created_contacts",
     "replayed",
+    "accepted_customer_observations",
+    "replayed_customer_observations",
+    "adopted_customer_observations",
+    "attached_customer_facets",
+    "adopted_customer_facets",
 }
-TOTAL_FIELDS = {"records_projected", "created_entities", "created_contacts", "replayed"}
+PROJECTION_COUNTER_FIELDS = {
+    "created_entities",
+    "created_contacts",
+    "replayed",
+    "accepted_customer_observations",
+    "replayed_customer_observations",
+    "adopted_customer_observations",
+    "attached_customer_facets",
+    "adopted_customer_facets",
+}
+TOTAL_FIELDS = {"records_projected", *PROJECTION_COUNTER_FIELDS}
 
 
 class ProjectionError(RuntimeError):
@@ -262,7 +277,7 @@ def _write_new_private_json(path: Path, value: dict[str, Any]) -> tuple[bytes, s
 def _initial_checkpoint(manifest_sha256: str, batch_size: int, total: int) -> dict[str, Any]:
     return {
         "receipt_type": CHECKPOINT_RECEIPT,
-        "receipt_version": 1,
+        "receipt_version": 2,
         "manifest_sha256": manifest_sha256,
         "batch_size": batch_size,
         "record_count": total,
@@ -274,6 +289,11 @@ def _initial_checkpoint(manifest_sha256: str, batch_size: int, total: int) -> di
             "created_entities": 0,
             "created_contacts": 0,
             "replayed": 0,
+            "accepted_customer_observations": 0,
+            "replayed_customer_observations": 0,
+            "adopted_customer_observations": 0,
+            "attached_customer_facets": 0,
+            "adopted_customer_facets": 0,
         },
     }
 
@@ -289,7 +309,7 @@ def load_checkpoint(
         set(value) != CHECKPOINT_FIELDS
         or
         value.get("receipt_type") != CHECKPOINT_RECEIPT
-        or value.get("receipt_version") != 1
+        or value.get("receipt_version") != 2
         or value.get("manifest_sha256") != manifest_sha256
         or value.get("batch_size") != batch_size
         or value.get("record_count") != total
@@ -330,7 +350,7 @@ def load_checkpoint(
             or not SHA256_RE.fullmatch(batch["projection_result_sha256"])
         ):
             raise ProjectionError("checkpoint batch receipt does not match the manifest")
-        for field in ("created_entities", "created_contacts", "replayed"):
+        for field in PROJECTION_COUNTER_FIELDS:
             counter = batch.get(field)
             if (
                 not isinstance(counter, int)
@@ -339,6 +359,17 @@ def load_checkpoint(
             ):
                 raise ProjectionError("checkpoint batch counter is malformed")
             observed_totals[field] += counter
+        if (
+            sum(batch[field] for field in (
+                "accepted_customer_observations",
+                "replayed_customer_observations",
+                "adopted_customer_observations",
+            ))
+            != len(batch_ids)
+            or batch["attached_customer_facets"] + batch["adopted_customer_facets"]
+            != len(batch_ids)
+        ):
+            raise ProjectionError("checkpoint semantic counters do not cover the exact batch")
         observed_totals["records_projected"] += len(batch_ids)
         cursor = end
     if cursor != next_index or totals != observed_totals:
@@ -573,11 +604,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         ):
             raise ProjectionError("Nex returned an invalid projection receipt")
         counters: dict[str, int] = {}
-        for field in ("created_entities", "created_contacts", "replayed"):
+        for field in PROJECTION_COUNTER_FIELDS:
             value = result.get(field)
             if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= len(batch_ids):
                 raise ProjectionError(f"Nex returned an invalid {field} counter")
             counters[field] = value
+        if (
+            sum(counters[field] for field in (
+                "accepted_customer_observations",
+                "replayed_customer_observations",
+                "adopted_customer_observations",
+            ))
+            != len(batch_ids)
+            or counters["attached_customer_facets"] + counters["adopted_customer_facets"]
+            != len(batch_ids)
+        ):
+            raise ProjectionError("Nex semantic counters do not cover the exact batch")
         projection_sha256 = result.get("projection_result_sha256")
         if not isinstance(projection_sha256, str) or not SHA256_RE.fullmatch(projection_sha256):
             raise ProjectionError("Nex returned an invalid projection result digest")

@@ -89,6 +89,11 @@ class ProjectionHandler(BaseHTTPRequestHandler):
                     "created_entities": created,
                     "created_contacts": created,
                     "replayed": replayed,
+                    "accepted_customer_observations": created,
+                    "replayed_customer_observations": 0,
+                    "adopted_customer_observations": replayed,
+                    "attached_customer_facets": created,
+                    "adopted_customer_facets": replayed,
                     "provider_write_authority": False,
                 },
             }
@@ -211,11 +216,15 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(len(first["batches"]), 3)
         self.assertEqual(first["totals"]["created_entities"], 5)
         self.assertEqual(first["totals"]["replayed"], 0)
+        self.assertEqual(first["totals"]["accepted_customer_observations"], 5)
+        self.assertEqual(first["totals"]["attached_customer_facets"], 5)
         second = self.drain(self.args(manifest, digest, "second.json"))
         self.assertTrue(second["completed"])
         self.assertEqual(second["totals"]["created_entities"], 0)
         self.assertEqual(second["totals"]["created_contacts"], 0)
         self.assertEqual(second["totals"]["replayed"], 5)
+        self.assertEqual(second["totals"]["adopted_customer_observations"], 5)
+        self.assertEqual(second["totals"]["adopted_customer_facets"], 5)
         self.assertEqual(ProjectionHandler.calls, 6)
 
     def test_production_scale_shape_stays_within_250_record_batches(self) -> None:

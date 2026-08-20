@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -202,7 +202,7 @@
       }
     },
     "moonsleep-commerce.shopify-customers.project-cohort": {
-      "description": "Project an explicit bounded cohort of committed Shopify customer records into Nex identity using replay-safe public operations.",
+      "description": "Project an explicit bounded cohort of immutable Shopify customer Records into Nex identity, accepted customer-role evidence, and the canonical Customer Facet using replay-safe public operations.",
       "action": "write",
       "access": "authenticated",
       "params": {
@@ -228,7 +228,7 @@
       }
     },
     "moonsleep-commerce.shopify-customers.project-backfill": {
-      "description": "Project one explicit bounded batch of committed Shopify customer records into Nex identity and return deterministic replay counters and hashes.",
+      "description": "Project one explicit bounded batch of immutable Shopify customer Records through the unified identity, accepted-Observation, and Customer Facet path and return deterministic replay counters and hashes.",
       "action": "write",
       "access": "authenticated",
       "params": {
@@ -258,7 +258,7 @@
       }
     },
     "moonsleep-commerce.shopify-customers.inspect-backfill": {
-      "description": "Read, validate, and return the exact sorted committed Shopify customer record IDs and their hash through public records.list without projecting identities.",
+      "description": "Read, validate, and return the exact sorted immutable Shopify customer Record IDs, scan cursor, and hash through public records.scan without projecting identities.",
       "action": "read",
       "access": "authenticated",
       "params": {
@@ -283,7 +283,7 @@
       }
     },
     "moonsleep-commerce.shopify-commerce.inspect-backfill": {
-      "description": "Read and validate the exact sorted committed Shopify order and line-item record IDs without calling Shopify or projecting commerce state.",
+      "description": "Read and validate the dependency-ordered immutable Shopify Order and line-item Record IDs and scan cursors through records.scan without calling Shopify or projecting commerce state.",
       "action": "read",
       "access": "authenticated",
       "params": {
@@ -308,7 +308,7 @@
       }
     },
     "moonsleep-commerce.shopify-commerce.project-backfill": {
-      "description": "Project one explicit resource-bounded batch of committed Shopify order and line-item records through public Nex commerce operations.",
+      "description": "Project one explicit resource-bounded batch of immutable Shopify Order and line-item Records through public Nex commerce operations.",
       "action": "write",
       "access": "authenticated",
       "params": {

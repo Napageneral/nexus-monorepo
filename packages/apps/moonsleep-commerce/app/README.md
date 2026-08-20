@@ -3,19 +3,24 @@
 Installable Nex app for MoonSleep customer identity and typed commerce
 projection from exact provider records.
 
-The first vertical consumes committed Shopify customer, order, and line-item records. It observes a
-stable Shopify contact, resolves the canonical Nex entity, and verifies the
-`Customer` and `Shopify` tags, then binds immutable order revisions to that
-canonical customer and line-item revisions to their stable parent order. It
-uses public Nex operations only.
+The first vertical consumes immutable Shopify customer, order, and line-item
+Records. It observes a stable Shopify Contact, resolves the canonical Nex
+Entity, creates or reuses Record-native customer-role evidence and the one
+`moonsleep.customer.v1` Customer Facet, then binds immutable Order Records to
+that canonical customer and line-item Records to their stable parent Order. It
+uses public Nex operations only. `Customer` and `Shopify` Entity tags remain
+compatibility/search hints; the Customer Facet is the role authority.
 
 Current scope:
 
 - replay-safe Shopify store and integration routing identities through
   `contacts.observe`, `entities.resolve`, and `entities.tags.list`
-- Shopify customer identity projection
+- Shopify customer identity, accepted-Observation, and Customer Facet projection
 - typed, revisioned Shopify order and line-item projection
 - canonical customer links on orders, with no fuzzy matching
+- canonical Commerce Order targets use the exact `commerce_orders.row_id`
+  returned by `observeCommerceOrder`, subject class `moonsleep.commerce_order`,
+  and adapter contract `moonsleep.commerce-order.target-adapter.v1`
 - immutable billing and shipping snapshots with deterministic SHA-256 binding
 - bounded explicit customer cohort projection for pre-activation production proof
 - explicit deterministic customer projection batches capped at 250 records,
@@ -31,6 +36,9 @@ Current scope:
 - exact provider JSON hash verification
 - zero Shopify calls during projection: backfill drains immutable records that
   are already committed to the MoonSleep Nex database
+- direct semantic-ledger accepted-Observation verification; the projector does
+  not invoke the legacy Shopify Customer Facet bridge or write copied receipts
+  to `core_graph_accepted_observation_receipts`
 - twelve independent Shopify source-observation jobs with one bounded provider
   page per invocation, independent cursors and commit/abort capture receipts
 - disabled-first UTC schedules plus a force-now operation; recurring schedules
@@ -51,13 +59,15 @@ record IDs and its SHA-256 identity. It validates that complete batch before the
 first identity observation, projects through the same public operations, and
 returns a deterministic result hash plus created/replayed counters.
 
-For production-size sets, `shopify-customers.inspect-backfill` discovers the
-complete committed customer record set through paginated public `records.list`
-calls and returns its validated sorted IDs, count, boundaries, and SHA-256.
+For historical sets, `shopify-customers.inspect-backfill` discovers immutable
+customer Records through paginated public `records.scan` calls scoped to the
+exact platform, connection, and source Record type. It returns validated sorted
+IDs, count, boundaries, terminal scan cursor, and SHA-256.
 `shopify_customer_projection_runner.py --build-manifest` calls that read-only
 operation and atomically creates a new private manifest without direct SQL.
-Projection mode then drains that exact manifest in independently receipted
-batches, checks health, pause markers and Linux I/O pressure before every batch,
+Projection mode can drain that exact manifest in independently receipted,
+resumable batches when observed risk warrants a larger run. It checks health,
+pause markers and Linux I/O pressure before every batch,
 and advances its durable checkpoint only after an exact Nex success receipt. A
 lost response retries only the uncheckpointed batch; replay-safe source
 observations prevent duplicate identities. Safe invocation defaults are one

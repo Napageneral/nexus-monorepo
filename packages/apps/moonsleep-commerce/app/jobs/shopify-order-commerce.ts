@@ -4,8 +4,6 @@ type RuntimeRow = Record<string, unknown>;
 
 const PROJECTOR_VERSION = "moonsleep-commerce-shopify-orders-v1";
 const SHA256_RE = /^[0-9a-f]{64}$/;
-const LEGACY_REVISION_TOKEN_RE = /^[0-9a-f]{16}$/;
-const LEGACY_REVISION_DIGEST_DOMAIN = "nex-commerce-source-revision-token-v1\0";
 const DECIMAL_RE = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const NUMERIC_ID_RE = /^[1-9][0-9]*$/;
 
@@ -23,9 +21,6 @@ export type ShopifyCommerceClient = {
   };
   entities: {
     resolve(params: { entity_id: string }): Promise<unknown>;
-    tags: {
-      list(params: { entity_id: string }): Promise<unknown>;
-    };
   };
   commerce: {
     orders: {
@@ -99,17 +94,6 @@ function requireSha256(row: RuntimeRow, field: string): string {
   return value;
 }
 
-function sourceRevisionDigest(metadata: RuntimeRow): string {
-  const value = requireString(metadata, "revision_hash");
-  if (SHA256_RE.test(value)) {
-    return value;
-  }
-  if (!LEGACY_REVISION_TOKEN_RE.test(value)) {
-    throw new Error("Shopify commerce revision_hash is malformed");
-  }
-  return sha256(LEGACY_REVISION_DIGEST_DOMAIN + value);
-}
-
 function requireNumericId(value: unknown, field: string): string {
   const text = asString(value);
   if (!NUMERIC_ID_RE.test(text)) {
@@ -168,7 +152,6 @@ function sha256(value: string): string {
 }
 
 function exactProviderEnvelope(payload: RuntimeRow): {
-  payloadSha256: string;
   sourceObject: RuntimeRow;
 } {
   const sourceJson = requireString(payload, "provider_object_json");
@@ -189,7 +172,7 @@ function exactProviderEnvelope(payload: RuntimeRow): {
   // Provider IDs are deliberately not read from the decoded object: Shopify's
   // integer IDs exceed JavaScript's safe range. The exact JSON remains the
   // immutable evidence; lossless string anchors come from the adapter metadata.
-  return { payloadSha256, sourceObject };
+  return { sourceObject };
 }
 
 function orderCustomerName(sourceObject: RuntimeRow, customerGid: string): string {
@@ -228,6 +211,9 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
   if (asString(record.platform) !== "shopify") {
     throw new Error("Shopify commerce projector only accepts Shopify records");
   }
+  if (asString(record.source_record_type) !== `shopify.${expectedFamily}`) {
+    throw new Error(`Shopify commerce projector expected shopify.${expectedFamily} Record`);
+  }
   const metadata = asRecord(record.metadata);
   if (asString(metadata.family) !== expectedFamily) {
     throw new Error(`Shopify commerce projector expected ${expectedFamily} record`);
@@ -235,12 +221,18 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
   const row = asRecord(metadata.row);
   const providerIds = asRecord(metadata.provider_ids);
   const shopDomain = requireString(row, "shop_domain");
-  if (asString(record.space_id) !== shopDomain) {
+  if (asString(record.source_space_id) !== shopDomain) {
     throw new Error("Shopify commerce record space does not match its shop domain");
   }
   const sourceRecordId = requireString(record, "id");
-  const sourceRevisionSha256 = sourceRevisionDigest(metadata);
-  const { payloadSha256, sourceObject } = exactProviderEnvelope(asRecord(record.payload));
+  const sourceRecordPayloadSha256 = requireSha256(record, "payload_sha256");
+  const sourceProviderRecordId = requireString(record, "provider_record_id");
+  const providerAccountRef = requireString(record, "provider_account_ref");
+  const payload = asRecord(record.payload);
+  const sourceMetadata = asRecord(payload.source_metadata);
+  const { sourceObject } = exactProviderEnvelope(
+    asRecord(sourceMetadata.provider_payload),
+  );
   const observedAt = record.timestamp;
   if (typeof observedAt !== "number" || !Number.isSafeInteger(observedAt) || observedAt < 0) {
     throw new Error("Shopify commerce record timestamp must be a non-negative safe integer");
@@ -251,8 +243,9 @@ function commonRecord(record: RuntimeRow, expectedFamily: "order" | "line_item")
     providerIds,
     shopDomain,
     sourceRecordId,
-    sourceRevisionSha256,
-    payloadSha256,
+    sourceRecordPayloadSha256,
+    sourceProviderRecordId,
+    providerAccountRef,
     sourceObject,
     observedAt,
   };
@@ -278,12 +271,13 @@ export function parseShopifyOrderRecord(recordValue: unknown): ParsedShopifyComm
   }
   const input: RuntimeRow = {
     platform: "shopify",
-    space_id: common.shopDomain,
+    space_id: common.providerAccountRef,
     order_id: gid("Order", orderNumericId),
     order_name: asOptionalString(common.row.name),
     source_record_id: common.sourceRecordId,
-    source_payload_sha256: common.payloadSha256,
-    source_revision_sha256: common.sourceRevisionSha256,
+    source_payload_sha256: sha256(stableJson(common.row)),
+    source_record_payload_sha256: common.sourceRecordPayloadSha256,
+    source_provider_record_id: common.sourceProviderRecordId,
     projector_version: PROJECTOR_VERSION,
     observed_at: common.observedAt,
     customer_shopify_gid: customerId ? gid("Customer", requireNumericId(customerId, "customer_id")) : null,
@@ -332,22 +326,27 @@ export function parseShopifyLineItemRecord(recordValue: unknown): ParsedShopifyC
   ) {
     throw new Error("Shopify line-item anchors disagree");
   }
+  const title = requireString(common.row, "title");
+  const quantity = requireSafeQuantity(common.row.quantity);
+  const price = requireDecimal(common.row.price, "price");
+  const sourcePayloadSha256 = sha256(stableJson(common.row));
   const inputWithoutCurrency: RuntimeRow = {
     platform: "shopify",
-    space_id: common.shopDomain,
+    space_id: common.providerAccountRef,
     order_id: gid("Order", orderNumericId),
     line_item_id: gid("LineItem", lineNumericId),
     source_record_id: common.sourceRecordId,
-    source_payload_sha256: common.payloadSha256,
-    source_revision_sha256: common.sourceRevisionSha256,
+    source_payload_sha256: sourcePayloadSha256,
+    source_record_payload_sha256: common.sourceRecordPayloadSha256,
+    source_provider_record_id: common.sourceProviderRecordId,
     projector_version: PROJECTOR_VERSION,
     observed_at: common.observedAt,
     product_id: asOptionalString(common.row.product_id),
     variant_id: asOptionalString(common.row.variant_id),
     sku: asOptionalString(common.row.sku),
-    title: requireString(common.row, "title"),
-    quantity: requireSafeQuantity(common.row.quantity),
-    price: requireDecimal(common.row.price, "price"),
+    title,
+    quantity,
+    price,
   };
   return {
     family: "line_item",
@@ -372,7 +371,12 @@ function validateObservationResult(resultValue: unknown, parsed: ParsedShopifyCo
   if (
     asString(result.source_record_id) !== parsed.sourceRecordId ||
     !SHA256_RE.test(asString(result.projection_payload_sha256)) ||
-    !SHA256_RE.test(asString(result.source_revision_sha256))
+    asString(result.source_record_payload_sha256) !==
+      asString(
+        parsed.family === "order"
+          ? parsed.input.source_record_payload_sha256
+          : parsed.inputWithoutCurrency.source_record_payload_sha256,
+      )
   ) {
     throw new Error("Nex committed an unexpected Shopify commerce observation receipt");
   }
@@ -387,18 +391,18 @@ export async function projectParsedShopifyOrder(
   const customerGid = asOptionalString(input.customer_shopify_gid);
   delete input.customer_shopify_gid;
   if (customerGid) {
+    const observation = parsed.customerObservation;
+    if (!observation || observation.contact_id !== customerGid) {
+      throw new Error(`Shopify order customer contact is not projected: ${customerGid}`);
+    }
     let resolved = unwrapPayload(
       await nex.contacts.resolve({
         platform: "shopify",
-        space_id: asString(input.space_id),
+        space_id: observation.space_id,
         contact_id: customerGid,
       }),
     );
     if (resolved.found !== true) {
-      const observation = parsed.customerObservation;
-      if (!observation || observation.contact_id !== customerGid) {
-        throw new Error(`Shopify order customer contact is not projected: ${customerGid}`);
-      }
       const observed = unwrapPayload(await nex.contacts.observe(observation));
       const observedContact = asRecord(observed.contact);
       const committedObservation = asRecord(observed.observation);
@@ -421,17 +425,10 @@ export async function projectParsedShopifyOrder(
       if (asString(entityResolution.canonical_id) !== canonicalEntityId) {
         throw new Error("Nex canonical entity resolution disagrees with order-customer observation");
       }
-      const listed = unwrapPayload(await nex.entities.tags.list({ entity_id: canonicalEntityId }));
-      const tags = Array.isArray(listed.tags) ? listed.tags.map(asString).filter(Boolean) : [];
-      for (const requiredTag of observation.tags) {
-        if (!tags.includes(requiredTag)) {
-          throw new Error(`Nex canonical customer entity is missing ${requiredTag} tag`);
-        }
-      }
       resolved = unwrapPayload(
         await nex.contacts.resolve({
           platform: "shopify",
-          space_id: asString(input.space_id),
+          space_id: observation.space_id,
           contact_id: customerGid,
         }),
       );
@@ -443,7 +440,19 @@ export async function projectParsedShopifyOrder(
     input.customer_contact_id = asString(contact.id);
     input.customer_entity_id = asString(contact.canonical_entity_id);
   }
-  return validateObservationResult(await nex.commerce.orders.observe(input), parsed);
+  const result = validateObservationResult(await nex.commerce.orders.observe(input), parsed);
+  const rowId = asString(result.row_id);
+  if (!/^commerce_order_[0-9a-f]{64}$/.test(rowId)) {
+    throw new Error("Nex committed an invalid canonical Commerce Order row id");
+  }
+  return {
+    ...result,
+    canonical_order_target: {
+      subject_class: "moonsleep.commerce_order",
+      target_id: rowId,
+      adapter_contract_id: "moonsleep.commerce-order.target-adapter.v1",
+    },
+  };
 }
 
 export async function projectParsedShopifyLineItem(

@@ -24,7 +24,7 @@ const MAX_BACKFILL_BATCH_RECORDS = 250;
 const MAX_COMMERCE_BATCH_RECORDS = 50;
 const MAX_INSPECTED_CUSTOMER_RECORDS = 20_000;
 const MAX_INSPECTED_COMMERCE_RECORDS = 40_000;
-const RECORD_SCAN_PAGE_SIZE = 1_000;
+const RECORD_SCAN_PAGE_SIZE = 100;
 const MAX_RECORDS_SCANNED = 100_000;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
 const MOONSLEEP_OPS_ENTITY_ID = "entity_moonsleep_ops";
@@ -79,6 +79,10 @@ function asRecord(value: unknown): RuntimeRow {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function asNonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function unwrapPayload(value: unknown): RuntimeRow {
@@ -140,7 +144,7 @@ function requireBackfillRecordIds(params: RuntimeRow): string[] {
 
 function requireCommerceRecordIds(params: RuntimeRow): string[] {
   // Commerce manifests are dependency-ordered, not globally lexical: every
-  // order revision precedes line-item revisions. The exact ordered set remains
+  // order Record precedes its line-item Records. The exact ordered set remains
   // hash-bound and unique.
   const ids = requireRecordIds(params, MAX_COMMERCE_BATCH_RECORDS, false);
   const expectedSha256 = asString(params.record_set_sha256);
@@ -177,48 +181,58 @@ async function discoverShopifyCustomerRecordIds(params: {
   nex: unknown;
   shopDomain: string;
   connectionId: string;
-}): Promise<string[]> {
+}): Promise<{ recordIds: string[]; nextScanSequence: number }> {
   const recordsClient = (
     params.nex as {
       records: {
-        list: (input: {
+        scan: (input: {
+          after_scan_sequence: number;
           platform: "shopify";
           connection_id: string;
+          source_record_type: "shopify.customer";
           limit: number;
-          offset: number;
         }) => Promise<unknown>;
       };
     }
   ).records;
   const customerIds: string[] = [];
   let scanned = 0;
+  let afterScanSequence = 0;
 
-  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
+  while (scanned < MAX_RECORDS_SCANNED) {
     const response = unwrapPayload(
-      await recordsClient.list({
+      await recordsClient.scan({
+        after_scan_sequence: afterScanSequence,
         platform: "shopify",
         connection_id: params.connectionId,
+        source_record_type: "shopify.customer",
         limit: RECORD_SCAN_PAGE_SIZE,
-        offset,
       }),
     );
     if (!Array.isArray(response.records)) {
-      throw new Error("records.list did not return a records array");
+      throw new Error("records.scan did not return a records array");
     }
     const rows = response.records.map(asRecord);
+    const nextScanSequence = asNonNegativeInteger(response.next_scan_sequence);
+    if (nextScanSequence == null || nextScanSequence < afterScanSequence) {
+      throw new Error("records.scan returned an invalid next_scan_sequence");
+    }
     scanned += rows.length;
     if (scanned > MAX_RECORDS_SCANNED) {
       throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
     }
     for (const record of rows) {
+      if (asString(record.source_record_type) !== "shopify.customer") {
+        throw new Error("Shopify customer scan returned a foreign source Record type");
+      }
       const metadata = asRecord(record.metadata);
       if (asString(metadata.family) !== "customer") {
-        continue;
+        throw new Error("Shopify customer scan returned a foreign family record");
       }
       if (asString(record.platform) !== "shopify") {
         throw new Error("Shopify customer scan returned a foreign platform record");
       }
-      if (asString(record.space_id) !== params.shopDomain) {
+      if (asString(record.source_space_id) !== params.shopDomain) {
         throw new Error("Shopify customer scan returned a foreign shop record");
       }
       buildShopifyCustomerObservation(record);
@@ -228,10 +242,15 @@ async function discoverShopifyCustomerRecordIds(params: {
       }
       customerIds.push(id);
     }
-    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
+    if (rows.length === 0 || rows.length < RECORD_SCAN_PAGE_SIZE) {
+      afterScanSequence = nextScanSequence;
       break;
     }
-    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
+    if (nextScanSequence <= afterScanSequence) {
+      throw new Error("records.scan cursor did not advance");
+    }
+    afterScanSequence = nextScanSequence;
+    if (scanned >= MAX_RECORDS_SCANNED) {
       throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
     }
   }
@@ -245,59 +264,64 @@ async function discoverShopifyCustomerRecordIds(params: {
   if (new Set(customerIds).size !== customerIds.length) {
     throw new Error("Shopify customer record scan returned duplicate record ids");
   }
-  return customerIds;
+  return { recordIds: customerIds, nextScanSequence: afterScanSequence };
 }
 
-async function discoverShopifyCommerceRecordIds(params: {
-  nex: unknown;
+async function scanShopifyCommerceFamily(params: {
+  recordsClient: {
+    scan(input: {
+      after_scan_sequence: number;
+      platform: "shopify";
+      connection_id: string;
+      source_record_type: "shopify.order" | "shopify.line_item";
+      limit: number;
+    }): Promise<unknown>;
+  };
   shopDomain: string;
   connectionId: string;
-}): Promise<string[]> {
-  const recordsClient = (
-    params.nex as {
-      records: {
-        list: (input: {
-          platform: "shopify";
-          connection_id: string;
-          limit: number;
-          offset: number;
-        }) => Promise<unknown>;
-      };
-    }
-  ).records;
-  const orderRecordIds: string[] = [];
-  const lineItemRecordIds: string[] = [];
+  family: "order" | "line_item";
+  remainingScanBudget: number;
+}): Promise<{ recordIds: string[]; nextScanSequence: number; scanned: number }> {
+  const sourceRecordType = `shopify.${params.family}` as const;
+  const recordIds: string[] = [];
+  let afterScanSequence = 0;
   let scanned = 0;
-
-  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
+  while (scanned < params.remainingScanBudget) {
     const response = unwrapPayload(
-      await recordsClient.list({
+      await params.recordsClient.scan({
+        after_scan_sequence: afterScanSequence,
         platform: "shopify",
         connection_id: params.connectionId,
+        source_record_type: sourceRecordType,
         limit: RECORD_SCAN_PAGE_SIZE,
-        offset,
       }),
     );
     if (!Array.isArray(response.records)) {
-      throw new Error("records.list did not return a records array");
+      throw new Error("records.scan did not return a records array");
     }
     const rows = response.records.map(asRecord);
+    const nextScanSequence = asNonNegativeInteger(response.next_scan_sequence);
+    if (nextScanSequence == null || nextScanSequence < afterScanSequence) {
+      throw new Error("records.scan returned an invalid next_scan_sequence");
+    }
     scanned += rows.length;
-    if (scanned > MAX_RECORDS_SCANNED) {
+    if (scanned > params.remainingScanBudget) {
       throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
     }
     for (const record of rows) {
-      const family = asString(asRecord(record.metadata).family);
-      if (family !== "order" && family !== "line_item") {
-        continue;
+      if (asString(record.source_record_type) !== sourceRecordType) {
+        throw new Error("Shopify commerce scan returned a foreign source Record type");
+      }
+      if (asString(asRecord(record.metadata).family) !== params.family) {
+        throw new Error("Shopify commerce scan returned a foreign family record");
       }
       if (asString(record.platform) !== "shopify") {
         throw new Error("Shopify commerce scan returned a foreign platform record");
       }
-      if (asString(record.space_id) !== params.shopDomain) {
+      if (asString(record.source_space_id) !== params.shopDomain) {
         throw new Error("Shopify commerce scan returned a foreign shop record");
       }
-      if (family === "order") {
+      if (params.family === "order") {
         parseShopifyOrderRecord(record);
       } else {
         parseShopifyLineItemRecord(record);
@@ -306,19 +330,61 @@ async function discoverShopifyCommerceRecordIds(params: {
       if (!id || Buffer.byteLength(id, "utf8") > 512) {
         throw new Error("Shopify commerce scan returned an invalid record id");
       }
-      if (family === "order") {
-        orderRecordIds.push(id);
-      } else {
-        lineItemRecordIds.push(id);
-      }
+      recordIds.push(id);
     }
-    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
+    if (rows.length === 0 || rows.length < RECORD_SCAN_PAGE_SIZE) {
+      afterScanSequence = nextScanSequence;
       break;
     }
-    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
+    if (nextScanSequence <= afterScanSequence) {
+      throw new Error("records.scan cursor did not advance");
+    }
+    afterScanSequence = nextScanSequence;
+    if (scanned >= params.remainingScanBudget) {
       throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
     }
   }
+  return { recordIds, nextScanSequence: afterScanSequence, scanned };
+}
+
+async function discoverShopifyCommerceRecordIds(params: {
+  nex: unknown;
+  shopDomain: string;
+  connectionId: string;
+}): Promise<{
+  recordIds: string[];
+  orderNextScanSequence: number;
+  lineItemNextScanSequence: number;
+}> {
+  const recordsClient = (
+    params.nex as {
+      records: {
+        scan: (input: {
+          after_scan_sequence: number;
+          platform: "shopify";
+          connection_id: string;
+          source_record_type: "shopify.order" | "shopify.line_item";
+          limit: number;
+        }) => Promise<unknown>;
+      };
+    }
+  ).records;
+  const orders = await scanShopifyCommerceFamily({
+    recordsClient,
+    shopDomain: params.shopDomain,
+    connectionId: params.connectionId,
+    family: "order",
+    remainingScanBudget: MAX_RECORDS_SCANNED,
+  });
+  const lineItems = await scanShopifyCommerceFamily({
+    recordsClient,
+    shopDomain: params.shopDomain,
+    connectionId: params.connectionId,
+    family: "line_item",
+    remainingScanBudget: MAX_RECORDS_SCANNED - orders.scanned,
+  });
+  const orderRecordIds = orders.recordIds;
+  const lineItemRecordIds = lineItems.recordIds;
 
   // This order is part of the manifest contract. Sorting one combined set can
   // put line-item batches ahead of their parent-order batches. Keep each family
@@ -334,17 +400,22 @@ async function discoverShopifyCommerceRecordIds(params: {
   if (new Set(recordIds).size !== recordIds.length) {
     throw new Error("Shopify commerce record scan returned duplicate record ids");
   }
-  return recordIds;
+  return {
+    recordIds,
+    orderNextScanSequence: orders.nextScanSequence,
+    lineItemNextScanSequence: lineItems.nextScanSequence,
+  };
 }
 
 export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
   const shopDomain = requireShopDomain(ctx.params.shop_domain);
   const connectionId = requireConnectionId(ctx.params.connection_id);
-  const recordIds = await discoverShopifyCustomerRecordIds({
+  const discovery = await discoverShopifyCustomerRecordIds({
     nex: ctx.nex,
     shopDomain,
     connectionId,
   });
+  const recordIds = discovery.recordIds;
   return {
     state: "ready",
     shop_domain: shopDomain,
@@ -354,6 +425,7 @@ export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
     record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
     first_record_id: recordIds[0],
     last_record_id: recordIds.at(-1),
+    next_scan_sequence: discovery.nextScanSequence,
     provider_write_authority: false,
   };
 };
@@ -361,11 +433,12 @@ export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
 export const inspectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
   const shopDomain = requireShopDomain(ctx.params.shop_domain);
   const connectionId = requireConnectionId(ctx.params.connection_id);
-  const recordIds = await discoverShopifyCommerceRecordIds({
+  const discovery = await discoverShopifyCommerceRecordIds({
     nex: ctx.nex,
     shopDomain,
     connectionId,
   });
+  const recordIds = discovery.recordIds;
   return {
     state: "ready",
     shop_domain: shopDomain,
@@ -375,6 +448,10 @@ export const inspectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) =
     record_set_sha256: shopifyCommerceRecordSetSha256(recordIds),
     first_record_id: recordIds[0],
     last_record_id: recordIds.at(-1),
+    scan_cursors: {
+      order: discovery.orderNextScanSequence,
+      line_item: discovery.lineItemNextScanSequence,
+    },
     provider_read_authority: false,
     provider_write_authority: false,
   };
@@ -1049,6 +1126,11 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
   let createdEntities = 0;
   let createdContacts = 0;
   let replayed = 0;
+  let acceptedCustomerObservations = 0;
+  let replayedCustomerObservations = 0;
+  let adoptedCustomerObservations = 0;
+  let attachedCustomerFacets = 0;
+  let adoptedCustomerFacets = 0;
   const resultHash = createHash("sha256");
   const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
   for (const entry of records) {
@@ -1056,12 +1138,23 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
     createdEntities += projected.created_entity === true ? 1 : 0;
     createdContacts += projected.created_contact === true ? 1 : 0;
     replayed += projected.replayed === true ? 1 : 0;
+    acceptedCustomerObservations +=
+      projected.customer_observation_outcome === "accepted" ? 1 : 0;
+    replayedCustomerObservations +=
+      projected.customer_observation_outcome === "replayed" ? 1 : 0;
+    adoptedCustomerObservations +=
+      projected.customer_observation_outcome === "adopted_existing" ? 1 : 0;
+    attachedCustomerFacets += projected.customer_facet_outcome === "attached" ? 1 : 0;
+    adoptedCustomerFacets +=
+      projected.customer_facet_outcome === "adopted_existing" ? 1 : 0;
     resultHash.update(
       [
         entry.id,
         asString(projected.source_observation_id),
         asString(projected.contact_id),
         asString(projected.canonical_entity_id),
+        asString(projected.customer_observation_id),
+        asString(projected.customer_facet_attachment_id),
       ].join("\u0000") + "\n",
       "utf8",
     );
@@ -1078,6 +1171,11 @@ export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) =
     created_entities: createdEntities,
     created_contacts: createdContacts,
     replayed,
+    accepted_customer_observations: acceptedCustomerObservations,
+    replayed_customer_observations: replayedCustomerObservations,
+    adopted_customer_observations: adoptedCustomerObservations,
+    attached_customer_facets: attachedCustomerFacets,
+    adopted_customer_facets: adoptedCustomerFacets,
     provider_write_authority: false,
   };
 };

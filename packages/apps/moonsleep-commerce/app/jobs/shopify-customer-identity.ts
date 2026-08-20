@@ -11,11 +11,55 @@ type NexIdentityClient = {
   };
   entities: {
     resolve(params: { entity_id: string }): Promise<unknown>;
-    tags: {
-      list(params: { entity_id: string }): Promise<unknown>;
+  };
+  memory: {
+    evidence: {
+      profiles: {
+        list(params: Record<string, never>): Promise<unknown>;
+        register(params: RuntimeRow): Promise<unknown>;
+      };
+      episodes: {
+        create(params: RuntimeRow): Promise<unknown>;
+      };
+      facts: {
+        create_from_episode(params: RuntimeRow): Promise<unknown>;
+      };
+      observations: {
+        head: {
+          get(params: { headKey: string }): Promise<unknown>;
+        };
+        commit(params: RuntimeRow): Promise<unknown>;
+      };
+    };
+    sets: {
+      create(params: RuntimeRow): Promise<unknown>;
+      members: {
+        add(params: RuntimeRow): Promise<unknown>;
+      };
+      seal(params: RuntimeRow): Promise<unknown>;
+    };
+  };
+  facets: {
+    attachments: {
+      list(params: RuntimeRow): Promise<unknown>;
+      create(params: RuntimeRow): Promise<unknown>;
     };
   };
 };
+
+const CUSTOMER_FACT_PROFILE_ID = "commerce.customer.reference_fact.v1";
+const CUSTOMER_OBSERVATION_PROFILE_ID = "commerce.customer.current.v1";
+const CUSTOMER_SET_PROFILE_ID = "commerce.customer.evidence_set.v1";
+const CUSTOMER_PROFILE_VERSION = "1.0.0";
+const CUSTOMER_PROFILE_OWNER = "@moonsleep/continuous-evidence";
+const CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256 =
+  "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c";
+const CUSTOMER_RESOLVER_ID = "commerce-customer-current";
+const CUSTOMER_FACET_DEFINITION_ID = "moonsleep.customer.v1";
+const CUSTOMER_FACET_DEFINITION_VERSION = 1;
+const CUSTOMER_FACET_DOMAIN_SCOPE = "moonsleep";
+const CUSTOMER_FACET_ATTACHMENT_SLOT = "customer";
+const CUSTOMER_PROJECTOR_VERSION = "1.0.0";
 
 export type ShopifyContactObservation = {
   platform: "shopify";
@@ -65,6 +109,386 @@ function requireString(row: RuntimeRow, field: string): string {
   return value;
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("canonical JSON does not support non-finite numbers");
+    }
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const row = value as RuntimeRow;
+    return `{${Object.keys(row)
+      .filter((key) => row[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(row[key])}`)
+      .join(",")}}`;
+  }
+  throw new TypeError(`canonical JSON does not support ${typeof value}`);
+}
+
+function sha256CanonicalJson(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
+}
+
+function immutableSourceRef(record: RuntimeRow): {
+  recordId: string;
+  payloadSha256: string;
+} {
+  const recordId = requireString(record, "id");
+  const payloadSha256 = requireString(record, "payload_sha256");
+  if (!/^[0-9a-f]{64}$/.test(payloadSha256)) {
+    throw new Error("Shopify customer immutable Record payload_sha256 is malformed");
+  }
+  return { recordId, payloadSha256 };
+}
+
+function profileRows(value: unknown): RuntimeRow[] {
+  const payload = unwrapPayload(value);
+  return Array.isArray(payload.items) ? payload.items.map(asRecord) : [];
+}
+
+const CUSTOMER_EVIDENCE_PROFILES = [
+  {
+    profileId: CUSTOMER_FACT_PROFILE_ID,
+    elementType: "fact",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["customer_ref", "identity_state"],
+      properties: {
+        customer_ref: { type: "string", minLength: 1 },
+        identity_state: { type: "string", enum: ["source_anchored", "reviewed"] },
+      },
+    },
+  },
+  {
+    profileId: CUSTOMER_OBSERVATION_PROFILE_ID,
+    elementType: "observation",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["customer_ref", "current_state", "review_state"],
+      properties: {
+        customer_ref: { type: "string", minLength: 1 },
+        current_state: { type: "string", minLength: 1 },
+        review_state: { type: "string", minLength: 1 },
+      },
+    },
+  },
+] as const;
+
+function assertCustomerEvidenceProfile(
+  item: RuntimeRow,
+  profileId: string,
+  elementType: "fact" | "observation",
+): void {
+  if (
+    asString(item.profile_id) !== profileId ||
+    asString(item.profile_version) !== CUSTOMER_PROFILE_VERSION ||
+    asString(item.element_type) !== elementType ||
+    asString(item.owner_package) !== CUSTOMER_PROFILE_OWNER ||
+    asString(item.source_manifest_sha256) !== CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256 ||
+    asString(item.status) !== "active"
+  ) {
+    throw new Error(`canonical Shopify customer evidence profile mismatch: ${profileId}`);
+  }
+}
+
+async function ensureCustomerEvidenceProfiles(nex: NexIdentityClient): Promise<void> {
+  for (const profile of CUSTOMER_EVIDENCE_PROFILES) {
+    const registered = unwrapPayload(
+      await nex.memory.evidence.profiles.register({
+        profileId: profile.profileId,
+        profileVersion: CUSTOMER_PROFILE_VERSION,
+        elementType: profile.elementType,
+        schema: profile.schema,
+        ownerPackage: CUSTOMER_PROFILE_OWNER,
+        sourceManifestSha256: CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256,
+        compatibility: {
+          compatibility_mode: "initial",
+          previous_profile_version: null,
+        },
+      }),
+    );
+    assertCustomerEvidenceProfile(
+      asRecord(registered.item),
+      profile.profileId,
+      profile.elementType,
+    );
+  }
+  const rows = profileRows(await nex.memory.evidence.profiles.list({}));
+  for (const [profileId, elementType] of [
+    [CUSTOMER_FACT_PROFILE_ID, "fact"],
+    [CUSTOMER_OBSERVATION_PROFILE_ID, "observation"],
+  ] as const) {
+    const matches = rows.filter(
+      (row) =>
+        asString(row.profile_id) === profileId &&
+        asString(row.profile_version) === CUSTOMER_PROFILE_VERSION,
+    );
+    if (matches.length !== 1) {
+      throw new Error(`canonical Shopify customer evidence profile mismatch: ${profileId}`);
+    }
+    assertCustomerEvidenceProfile(matches[0]!, profileId, elementType);
+  }
+}
+
+function activeCustomerFacetRows(value: unknown): RuntimeRow[] {
+  const payload = unwrapPayload(value);
+  const rows = Array.isArray(payload.items) ? payload.items.map(asRecord) : [];
+  if (rows.length > 1 || payload.next_cursor) {
+    throw new Error("canonical Entity has more than one active MoonSleep Customer Facet");
+  }
+  return rows;
+}
+
+function assertCanonicalCustomerFacet(attachment: RuntimeRow, entityId: string): void {
+  const observationRefs = Array.isArray(attachment.observation_refs)
+    ? attachment.observation_refs.map(asString)
+    : [];
+  const redactedFields = Array.isArray(attachment.redacted_fields)
+    ? attachment.redacted_fields.map(asString)
+    : [];
+  const basis = asRecord(attachment.basis);
+  const basisObservationId = asString(basis.observation_id);
+  const observationReferenceIsVisible = observationRefs.includes(basisObservationId);
+  const observationReferenceIsGovernedRedaction =
+    observationRefs.length === 0 && redactedFields.includes("observation_refs");
+  if (
+    asString(attachment.facet_definition_id) !== CUSTOMER_FACET_DEFINITION_ID ||
+    attachment.definition_version !== CUSTOMER_FACET_DEFINITION_VERSION ||
+    asString(attachment.subject_class) !== "nex.entity" ||
+    asString(attachment.subject_id) !== entityId ||
+    asString(attachment.domain_scope) !== CUSTOMER_FACET_DOMAIN_SCOPE ||
+    asString(attachment.attachment_slot) !== CUSTOMER_FACET_ATTACHMENT_SLOT ||
+    attachment.instance_key != null ||
+    asString(attachment.lifecycle_state) !== "active" ||
+    asString(attachment.privacy_class) !== "restricted" ||
+    asString(basis.basis_type) !== "accepted_observation" ||
+    !basisObservationId ||
+    (!observationReferenceIsVisible && !observationReferenceIsGovernedRedaction) ||
+    Object.keys(asRecord(attachment.values)).length !== 0 ||
+    (Array.isArray(attachment.relationships) ? attachment.relationships.length : -1) !== 0
+  ) {
+    throw new Error("active MoonSleep Customer Facet differs from the canonical v1 attachment");
+  }
+}
+
+async function listActiveCustomerFacets(
+  nex: NexIdentityClient,
+  entityId: string,
+): Promise<RuntimeRow[]> {
+  return activeCustomerFacetRows(
+    await nex.facets.attachments.list({
+      subject_class: "nex.entity",
+      subject_id: entityId,
+      facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
+      lifecycle_state: "active",
+      limit: 2,
+    }),
+  );
+}
+
+async function ensureCustomerRoleEvidence(params: {
+  nex: NexIdentityClient;
+  record: RuntimeRow;
+  observation: ShopifyContactObservation;
+  canonicalEntityId: string;
+}): Promise<RuntimeRow> {
+  const existingFacets = await listActiveCustomerFacets(params.nex, params.canonicalEntityId);
+  if (existingFacets[0]) {
+    assertCanonicalCustomerFacet(existingFacets[0], params.canonicalEntityId);
+    return {
+      customer_observation_outcome: "adopted_existing",
+      customer_observation_id: asString(asRecord(existingFacets[0].basis).observation_id),
+      customer_facet_outcome: "adopted_existing",
+      customer_facet_attachment_id: requireString(existingFacets[0], "id"),
+    };
+  }
+
+  await ensureCustomerEvidenceProfiles(params.nex);
+  const sourceRef = immutableSourceRef(params.record);
+  const keyPrefix = `moonsleep-commerce:shopify-customer:${sourceRef.recordId}`;
+  const episodePayload = unwrapPayload(
+    await params.nex.memory.evidence.episodes.create({
+      title: `Shopify customer role evidence ${params.observation.contact_id}`,
+      purpose: "Project one immutable Shopify customer Record into canonical customer-role evidence",
+      sourceRecordRefs: [sourceRef],
+      metadata: {
+        platform: "shopify",
+        shop_domain: params.observation.space_id,
+        customer_ref: params.observation.contact_id,
+      },
+      sealedBy: "job:moonsleep-commerce.shopify-customer-identity",
+      idempotencyKey: `${keyPrefix}:episode:v1`,
+    }),
+  );
+  const episode = asRecord(episodePayload.item);
+  const episodeId = requireString(episode, "episode_id");
+
+  const factPayload = unwrapPayload(
+    await params.nex.memory.evidence.facts.create_from_episode({
+      profileId: CUSTOMER_FACT_PROFILE_ID,
+      profileVersion: CUSTOMER_PROFILE_VERSION,
+      payload: {
+        customer_ref: params.observation.contact_id,
+        identity_state: "source_anchored",
+      },
+      summary: `Shopify identifies ${params.observation.contact_id} as a MoonSleep customer.`,
+      subjectType: "commerce_customer",
+      subjectRef: params.observation.contact_id,
+      producerId: CUSTOMER_RESOLVER_ID,
+      producerVersion: CUSTOMER_PROJECTOR_VERSION,
+      extractionPolicyRef: "policy:moonsleep-commerce-shopify-customer-role-v1",
+      episodeId,
+      sourceRecordRefs: [sourceRef],
+      asOf: params.observation.observed_at,
+      idempotencyKey: `${keyPrefix}:fact:v1`,
+    }),
+  );
+  const fact = asRecord(asRecord(factPayload.item).fact);
+  const factId = requireString(fact, "id");
+
+  const setPayload = unwrapPayload(
+    await params.nex.memory.sets.create({
+      definitionId: "evidence_set_v1",
+      idempotencyKey: `${keyPrefix}:set:v1`,
+      evidenceScope: {
+        domain: "moonsleep.commerce",
+        purpose: CUSTOMER_SET_PROFILE_ID,
+        resolverId: CUSTOMER_RESOLVER_ID,
+        resolverPolicyVersion: CUSTOMER_PROFILE_VERSION,
+        targetProfileId: CUSTOMER_OBSERVATION_PROFILE_ID,
+        targetProfileVersion: CUSTOMER_PROFILE_VERSION,
+        allowedFactProfiles: [
+          { profileId: CUSTOMER_FACT_PROFILE_ID, profileVersion: CUSTOMER_PROFILE_VERSION },
+        ],
+        sourceManifestSha256: CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256,
+      },
+    }),
+  );
+  const setId = requireString(asRecord(setPayload.set), "id");
+  await params.nex.memory.sets.members.add({
+    setId,
+    memberType: "element",
+    memberId: factId,
+    position: 0,
+  });
+  await params.nex.memory.sets.seal({
+    setId,
+    sealedBy: "job:moonsleep-commerce.shopify-customer-identity",
+  });
+
+  const headKey = `moonsleep.commerce:shopify-customer:${params.observation.space_id}:${params.observation.contact_id}`;
+  const headPayload = unwrapPayload(
+    await params.nex.memory.evidence.observations.head.get({ headKey }),
+  );
+  const head = asRecord(headPayload.item);
+  const headObservation = asRecord(head.observation);
+  let expectedHeadId: string | null = asString(head.head_element_id) || null;
+  if (
+    asString(asRecord(headObservation.metadata).input_set_id) === setId &&
+    asString(headObservation.id)
+  ) {
+    expectedHeadId = asString(headObservation.parent_id) || null;
+  }
+
+  const commitPayload = unwrapPayload(
+    await params.nex.memory.evidence.observations.commit({
+      headKey,
+      expectedHeadId,
+      inputSetId: setId,
+      profileId: CUSTOMER_OBSERVATION_PROFILE_ID,
+      profileVersion: CUSTOMER_PROFILE_VERSION,
+      payload: {
+        customer_ref: params.observation.contact_id,
+        current_state: "customer",
+        review_state: "source_anchored",
+      },
+      summary: `${params.observation.contact_id} has the MoonSleep customer role.`,
+      subjectType: "commerce_customer",
+      subjectRef: params.observation.contact_id,
+      factDispositions: [{ factElementId: factId, disposition: "supports" }],
+      resolverId: CUSTOMER_RESOLVER_ID,
+      resolverVersion: CUSTOMER_PROJECTOR_VERSION,
+      resolverPolicyVersion: CUSTOMER_PROFILE_VERSION,
+      actorRef: "job:moonsleep-commerce.shopify-customer-identity",
+      policyRef: "policy:moonsleep-commerce-shopify-customer-role-v1",
+      idempotencyKey: `${keyPrefix}:observation:v1`,
+      asOf: params.observation.observed_at,
+    }),
+  );
+  const committed = asRecord(commitPayload.item);
+  const customerObservation = asRecord(committed.observation);
+  const commitReceipt = asRecord(committed.receipt);
+  const customerObservationId = requireString(customerObservation, "id");
+  const commitReceiptId = requireString(commitReceipt, "receipt_id");
+  const basis = {
+    basis_type: "accepted_observation",
+    observation_id: customerObservationId,
+    commit_receipt_id: commitReceiptId,
+    commit_receipt_sha256: sha256CanonicalJson(commitReceipt),
+  };
+  const attachmentId = `facet-attachment:moonsleep.customer.v1:${sha256CanonicalJson({
+    facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
+    canonical_entity_id: params.canonicalEntityId,
+    domain_scope: CUSTOMER_FACET_DOMAIN_SCOPE,
+    attachment_slot: CUSTOMER_FACET_ATTACHMENT_SLOT,
+  }).slice(0, 32)}`;
+
+  let attachmentPayload: RuntimeRow;
+  try {
+    attachmentPayload = unwrapPayload(
+      await params.nex.facets.attachments.create({
+        id: attachmentId,
+        facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
+        definition_version: CUSTOMER_FACET_DEFINITION_VERSION,
+        subject_class: "nex.entity",
+        subject_id: params.canonicalEntityId,
+        domain_scope: CUSTOMER_FACET_DOMAIN_SCOPE,
+        attachment_slot: CUSTOMER_FACET_ATTACHMENT_SLOT,
+        effective_from: params.observation.observed_at,
+        values: {},
+        relationships: [],
+        observation_refs: [customerObservationId],
+        privacy_class: "restricted",
+        basis,
+        idempotency_key: `${attachmentId}:create`,
+      }),
+    );
+  } catch (error) {
+    if (!String(error).includes("facet_attachment_cardinality_conflict")) {
+      throw error;
+    }
+    const raced = await listActiveCustomerFacets(params.nex, params.canonicalEntityId);
+    if (!raced[0]) throw error;
+    assertCanonicalCustomerFacet(raced[0], params.canonicalEntityId);
+    return {
+      customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
+      customer_observation_id: customerObservationId,
+      customer_facet_outcome: "adopted_existing",
+      customer_facet_attachment_id: requireString(raced[0], "id"),
+    };
+  }
+  const attachment = asRecord(
+    attachmentPayload.value ?? attachmentPayload.item ?? attachmentPayload.attachment,
+  );
+  assertCanonicalCustomerFacet(attachment, params.canonicalEntityId);
+  return {
+    customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
+    customer_observation_id: customerObservationId,
+    customer_facet_outcome: attachmentPayload.replayed === true ? "adopted_existing" : "attached",
+    customer_facet_attachment_id: requireString(attachment, "id"),
+  };
+}
+
 function exactSourceObject(payload: RuntimeRow): RuntimeRow {
   const sourceJson = requireString(payload, "provider_object_json");
   const expectedSha = requireString(payload, "provider_object_sha256");
@@ -107,23 +531,28 @@ export function buildShopifyCustomerObservation(recordValue: unknown): ShopifyCo
   if (asString(record.platform) !== "shopify") {
     throw new Error("Shopify customer identity projector only accepts Shopify records");
   }
+  if (asString(record.source_record_type) !== "shopify.customer") {
+    throw new Error("Shopify customer identity projector only accepts shopify.customer Records");
+  }
   const metadata = asRecord(record.metadata);
   if (asString(metadata.family) !== "customer") {
     throw new Error("Shopify customer identity projector only accepts customer records");
   }
   const payload = asRecord(record.payload);
-  const sourceObject = exactSourceObject(payload);
+  const sourceMetadata = asRecord(payload.source_metadata);
+  const providerPayload = asRecord(sourceMetadata.provider_payload);
+  const sourceObject = exactSourceObject(providerPayload);
   const row = asRecord(metadata.row);
   const providerIds = asRecord(metadata.provider_ids);
   const shopDomain = requireString(row, "shop_domain");
-  if (asString(record.space_id) !== shopDomain) {
+  if (asString(record.source_space_id) !== shopDomain) {
     throw new Error("Shopify customer record space does not match the normalized shop domain");
   }
   const customerGid = requireString(row, "customer_gid");
   if (asString(providerIds.customer_gid) !== customerGid || asString(sourceObject.id) !== customerGid) {
     throw new Error("Shopify customer identity anchors disagree");
   }
-  const sourceObservationId = requireString(record, "record_id");
+  const sourceObservationId = requireString(record, "id");
   const observedAt = asNonNegativeInteger(record.timestamp);
   if (observedAt == null) {
     throw new Error("Shopify customer record timestamp must be a non-negative safe integer");
@@ -182,13 +611,12 @@ export async function projectShopifyCustomerIdentity(
     throw new Error("Nex canonical entity resolution disagrees with contact observation");
   }
 
-  const listed = unwrapPayload(await nex.entities.tags.list({ entity_id: canonicalEntityId }));
-  const tags = Array.isArray(listed.tags) ? listed.tags.map(asString).filter(Boolean) : [];
-  for (const requiredTag of observation.tags) {
-    if (!tags.includes(requiredTag)) {
-      throw new Error(`Nex canonical customer entity is missing ${requiredTag} tag`);
-    }
-  }
+  const customerRole = await ensureCustomerRoleEvidence({
+    nex,
+    record: asRecord(record),
+    observation,
+    canonicalEntityId,
+  });
 
   return {
     projected: true,
@@ -202,6 +630,8 @@ export async function projectShopifyCustomerIdentity(
     shopify_customer_gid: observation.contact_id,
     source_observation_id: observation.source_observation_id,
     tags: [...observation.tags],
+    tag_contract: "compatibility_hint",
+    ...customerRole,
   };
 }
 

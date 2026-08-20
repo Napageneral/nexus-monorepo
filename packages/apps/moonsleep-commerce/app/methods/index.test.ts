@@ -650,12 +650,19 @@ function customerRecord(recordId: string, customerId: string) {
   return {
     id: recordId,
     record_id: recordId,
+    payload_sha256: createHash("sha256").update(`immutable:${recordId}`).digest("hex"),
     platform: "shopify",
+    source_record_type: "shopify.customer",
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
     timestamp: 1_784_564_000_000,
     payload: {
-      provider_object_json: providerObjectJson,
-      provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+      source_metadata: {
+        provider_payload: {
+          provider_object_json: providerObjectJson,
+          provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+        },
+      },
     },
     metadata: {
       family: "customer",
@@ -670,6 +677,7 @@ function customerRecord(recordId: string, customerId: string) {
 
 function context(recordById: Record<string, ReturnType<typeof customerRecord>>) {
   const seenObservations = new Set<string>();
+  const customerFacets = new Map<string, Record<string, unknown>>();
   const recordsGet = vi.fn(async ({ id }: { id: string }) => ({ record: recordById[id] }));
   const observe = vi.fn(async (input: Record<string, unknown>) => {
     const contactId = String(input.contact_id);
@@ -696,12 +704,88 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
     canonical_id: entity_id,
   }));
   const tagsList = vi.fn(async () => ({ tags: ["Customer", "Shopify"] }));
+  const profilesList = vi.fn(async () => ({
+    items: [
+      {
+        profile_id: "commerce.customer.reference_fact.v1",
+        profile_version: "1.0.0",
+        element_type: "fact",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+      {
+        profile_id: "commerce.customer.current.v1",
+        profile_version: "1.0.0",
+        element_type: "observation",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+    ],
+  }));
+  const profileRegister = vi.fn(async (input: Record<string, unknown>) => ({
+    item: {
+      profile_id: input.profileId,
+      profile_version: input.profileVersion,
+      element_type: input.elementType,
+      owner_package: input.ownerPackage,
+      source_manifest_sha256: input.sourceManifestSha256,
+      status: "active",
+    },
+    reused: false,
+  }));
+  const episodeCreate = vi.fn(async (input: Record<string, unknown>) => ({
+    item: { episode_id: `episode-${String(input.idempotencyKey)}` },
+  }));
+  const factCreate = vi.fn(async (input: Record<string, unknown>) => ({
+    item: { fact: { id: `fact-${String(input.idempotencyKey)}` } },
+  }));
+  const setCreate = vi.fn(async (input: Record<string, unknown>) => ({
+    set: { id: `set-${String(input.idempotencyKey)}` },
+  }));
+  const memberAdd = vi.fn(async () => ({ ok: true }));
+  const setSeal = vi.fn(async () => ({ seal: { setId: "set" }, reused: false }));
+  const headGet = vi.fn(async () => ({ item: null }));
+  const observationCommit = vi.fn(async (input: Record<string, unknown>) => {
+    const subjectRef = String(input.subjectRef);
+    return {
+      item: {
+        observation: { id: `observation-${subjectRef}` },
+        receipt: {
+          receipt_id: `receipt-${subjectRef}`,
+          operation_type: "observation_commit",
+        },
+      },
+      reused: false,
+    };
+  });
+  const facetsList = vi.fn(async (input: Record<string, unknown>) => ({
+    items: customerFacets.has(String(input.subject_id))
+      ? [customerFacets.get(String(input.subject_id))]
+      : [],
+  }));
+  const facetsCreate = vi.fn(async (input: Record<string, unknown>) => {
+    const attachment = { ...input, instance_key: null, lifecycle_state: "active" };
+    customerFacets.set(String(input.subject_id), attachment);
+    return { value: attachment, replayed: false };
+  });
   return {
     params: { record_ids: Object.keys(recordById) },
     nex: {
       records: { get: recordsGet },
       contacts: { observe },
       entities: { resolve, tags: { list: tagsList } },
+      memory: {
+        evidence: {
+          profiles: { list: profilesList, register: profileRegister },
+          episodes: { create: episodeCreate },
+          facts: { create_from_episode: factCreate },
+          observations: { head: { get: headGet }, commit: observationCommit },
+        },
+        sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
+      },
+      facets: { attachments: { list: facetsList, create: facetsCreate } },
     },
     recordsGet,
     observe,
@@ -764,19 +848,32 @@ describe("Complete Shopify customer record-set discovery", () => {
   function completeContext(recordById: Record<string, ReturnType<typeof customerRecord>>) {
     const ctx = context(recordById);
     const ordered = Object.values(recordById);
-    const list = vi.fn(async ({ limit, offset }: { limit: number; offset: number }) => ({
-      records: ordered.slice(offset, offset + limit),
-      limit,
-      offset,
-    }));
+    const scan = vi.fn(
+      async ({
+        limit,
+        after_scan_sequence: afterScanSequence,
+      }: {
+        limit: number;
+        after_scan_sequence: number;
+      }) => {
+        const records = ordered
+          .map((record, index) => ({ ...record, scan_sequence: index + 1 }))
+          .filter((record) => record.scan_sequence > afterScanSequence)
+          .slice(0, limit);
+        return {
+          records,
+          next_scan_sequence: records.at(-1)?.scan_sequence ?? afterScanSequence,
+        };
+      },
+    );
     return {
       ...ctx,
       params: {
         shop_domain: "moonsleepco.myshopify.com",
         connection_id: "shopify-primary",
       },
-      nex: { ...ctx.nex, records: { ...ctx.nex.records, list } },
-      list,
+      nex: { ...ctx.nex, records: { ...ctx.nex.records, scan } },
+      scan,
     };
   }
 
@@ -799,11 +896,12 @@ describe("Complete Shopify customer record-set discovery", () => {
 
     expect(ctx.observe).not.toHaveBeenCalled();
     expect(ctx.recordsGet).not.toHaveBeenCalled();
-    expect(ctx.list).toHaveBeenCalledWith({
+    expect(ctx.scan).toHaveBeenCalledWith({
+      after_scan_sequence: 0,
       platform: "shopify",
       connection_id: "shopify-primary",
-      limit: 1000,
-      offset: 0,
+      source_record_type: "shopify.customer",
+      limit: 100,
     });
   });
 
@@ -818,7 +916,7 @@ describe("Complete Shopify customer record-set discovery", () => {
     await expect(inspectShopifyCustomerBackfill(ctx as never)).resolves.toMatchObject({
       record_count: 1001,
     });
-    expect(ctx.list).toHaveBeenCalledTimes(2);
+    expect(ctx.scan).toHaveBeenCalledTimes(11);
 
     const duplicateCtx = completeContext({
       first: customerRecord("same-id", "gid://shopify/Customer/1"),
@@ -861,6 +959,9 @@ describe("Shopify customer full backfill projector", () => {
       created_entities: 3,
       created_contacts: 3,
       replayed: 0,
+      accepted_customer_observations: 3,
+      attached_customer_facets: 3,
+      adopted_customer_facets: 0,
       first_record_id: "record-1",
       last_record_id: "record-3",
       provider_write_authority: false,
@@ -874,6 +975,10 @@ describe("Shopify customer full backfill projector", () => {
       created_entities: 0,
       created_contacts: 0,
       replayed: 3,
+      accepted_customer_observations: 0,
+      adopted_customer_observations: 3,
+      attached_customer_facets: 0,
+      adopted_customer_facets: 3,
       record_set_sha256: first.record_set_sha256,
       projection_result_sha256: first.projection_result_sha256,
       provider_write_authority: false,
@@ -884,7 +989,7 @@ describe("Shopify customer full backfill projector", () => {
   it("validates the complete batch before the first identity write", async () => {
     const invalid = {
       ...customerRecord("record-3", "gid://shopify/Customer/3"),
-      space_id: "wrong.myshopify.com",
+      source_space_id: "wrong.myshopify.com",
     };
     const ctx = backfillContext({
       "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
@@ -942,14 +1047,23 @@ function commerceRecord(
   return {
     id,
     record_id: `shopify:shopify-primary:${family}:${id}:revision-1`,
+    payload_sha256: createHash("sha256").update(`immutable:${id}`).digest("hex"),
+    provider_account_ref: "moonsleepco.myshopify.com",
+    provider_record_id: `shopify-${family}-${id}`,
     platform: "shopify",
+    source_record_type: `shopify.${family}`,
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
     timestamp: 1_784_640_000_000 + (family === "order" ? 1 : 2),
     payload: {
-      provider_object_json: raw,
-      provider_object_sha256: options.invalidHash
-        ? "0".repeat(64)
-        : createHash("sha256").update(raw).digest("hex"),
+      source_metadata: {
+        provider_payload: {
+          provider_object_json: raw,
+          provider_object_sha256: options.invalidHash
+            ? "0".repeat(64)
+            : createHash("sha256").update(raw).digest("hex"),
+        },
+      },
     },
     metadata: {
       family,
@@ -999,10 +1113,10 @@ describe("Shopify order and line-item bounded backfill", () => {
         created: !replayed,
         replayed,
         became_current: true,
-        row_id: "order-row",
+        row_id: `commerce_order_${"a".repeat(64)}`,
         revision_id: `revision-${sourceRecordId}`,
         source_record_id: sourceRecordId,
-        source_revision_sha256: input.source_revision_sha256,
+        source_record_payload_sha256: input.source_record_payload_sha256,
         projection_payload_sha256: "d".repeat(64),
       };
     });
@@ -1018,7 +1132,7 @@ describe("Shopify order and line-item bounded backfill", () => {
         row_id: "line-row",
         revision_id: `revision-${sourceRecordId}`,
         source_record_id: sourceRecordId,
-        source_revision_sha256: input.source_revision_sha256,
+        source_record_payload_sha256: input.source_record_payload_sha256,
         projection_payload_sha256: "e".repeat(64),
       };
     });
@@ -1089,13 +1203,21 @@ describe("Shopify order and line-item bounded backfill", () => {
     const order = commerceRecord("record-z-order", "order");
     const line = commerceRecord("record-a-line", "line_item");
     const customer = customerRecord("record-customer", "gid://shopify/Customer/1");
-    const list = vi.fn(async () => ({ records: [order, customer, line] }));
+    const scan = vi.fn(async (input: Record<string, unknown>) => {
+      const rows = [order, customer, line].filter(
+        (record) => record.source_record_type === input.source_record_type,
+      );
+      return {
+        records: rows.map((record, index) => ({ ...record, scan_sequence: index + 1 })),
+        next_scan_sequence: rows.length,
+      };
+    });
     const inspected = await inspectShopifyCommerceBackfill({
       params: {
         shop_domain: "moonsleepco.myshopify.com",
         connection_id: "shopify-primary",
       },
-      nex: { records: { list } },
+      nex: { records: { scan } },
     } as never);
     expect(inspected).toMatchObject({
       state: "ready",
@@ -1113,12 +1235,19 @@ describe("Shopify order and line-item bounded backfill", () => {
       commerceRecord("record-b-line", "line_item"),
       commerceRecord("record-y-order", "order"),
     ];
+    const scan = vi.fn(async (input: Record<string, unknown>) => {
+      const rows = records.filter((record) => record.source_record_type === input.source_record_type);
+      return {
+        records: rows.map((record, index) => ({ ...record, scan_sequence: index + 1 })),
+        next_scan_sequence: rows.length,
+      };
+    });
     const inspected = await inspectShopifyCommerceBackfill({
       params: {
         shop_domain: "moonsleepco.myshopify.com",
         connection_id: "shopify-primary",
       },
-      nex: { records: { list: vi.fn(async () => ({ records })) } },
+      nex: { records: { scan } },
     } as never);
     expect(inspected.record_ids).toEqual([
       "record-y-order",
