@@ -107,6 +107,10 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
       }
     : null;
   const facetsList = vi.fn(async () => ({ items: attachment ? [attachment] : [] }));
+  const facetsGet = vi.fn(async (params: Record<string, unknown>) => {
+    if (!attachment || attachment.id !== params.id) throw new Error("Facet not found");
+    return { attachment };
+  });
   const facetsCreate = vi.fn(async (params: Record<string, unknown>) => {
     attachment = {
       ...params,
@@ -176,12 +180,13 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
         },
         sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
       },
-      facets: { attachments: { list: facetsList, create: facetsCreate } },
+      facets: { attachments: { get: facetsGet, list: facetsList, create: facetsCreate } },
     },
     calls: {
       get,
       observe,
       resolve,
+      facetsGet,
       facetsList,
       facetsCreate,
       profilesList,
@@ -281,6 +286,25 @@ describe("Shopify customer identity projection", () => {
     expect(fixture.calls.profileRegister).not.toHaveBeenCalled();
     expect(fixture.calls.observationCommit).not.toHaveBeenCalled();
     expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
+  });
+
+  it("adopts the deterministic active facet after a production cardinality conflict", async () => {
+    const fixture = nexFixture();
+    await projectShopifyCustomerIdentity(fixture.nex, fixture.record);
+    fixture.calls.facetsList.mockResolvedValue({ items: [] });
+    fixture.calls.facetsCreate.mockRejectedValueOnce(
+      new Error("canonical subject already has an active attachment in this slot"),
+    );
+
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
+      projected: true,
+      customer_facet_outcome: "adopted_existing",
+    });
+    expect(fixture.calls.facetsGet).toHaveBeenCalledWith({
+      id: expect.stringMatching(/^facet-attachment:moonsleep\.customer\.v1:/),
+    });
   });
 
   it("loads the committed record from a record.ingested event before projection", async () => {

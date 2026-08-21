@@ -45,6 +45,7 @@ type NexIdentityClient = {
   };
   facets: {
     attachments: {
+      get(params: { id: string }): Promise<unknown>;
       list(params: RuntimeRow): Promise<unknown>;
       create(params: RuntimeRow): Promise<unknown>;
     };
@@ -283,6 +284,16 @@ function assertCanonicalCustomerFacet(attachment: RuntimeRow, entityId: string):
   }
 }
 
+function isFacetAttachmentCardinalityConflict(error: unknown): boolean {
+  const reasonCode = asString(asRecord(error).reasonCode);
+  const message = String(error);
+  return (
+    reasonCode === "facet_attachment_cardinality_conflict" ||
+    message.includes("facet_attachment_cardinality_conflict") ||
+    message.includes("canonical subject already has an active attachment in this slot")
+  );
+}
+
 async function listActiveCustomerFacets(
   nex: NexIdentityClient,
   entityId: string,
@@ -467,17 +478,27 @@ async function ensureCustomerRoleEvidence(params: {
       }),
     );
   } catch (error) {
-    if (!String(error).includes("facet_attachment_cardinality_conflict")) {
+    if (!isFacetAttachmentCardinalityConflict(error)) {
       throw error;
     }
     const raced = await listActiveCustomerFacets(params.nex, params.canonicalEntityId);
-    if (!raced[0]) throw error;
-    assertCanonicalCustomerFacet(raced[0], params.canonicalEntityId);
+    let existing = raced[0];
+    if (!existing) {
+      try {
+        const exact = unwrapPayload(
+          await params.nex.facets.attachments.get({ id: attachmentId }),
+        );
+        existing = asRecord(exact.attachment ?? exact.item ?? exact.value);
+      } catch {
+        throw error;
+      }
+    }
+    assertCanonicalCustomerFacet(existing, params.canonicalEntityId);
     return {
       customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
       customer_observation_id: customerObservationId,
       customer_facet_outcome: "adopted_existing",
-      customer_facet_attachment_id: requireString(raced[0], "id"),
+      customer_facet_attachment_id: requireString(existing, "id"),
     };
   }
   const attachment = asRecord(
