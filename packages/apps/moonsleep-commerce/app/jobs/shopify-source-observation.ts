@@ -120,59 +120,6 @@ async function pauseBetweenWriteBatches(): Promise<void> {
   });
 }
 
-async function confirmExactRecordDurable(params: {
-  ctx: ShopifySourceJobContext;
-  routing: RuntimeRow;
-  payload: RuntimeRow;
-}): Promise<boolean> {
-  const platform = requireString(params.routing, "platform");
-  const connectionId = requireString(params.routing, "connection_id");
-  const providerRecordId = requireString(params.payload, "external_record_id");
-  const routingMetadata = asRecord(params.routing.metadata);
-  const payloadMetadata = asRecord(params.payload.metadata);
-  const providerAccountRef = requireString(routingMetadata, "provider_account_ref");
-  const sourceRecordType = requireString(payloadMetadata, "source_record_type");
-  const snapshotFingerprint = asString(payloadMetadata.snapshot_fingerprint_sha256);
-  const providerObjectSha256 = asString(
-    asRecord(params.payload.payload).provider_object_sha256,
-  );
-  if (!snapshotFingerprint && !providerObjectSha256) {
-    throw new Error("Shopify record durability check requires a source fingerprint");
-  }
-
-  const response = unwrap(
-    await params.ctx.nex.records.scan({
-      platform,
-      connection_id: connectionId,
-      provider_account_ref: providerAccountRef,
-      source_record_type: sourceRecordType,
-      provider_record_id_prefix: providerRecordId,
-      limit: 100,
-    }),
-  );
-  return asArray(response.records).some((record) => {
-    if (
-      asString(record.platform) !== platform ||
-      asString(record.connection_id) !== connectionId ||
-      asString(record.provider_account_ref) !== providerAccountRef ||
-      asString(record.source_record_type) !== sourceRecordType ||
-      asString(record.provider_record_id) !== providerRecordId
-    ) {
-      return false;
-    }
-    const sourceMetadata = asRecord(asRecord(record.payload).source_metadata);
-    const storedPayloadMetadata = asRecord(sourceMetadata.payload_metadata);
-    const storedProviderPayload = asRecord(sourceMetadata.provider_payload);
-    return (
-      (!snapshotFingerprint ||
-        asString(storedPayloadMetadata.snapshot_fingerprint_sha256) ===
-          snapshotFingerprint) &&
-      (!providerObjectSha256 ||
-        asString(storedProviderPayload.provider_object_sha256) === providerObjectSha256)
-    );
-  });
-}
-
 function sourceJobConfig(ctx: ShopifySourceJobContext): {
   family: string;
   connectionId: string;
@@ -235,11 +182,15 @@ export default async function shopifySourceObservationJob(
         throw new Error("Shopify source capture returned an incomplete record envelope");
       }
       const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
-      const nestedStatus = asString(asRecord(result.result).status);
+      const nestedResult = asRecord(result.result);
+      const nestedStatus = asString(nestedResult.status);
       const status = asString(result.status) || nestedStatus;
       const durableDespiteDownstreamFailure =
         status === "failed" &&
-        (await confirmExactRecordDurable({ ctx, routing, payload }));
+        asArray(nestedResult.stages).some(
+          (stage) =>
+            asString(stage.stage) === "finalizeRequest" && !asString(stage.error),
+        );
       if (
         status &&
         status !== "completed" &&
