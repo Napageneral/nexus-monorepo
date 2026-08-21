@@ -1,8 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  assertShopifyRecordFamily,
-  shopifyRecordSourceMetadata,
-} from "./shopify-record-family.js";
+import { assertShopifyRecordFamily, shopifyRecordSourceMetadata } from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -14,6 +11,7 @@ const NUMERIC_ID_RE = /^[1-9][0-9]*$/;
 export type ShopifyCommerceClient = {
   records?: {
     get(params: { id: string }): Promise<unknown>;
+    get_many(params: { ids: string[] }): Promise<unknown>;
   };
   contacts: {
     observe(params: ShopifyOrderCustomerObservation): Promise<unknown>;
@@ -29,17 +27,24 @@ export type ShopifyCommerceClient = {
   commerce: {
     orders: {
       observe(params: RuntimeRow): Promise<unknown>;
+      observe_many?(params: { observations: RuntimeRow[] }): Promise<unknown>;
       get(params: { platform: "shopify"; space_id: string; order_id: string }): Promise<unknown>;
     };
     "line-items": {
       observe(params: RuntimeRow): Promise<unknown>;
+      observe_many?(params: { observations: RuntimeRow[] }): Promise<unknown>;
     };
   };
 };
 
 export type ShopifyCommerceJobContext = {
   input: RuntimeRow;
-  nex: ShopifyCommerceClient & { records: { get(params: { id: string }): Promise<unknown> } };
+  nex: ShopifyCommerceClient & {
+    records: {
+      get(params: { id: string }): Promise<unknown>;
+      get_many(params: { ids: string[] }): Promise<unknown>;
+    };
+  };
 };
 
 export type ParsedShopifyCommerceRecord =
@@ -393,7 +398,7 @@ function validateObservationResult(resultValue: unknown, parsed: ParsedShopifyCo
   return result;
 }
 
-export async function projectParsedShopifyOrder(
+async function prepareShopifyOrderInput(
   nex: ShopifyCommerceClient,
   parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>,
 ): Promise<RuntimeRow> {
@@ -457,7 +462,14 @@ export async function projectParsedShopifyOrder(
     input.customer_contact_id = asString(contact.id);
     input.customer_entity_id = asString(contact.canonical_entity_id);
   }
-  const result = validateObservationResult(await nex.commerce.orders.observe(input), parsed);
+  return input;
+}
+
+function validateOrderObservationResult(
+  resultValue: unknown,
+  parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>,
+): RuntimeRow {
+  const result = validateObservationResult(resultValue, parsed);
   const rowId = asString(result.row_id);
   if (!/^commerce_order_[0-9a-f]{64}$/.test(rowId)) {
     throw new Error("Nex committed an invalid canonical Commerce Order row id");
@@ -472,26 +484,51 @@ export async function projectParsedShopifyOrder(
   };
 }
 
+export async function projectParsedShopifyOrder(
+  nex: ShopifyCommerceClient,
+  parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>,
+): Promise<RuntimeRow> {
+  const input = await prepareShopifyOrderInput(nex, parsed);
+  return validateOrderObservationResult(await nex.commerce.orders.observe(input), parsed);
+}
+
 export async function projectParsedShopifyLineItem(
   nex: ShopifyCommerceClient,
   parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>,
+  knownParentCurrency?: string,
 ): Promise<RuntimeRow> {
-  const parent = unwrapPayload(
-    await nex.commerce.orders.get({
-      platform: "shopify",
-      space_id: asString(parsed.inputWithoutCurrency.space_id),
-      order_id: parsed.orderId,
-    }),
-  );
-  const revision = asRecord(parent.revision);
-  const currency = asString(revision.currency);
-  if (parent.found !== true || !/^[A-Z]{3}$/.test(currency)) {
-    throw new Error(`Shopify line item parent order is not projected: ${parsed.orderId}`);
+  let currency = asString(knownParentCurrency);
+  if (!currency) {
+    const parent = unwrapPayload(
+      await nex.commerce.orders.get({
+        platform: "shopify",
+        space_id: asString(parsed.inputWithoutCurrency.space_id),
+        order_id: parsed.orderId,
+      }),
+    );
+    const revision = asRecord(parent.revision);
+    currency = asString(revision.currency);
+    if (parent.found !== true || !/^[A-Z]{3}$/.test(currency)) {
+      throw new Error(`Shopify line item parent order is not projected: ${parsed.orderId}`);
+    }
+  } else if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(`Shopify line item parent currency is invalid: ${parsed.orderId}`);
   }
   return validateObservationResult(
     await nex.commerce["line-items"].observe({ ...parsed.inputWithoutCurrency, currency }),
     parsed,
   );
+}
+
+function lineItemObservationInput(
+  parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>,
+  currencyValue: unknown,
+): RuntimeRow {
+  const currency = asString(currencyValue);
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(`Shopify line item parent currency is invalid: ${parsed.orderId}`);
+  }
+  return { ...parsed.inputWithoutCurrency, currency };
 }
 
 function eventRecordId(input: RuntimeRow): string {
@@ -500,9 +537,7 @@ function eventRecordId(input: RuntimeRow): string {
   return asString(properties.record_id) || asString(input.record_id);
 }
 
-export default async function shopifyOrderCommerceJob(
-  ctx: ShopifyCommerceJobContext,
-): Promise<RuntimeRow> {
+async function projectShopifyCommerceEvent(ctx: ShopifyCommerceJobContext): Promise<RuntimeRow> {
   const event = asRecord(ctx.input.event);
   const eventType = asString(event.type);
   if (eventType && eventType !== "record.ingested") {
@@ -542,4 +577,137 @@ export default async function shopifyOrderCommerceJob(
     };
   }
   return { projected: false, reason: "not_order_or_line_item", record_id: recordId };
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const output = new Array<R>(values.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (next < values.length) {
+        const index = next++;
+        output[index] = await mapper(values[index]!);
+      }
+    }),
+  );
+  return output;
+}
+
+export default async function shopifyOrderCommerceJob(
+  ctx: ShopifyCommerceJobContext,
+): Promise<RuntimeRow> {
+  const events = Array.isArray(ctx.input.events) ? ctx.input.events.map(asRecord) : [];
+  if (events.length === 0) return await projectShopifyCommerceEvent(ctx);
+  const startedAt = performance.now();
+  const recordIds = events.map((event) => eventRecordId({ event }));
+  if (recordIds.some((recordId) => !recordId) || new Set(recordIds).size !== recordIds.length) {
+    throw new Error("Shopify commerce batch contains missing or duplicate record_id");
+  }
+  const read = unwrapPayload(await ctx.nex.records.get_many({ ids: recordIds }));
+  const records = Array.isArray(read.records) ? read.records.map(asRecord) : [];
+  if (records.length !== recordIds.length) {
+    throw new Error("Shopify commerce batch did not load every immutable Record");
+  }
+  const byId = new Map(records.map((record) => [asString(record.id), record]));
+  const loaded = recordIds.map((recordId) => {
+    if (!recordId) throw new Error("Shopify commerce batch event is missing record_id");
+    const record = byId.get(recordId) ?? {};
+    if (asString(record.platform) !== "shopify") {
+      return { family: "ignored" as const, recordId, parsed: null };
+    }
+    const family = asString(shopifyRecordSourceMetadata(record).family);
+    if (family === "order") {
+      return { family, recordId, parsed: parseShopifyOrderRecord(record) };
+    }
+    if (family === "line_item") {
+      return { family, recordId, parsed: parseShopifyLineItemRecord(record) };
+    }
+    return { family: "ignored" as const, recordId, parsed: null };
+  });
+  const orders = loaded.filter(
+    (
+      entry,
+    ): entry is typeof entry & {
+      family: "order";
+      parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>;
+    } => entry.family === "order" && entry.parsed?.family === "order",
+  );
+  const lineItems = loaded.filter(
+    (
+      entry,
+    ): entry is typeof entry & {
+      family: "line_item";
+      parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>;
+    } => entry.family === "line_item" && entry.parsed?.family === "line_item",
+  );
+  const loadedAt = performance.now();
+  const preparedOrders = await mapWithConcurrency(orders, 32, async (entry) => ({
+    entry,
+    input: await prepareShopifyOrderInput(ctx.nex, entry.parsed),
+  }));
+  if (ctx.nex.commerce.orders.observe_many) {
+    const payload = unwrapPayload(
+      await ctx.nex.commerce.orders.observe_many({
+        observations: preparedOrders.map(({ input }) => input),
+      }),
+    );
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    if (results.length !== preparedOrders.length) {
+      throw new Error("Nex returned an incomplete Shopify order observation batch");
+    }
+    results.forEach((result, index) =>
+      validateOrderObservationResult(result, preparedOrders[index]!.entry.parsed),
+    );
+  } else {
+    await mapWithConcurrency(preparedOrders, 32, async ({ entry, input }) =>
+      validateOrderObservationResult(await ctx.nex.commerce.orders.observe(input), entry.parsed),
+    );
+  }
+  const ordersAt = performance.now();
+  const orderCurrencyById = new Map(
+    orders.map((entry) => [
+      asString(entry.parsed.input.order_id),
+      asString(entry.parsed.input.currency),
+    ]),
+  );
+  const preparedLineItems = lineItems.map((entry) => ({
+    entry,
+    input: lineItemObservationInput(entry.parsed, orderCurrencyById.get(entry.parsed.orderId)),
+  }));
+  if (ctx.nex.commerce["line-items"].observe_many) {
+    const payload = unwrapPayload(
+      await ctx.nex.commerce["line-items"].observe_many({
+        observations: preparedLineItems.map(({ input }) => input),
+      }),
+    );
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    if (results.length !== preparedLineItems.length) {
+      throw new Error("Nex returned an incomplete Shopify line-item observation batch");
+    }
+    results.forEach((result, index) =>
+      validateObservationResult(result, preparedLineItems[index]!.entry.parsed),
+    );
+  } else {
+    await mapWithConcurrency(preparedLineItems, 32, async ({ entry, input }) =>
+      validateObservationResult(await ctx.nex.commerce["line-items"].observe(input), entry.parsed),
+    );
+  }
+  const finishedAt = performance.now();
+  return {
+    projected: true,
+    records: events.length,
+    orders: orders.length,
+    line_items: lineItems.length,
+    ignored: loaded.length - orders.length - lineItems.length,
+    timing_ms: {
+      load: Math.round(loadedAt - startedAt),
+      orders: Math.round(ordersAt - loadedAt),
+      line_items: Math.round(finishedAt - ordersAt),
+      total: Math.round(finishedAt - startedAt),
+    },
+  };
 }

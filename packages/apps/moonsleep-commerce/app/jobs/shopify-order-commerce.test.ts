@@ -410,4 +410,75 @@ describe("Shopify order and line-item commerce projection", () => {
     ).resolves.toEqual({ projected: false, reason: "not_record_ingested" });
     expect(recordsGet).not.toHaveBeenCalled();
   });
+
+  it("projects a batch in Order-before-line-item dependency order", async () => {
+    const order = orderRecord();
+    ((order.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_id = null;
+    (
+      (order.metadata as Record<string, unknown>).provider_ids as Record<string, unknown>
+    ).customer_id = null;
+    const line = lineItemRecord();
+    let orderProjected = false;
+    const client = {
+      records: {
+        get: vi.fn(async ({ id }: { id: string }) => ({
+          record: id === order.id ? order : line,
+        })),
+        get_many: vi.fn(async ({ ids }: { ids: string[] }) => ({
+          records: ids.map((id) => (id === order.id ? order : line)),
+        })),
+      },
+      contacts: { resolve: vi.fn(), observe: vi.fn() },
+      entities: { resolve: vi.fn() },
+      commerce: {
+        orders: {
+          observe: vi.fn(async () => {
+            orderProjected = true;
+            return receipt(String(order.id));
+          }),
+          observe_many: vi.fn(async ({ observations }: { observations: unknown[] }) => ({
+            results: await Promise.all(
+              observations.map(async () => {
+                orderProjected = true;
+                return receipt(String(order.id));
+              }),
+            ),
+          })),
+          get: vi.fn(async () => ({ found: orderProjected, revision: { currency: "USD" } })),
+        },
+        "line-items": {
+          observe: vi.fn(async () => {
+            expect(orderProjected).toBe(true);
+            return receipt(String(line.id));
+          }),
+          observe_many: vi.fn(async ({ observations }: { observations: unknown[] }) => ({
+            results: observations.map(() => {
+              expect(orderProjected).toBe(true);
+              return receipt(String(line.id));
+            }),
+          })),
+        },
+      },
+    } as unknown as ShopifyCommerceClient & {
+      records: {
+        get(params: { id: string }): Promise<unknown>;
+        get_many(params: { ids: string[] }): Promise<unknown>;
+      };
+    };
+
+    await expect(
+      shopifyOrderCommerceJob({
+        input: {
+          events: [
+            { type: "record.ingested", properties: { record_id: line.id } },
+            { type: "record.ingested", properties: { record_id: order.id } },
+          ],
+        },
+        nex: client,
+      }),
+    ).resolves.toMatchObject({ projected: true, records: 2, orders: 1, line_items: 1 });
+    expect(client.commerce.orders.observe_many).toHaveBeenCalledTimes(1);
+    expect(client.commerce.orders.get).not.toHaveBeenCalled();
+    expect(client.commerce["line-items"].observe_many).toHaveBeenCalledTimes(1);
+  });
 });

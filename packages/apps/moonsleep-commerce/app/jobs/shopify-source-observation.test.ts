@@ -45,19 +45,17 @@ function fixture(
       complete: true,
     },
   }));
-  const ingest = vi.fn(async () => {
-    const call = ingest.mock.calls.length;
-    if (params.failAt === call) throw new Error("synthetic ingest failure");
+  const ingestMany = vi.fn(async ({ records }: { records: unknown[] }) => {
+    if (params.failAt) throw new Error("synthetic ingest failure");
+    if (params.statusAt) {
+      return { payload: { records: records.length, inserted: 0, replayed: 0 } };
+    }
+    const replayed = params.replayAt || params.skippedAt ? 1 : 0;
     return {
       payload: {
-        status:
-          params.statusAt && call === 1
-            ? params.statusAt
-            : params.skippedAt === call
-              ? "skipped"
-              : "completed",
-        inserted: params.replayAt !== call,
-        replayed: params.replayAt === call,
+        records: records.length,
+        inserted: records.length - replayed,
+        replayed,
       },
     };
   });
@@ -76,11 +74,11 @@ function fixture(
     input: { connection_id: "shopify-production" } as Record<string, unknown>,
     nex: {
       shopify: { source: { capture, commit, abort } },
-      record: { ingest },
+      record: { ingest_many: ingestMany },
     },
     log: { info: vi.fn(), warn: vi.fn() },
   };
-  return { ctx, capture, ingest, commit, abort };
+  return { ctx, capture, ingest: ingestMany, commit, abort };
 }
 
 describe("Shopify source observation job", () => {
@@ -99,31 +97,36 @@ describe("Shopify source observation job", () => {
       connection_id: "shopify-production",
       family: "orders.delta",
     });
-    expect(test.ingest).toHaveBeenCalledTimes(2);
-    expect(test.ingest).toHaveBeenNthCalledWith(1, {
-      routing: {
-        platform: "shopify",
-        connection_id: "shopify-production",
-        sender_id: "store",
-        receiver_id: "moonsleep",
-        container_kind: "group",
-        container_id: "order",
-        metadata: { provider_account_ref: "moonsleepco.myshopify.com" },
-      },
-      payload: {
-        external_record_id: "record-1",
-        timestamp: 1,
-        content: "record-1",
-        content_type: "text",
-        metadata: {
-          source_record_type: "shopify.order",
-          provider_version_ref: null,
+    expect(test.ingest).toHaveBeenCalledTimes(1);
+    expect(test.ingest).toHaveBeenCalledWith({
+      records: [
+        {
+          routing: {
+            platform: "shopify",
+            connection_id: "shopify-production",
+            sender_id: "store",
+            receiver_id: "moonsleep",
+            container_kind: "group",
+            container_id: "order",
+            metadata: { provider_account_ref: "moonsleepco.myshopify.com" },
+          },
+          payload: {
+            external_record_id: "record-1",
+            timestamp: 1,
+            content: "record-1",
+            content_type: "text",
+            metadata: {
+              source_record_type: "shopify.order",
+              provider_version_ref: null,
+            },
+          },
         },
-      },
+        expect.any(Object),
+      ],
     });
     expect(test.commit).toHaveBeenCalledTimes(1);
     expect(test.abort).not.toHaveBeenCalled();
-    expect(test.ingest.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(test.ingest.mock.invocationCallOrder[0]).toBeLessThan(
       test.commit.mock.invocationCallOrder[0]!,
     );
   });
@@ -135,14 +138,14 @@ describe("Shopify source observation job", () => {
       inserted: 324,
       replayed: 0,
     });
-    expect(test.ingest).toHaveBeenCalledTimes(324);
+    expect(test.ingest).toHaveBeenCalledTimes(1);
     expect(test.commit).toHaveBeenCalledTimes(1);
   });
 
   it("aborts without advancing the cursor for an unexpected ingest status", async () => {
     const test = fixture({ statusAt: "denied" });
     await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
-      "Shopify record ingest returned denied",
+      "Shopify Record batch ingest returned invalid counts",
     );
     expect(test.commit).not.toHaveBeenCalled();
     expect(test.abort).toHaveBeenCalledWith({

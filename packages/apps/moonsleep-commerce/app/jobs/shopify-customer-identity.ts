@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
-import {
-  assertShopifyRecordFamily,
-  shopifyRecordSourceMetadata,
-} from "./shopify-record-family.js";
+import { assertShopifyRecordFamily, shopifyRecordSourceMetadata } from "./shopify-record-family.js";
 
 type RuntimeRow = Record<string, unknown>;
 
 type NexIdentityClient = {
   records: {
     get(params: { id: string }): Promise<unknown>;
+    get_many(params: { ids: string[] }): Promise<unknown>;
   };
   contacts: {
     observe(params: ShopifyContactObservation): Promise<unknown>;
@@ -495,9 +493,7 @@ async function ensureCustomerRoleEvidence(params: {
     let existing = raced[0];
     if (!existing) {
       try {
-        const exact = unwrapPayload(
-          await params.nex.facets.attachments.get({ id: attachmentId }),
-        );
+        const exact = unwrapPayload(await params.nex.facets.attachments.get({ id: attachmentId }));
         existing = asRecord(exact.attachment ?? exact.item ?? exact.value);
       } catch {
         throw error;
@@ -676,9 +672,64 @@ export async function projectShopifyCustomerIdentity(
   };
 }
 
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const output = new Array<R>(values.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (next < values.length) {
+        const index = next++;
+        output[index] = await mapper(values[index]!);
+      }
+    }),
+  );
+  return output;
+}
+
 export default async function shopifyCustomerIdentityJob(
   ctx: ShopifyCustomerIdentityContext,
 ): Promise<RuntimeRow> {
+  const events = Array.isArray(ctx.input.events) ? ctx.input.events.map(asRecord) : [];
+  if (events.length > 0) {
+    const startedAt = performance.now();
+    const recordIds = events.map((event) => extractRecordId({ event }));
+    if (recordIds.some((recordId) => !recordId) || new Set(recordIds).size !== recordIds.length) {
+      throw new Error("Shopify customer identity batch contains missing or duplicate record_id");
+    }
+    const response = unwrapPayload(await ctx.nex.records.get_many({ ids: recordIds }));
+    const records = Array.isArray(response.records) ? response.records.map(asRecord) : [];
+    if (records.length !== recordIds.length) {
+      throw new Error("Shopify customer identity batch did not load every immutable Record");
+    }
+    const byId = new Map(records.map((record) => [asString(record.id), record]));
+    const customers = recordIds
+      .map((recordId) => ({ recordId, record: byId.get(recordId) ?? {} }))
+      .filter(
+        ({ record }) =>
+          asString(record.platform) === "shopify" &&
+          asString(shopifyRecordSourceMetadata(record).family) === "customer",
+      );
+    const loadedAt = performance.now();
+    await mapWithConcurrency(customers, 4, async ({ record }) =>
+      projectShopifyCustomerIdentity(ctx.nex, record),
+    );
+    const finishedAt = performance.now();
+    return {
+      projected: true,
+      records: events.length,
+      customers: customers.length,
+      ignored: events.length - customers.length,
+      timing_ms: {
+        load: Math.round(loadedAt - startedAt),
+        customers: Math.round(finishedAt - loadedAt),
+        total: Math.round(finishedAt - startedAt),
+      },
+    };
+  }
   const event = extractEvent(ctx.input);
   const eventType = asString(event.type);
   if (eventType && eventType !== "record.ingested") {
