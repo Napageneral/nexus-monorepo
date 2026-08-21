@@ -162,6 +162,20 @@ describe("Shopify source observation job", () => {
     });
   });
 
+  it("commits a durably inserted page when an unrelated downstream subscriber fails", async () => {
+    const test = fixture({ statusAt: "failed" });
+    await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
+      records: 2,
+      inserted: 2,
+      replayed: 0,
+    });
+    expect(test.commit).toHaveBeenCalledTimes(1);
+    expect(test.abort).not.toHaveBeenCalled();
+    expect(test.ctx.log.warn).toHaveBeenCalledWith(
+      "Shopify record was durable even though a downstream event subscriber failed",
+    );
+  });
+
   it("releases the exact capture and leaves the cursor uncommitted after ingest failure", async () => {
     const test = fixture({ failAt: 2 });
     await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
