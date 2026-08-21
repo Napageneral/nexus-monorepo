@@ -8,10 +8,6 @@ Run the focused tests with the Nex workspace toolchain:
   jobs/shopify-order-commerce.test.ts \
   hooks/runtime-work.test.ts \
   methods/index.test.ts
-
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
-  scripts.test_shopify_customer_projection_runner \
-  scripts.test_shopify_commerce_projection_runner
 ```
 
 Validate the package:
@@ -23,20 +19,16 @@ nexus package validate .
 Before any production canary, the validation ladder in
 `docs/validation/shopify-customer-identity.md` must pass against a fresh
 MoonSleep PostgreSQL runtime. Start with the smallest representative
-customer+Order set and project its byte-identical manifest twice. The second
-receipt must prove no duplicate Entity, Contact, semantic evidence, Customer
-Facet, Commerce Order, or line item.
+customer+Order page and ingest it twice. The second pass must prove no duplicate
+Entity, Contact, semantic evidence, Customer Facet, Commerce Order, or line item.
 
-Order/line-item proof must also project the exact same sorted record set twice.
-The second pass must report `created=0`, `replayed=records_projected`, unchanged
-projection hashes, exact canonical customer links, and unchanged address
-snapshot hashes. No proof run may call Shopify.
+Order/line-item proof must also ingest the exact same page twice. The second
+pass must report only idempotent replays, exact canonical customer links, and
+unchanged address snapshot hashes.
 
-The service-shaped cleanroom also invokes the bounded runner through the public
-HTTP operation surface and proves its first-pass and replay checkpoints against
+The service-shaped cleanroom invokes the native app methods through the public
+HTTP operation surface and proves first-pass and replay behavior against
 PostgreSQL 17 while the continuous job and subscription remain inactive.
-Customer checkpoint receipt v2 accounts for every accepted, replayed, or
-adopted customer-role Observation and every attached or adopted Customer Facet.
 The PostgreSQL readback must retain exactly one active Customer Facet and zero
 rows in the compatibility-only accepted-Observation receipt table.
 It also proves the dormant live topology is exactly two jobs and three
@@ -45,23 +37,6 @@ projector, while order and line-item Records schedule only the commerce
 projector. Disabled legacy broad subscriptions are migrated; active or foreign
 subscriptions fail closed.
 
-Historical Shopify Records whose immutable source type is the legacy `text`
-fallback are selected only through the explicit `legacy_current_prefix` or
-`legacy_double_prefix` runner contract. Each inspection requests at most 100
-rows to return at most 99, binds the exact provider account plus literal
-customer/order/line-item provider-ID prefix, and emits the next three-part
-provider cursor. The projector validates that same immutable namespace before
-any semantic write and uses the normalized row already bound by the Record;
-it never refetches Shopify or synthesizes a replacement Record. Live
-`record.ingested` jobs remain canonical-family-only.
-
-The runner unit suite retains large-shape coverage for resumability and resource
-guards. That coverage is not the activation plan and does not authorize a
-cumulative 50/500/5000 rollout; scale only after the representative canary and
-only when an observed integrity or performance risk warrants another gate.
-
-The commerce runner suite models the exact production manifest shape captured
-on 2026-07-22: 11,549 immutable order Records for 11,548 logical orders plus
-22,251 line-item Records. It drains all 33,800 IDs in 676 hard-ceiling
-batches across 68 bounded invocations, then repeats the full shape with zero
-created rows and 33,800 replayed observations.
+Source-job tests must prove that one provider page advances its cursor only
+after every Record is durably ingested, and that a failed page leaves the cursor
+unchanged for an idempotent retry.

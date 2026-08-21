@@ -23,19 +23,12 @@ Current scope:
   and adapter contract `moonsleep.commerce-order.target-adapter.v1`
 - immutable billing and shipping snapshots with deterministic SHA-256 binding
 - bounded explicit customer cohort projection for pre-activation production proof
-- explicit deterministic customer projection batches capped at 250 records,
-  with a resource-aware checkpoint runner and replay counters/hashes
-- deterministic order/line-item batches capped at 50 records; the production
-  runner defaults to one 25-record batch per invocation, a one-second inter-batch
-  delay, and an I/O-pressure ceiling before every batch
 - dormant `record.ingested` job registration on the full PostgreSQL work plane,
   with exact customer, order, and line-item subscriptions so each new revision
-  schedules one projector rather than fanning out to both jobs; activation is
-  held until cohort, double-backfill, restart, and replay gates pass
+  schedules one projector rather than fanning out to both jobs
 - deterministic shop-domain and customer-GID contact anchors
 - exact provider JSON hash verification
-- zero Shopify calls during projection: backfill drains immutable records that
-  are already committed to the MoonSleep Nex database
+- zero Shopify writes during projection
 - direct semantic-ledger accepted-Observation verification; the projector does
   not invoke the legacy Shopify Customer Facet bridge or write copied receipts
   to `core_graph_accepted_observation_receipts`
@@ -54,35 +47,11 @@ entire cohort before the first identity observation, then uses the same
 replay-safe public operations as the dormant event job. It exists only to prove
 real records and identity bindings before bulk event delivery is activated.
 
-The backfill method accepts one strictly sorted, unique batch of at most 250
-record IDs and its SHA-256 identity. It validates that complete batch before the
-first identity observation, projects through the same public operations, and
-returns a deterministic result hash plus created/replayed counters.
-
-For historical sets, `shopify-customers.inspect-backfill` discovers immutable
-customer Records through paginated public `records.scan` calls scoped to the
-exact platform, connection, and source Record type. It returns validated sorted
-IDs, count, boundaries, terminal scan cursor, and SHA-256.
-`shopify_customer_projection_runner.py --build-manifest` calls that read-only
-operation and atomically creates a new private manifest without direct SQL.
-Projection mode can drain that exact manifest in independently receipted,
-resumable batches when observed risk warrants a larger run. It checks health,
-pause markers and Linux I/O pressure before every batch,
-and advances its durable checkpoint only after an exact Nex success receipt. A
-lost response retries only the uncheckpointed batch; replay-safe source
-observations prevent duplicate identities. Safe invocation defaults are one
-25-record batch, a one-second inter-batch delay, and an I/O full-pressure
-`avg60` ceiling of 1.0. An explicit invocation can run at most ten batches; a
-fresh invocation must re-read and validate the durable checkpoint before it can
-continue.
-
-Order and line-item backfill follows the same pattern through
-`shopify-commerce.inspect-backfill` and `shopify-commerce.project-backfill`.
-Every explicit batch is fetched and validated before the first commerce write;
-orders are projected before line items. The runner stores a hash-bound manifest
-and fsynced checkpoint. Its safe defaults make each scheduled invocation do at
-most 25 records and then exit, allowing the host resource guard to pause or
-resume the drain without a full replay or new Shopify fetch.
+Each source invocation captures one provider page and ingests its Records
+through the native `record.ingest` operation. The Shopify cursor advances only
+after the whole page succeeds. A failure aborts the capture without advancing
+the cursor, so the same page can be retried and already committed Records replay
+idempotently.
 
 Before ingest, `moonsleep-commerce.shopify-source.seed-identities` must run
 twice for the exact shop domain and connection ID. The first run creates the
@@ -99,10 +68,5 @@ set. An empty set safely binds the connection while leaving every schedule
 disabled. `moonsleep-commerce.shopify-source.trigger` can queue one exact
 family without enabling any recurring schedule.
 
-Still held from production activation:
-
-- historical production backfill execution against the MoonSleep-only runtime
-- continuous production monitor activation
-- event subscription activation before the production cohort, double-backfill,
-  restart, and replay gates pass
-- Shopify, Dispatch, payment, refund, or fulfillment writes
+This app has no Shopify, Dispatch, payment, refund, or fulfillment write
+authority.

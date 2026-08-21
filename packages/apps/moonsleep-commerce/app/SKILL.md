@@ -36,31 +36,19 @@ schedule by editing its row directly. The installed UTC expressions stagger
 each family into its own second/minute slot so activation does not create a
 provider-call burst.
 
-After a reviewed representative customer+Order canary, a larger historical run
-may invoke
-`scripts/shopify_customer_projection_runner.py --build-manifest`. The runner
-calls `shopify-customers.inspect-backfill` and atomically writes its exact
-validated sorted ID set to a new private SHA-256-bound manifest without direct
-SQL. Then run the same script in projection mode; it calls
-`shopify-customers.project-backfill` in batches of at most 250, checkpoints
-after every exact success receipt, and checks health, pause markers and I/O
-pressure before the next batch. Run a second pass with a fresh checkpoint and
-require it to create nothing and replay every exact source observation.
+Each source invocation captures one provider page. The app commits the Shopify
+cursor only after every Record is durably ingested. A failed page is aborted
+without cursor advancement and may be retried idempotently from the same native
+capture boundary.
 
 ## Boundaries
 
 - Do not query Nex or MoonSleep databases directly.
 - Do not merge identities by email, phone, name, or address.
 - Do not mutate Shopify or another provider.
-- Do not refetch or re-ingest an already committed historical source corpus to
-  prove projection replay.
-- Do not call an unbounded whole-corpus projection operation.
-- Do not hand-assemble the production record-ID manifest.
 - Do not replace Dispatch fulfillment ownership.
-- Do not enable a production backfill until PostgreSQL runtime, restart, and
-  replay gates pass.
 - Do not use Entity tags as customer-role authority; require the Customer Facet.
 - Do not invoke the legacy Shopify Customer Facet bridge or copy accepted
   Observation receipts into `core_graph_accepted_observation_receipts`.
 - Do not enable either projector job or any projection subscription before a
-  separately reviewed representative customer+Order canary and identical replay.
+  representative customer+Order page and identical replay pass.

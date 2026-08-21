@@ -67,20 +67,14 @@ Stable rows point to the newest `(observed_at, source_record_id)` revision.
 Older revisions remain durable evidence but cannot replace newer current state.
 Exact replay returns the committed receipt; conflicting replay fails closed.
 
-## Backfill and continuous projection
-
-Backfill never calls Shopify. A read-only public inspection creates a private
-hash-bound manifest of existing Nex records. The runner defaults to one batch of
-25 records per invocation, checks pause markers, health and Linux I/O pressure,
-then persists a fsynced checkpoint only after a validated batch receipt. Lost
-responses retry only the uncheckpointed batch.
+## Continuous projection
 
 The customer and order/line event jobs are installed inactive with three exact
 `record.ingested` subscriptions for `customer`, `order`, and `line_item` record
 families. This prevents duplicate queue fanout: each newly committed Shopify
-revision schedules exactly one projector. After historical drain,
-restart/replay, parity and rollback gates, these projectors may consume only
-newly committed Shopify revisions.
+revision schedules exactly one projector. Source jobs advance the Shopify cursor
+only after every Record in one provider page is durably ingested, so a failed
+page can be retried from its existing cursor with idempotent Record replay.
 
 ## Authority
 
