@@ -20,6 +20,8 @@ function record(id: string) {
       content_type: "text",
       source_record_type: "shopify.order",
       provider_version_ref: null,
+      payload: { provider_object_sha256: `provider-${id}` },
+      metadata: { snapshot_fingerprint_sha256: `snapshot-${id}` },
     },
   };
 }
@@ -71,16 +73,43 @@ function fixture(
     },
   }));
   const abort = vi.fn(async () => ({ payload: { aborted: true } }));
+  const scan = vi.fn(async (params: Record<string, unknown>) => {
+    const providerRecordId = String(params.provider_record_id_prefix);
+    return {
+      payload: {
+        records: [
+          {
+            platform: "shopify",
+            connection_id: "shopify-production",
+            provider_account_ref: "moonsleepco.myshopify.com",
+            source_record_type: "shopify.order",
+            provider_record_id: providerRecordId,
+            payload: {
+              source_metadata: {
+                payload_metadata: {
+                  snapshot_fingerprint_sha256: `snapshot-${providerRecordId}`,
+                },
+                provider_payload: {
+                  provider_object_sha256: `provider-${providerRecordId}`,
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+  });
   const ctx = {
     job: { config: { family: "orders.delta" } },
     input: { connection_id: "shopify-production" } as Record<string, unknown>,
     nex: {
       shopify: { source: { capture, commit, abort } },
       record: { ingest },
+      records: { scan },
     },
     log: { info: vi.fn(), warn: vi.fn() },
   };
-  return { ctx, capture, ingest, commit, abort };
+  return { ctx, capture, ingest, commit, abort, scan };
 }
 
 describe("Shopify source observation job", () => {
@@ -115,7 +144,9 @@ describe("Shopify source observation job", () => {
         timestamp: 1,
         content: "record-1",
         content_type: "text",
+        payload: { provider_object_sha256: "provider-record-1" },
         metadata: {
+          snapshot_fingerprint_sha256: "snapshot-record-1",
           source_record_type: "shopify.order",
           provider_version_ref: null,
         },
@@ -165,7 +196,7 @@ describe("Shopify source observation job", () => {
   it("commits a durably inserted page when an unrelated downstream subscriber fails", async () => {
     const test = fixture();
     test.ingest.mockReset().mockResolvedValue({
-      payload: { status: "failed", result: { status: "completed" } },
+      payload: { status: "failed", result: { status: "failed" } },
     });
     await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
       records: 2,
@@ -173,6 +204,15 @@ describe("Shopify source observation job", () => {
       replayed: 0,
     });
     expect(test.ingest).toHaveBeenCalledTimes(2);
+    expect(test.scan).toHaveBeenCalledTimes(2);
+    expect(test.scan).toHaveBeenNthCalledWith(1, {
+      platform: "shopify",
+      connection_id: "shopify-production",
+      provider_account_ref: "moonsleepco.myshopify.com",
+      source_record_type: "shopify.order",
+      provider_record_id_prefix: "record-1",
+      limit: 100,
+    });
     expect(test.commit).toHaveBeenCalledTimes(1);
     expect(test.abort).not.toHaveBeenCalled();
     expect(test.ctx.log.warn).toHaveBeenCalledWith(
@@ -180,11 +220,12 @@ describe("Shopify source observation job", () => {
     );
   });
 
-  it("fails closed when both aggregate and record ingest statuses fail", async () => {
+  it("fails closed when a failed aggregate has no exact durable Record", async () => {
     const test = fixture();
     test.ingest.mockReset().mockResolvedValue({
       payload: { status: "failed", result: { status: "failed" } },
     });
+    test.scan.mockResolvedValue({ payload: { records: [] } });
     await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
       "Shopify record ingest returned failed",
     );
