@@ -165,6 +165,7 @@ export default async function shopifySourceObservationJob(
   let inserted = 0;
   let replayed = 0;
   try {
+    const ingestRecords: Array<{ routing: RuntimeRow; payload: RuntimeRow }> = [];
     for (const record of records) {
       if (asString(record.operation) !== "record.ingest") {
         throw new Error("Shopify source capture returned an unsupported operation");
@@ -173,15 +174,20 @@ export default async function shopifySourceObservationJob(
       if (Object.keys(routing).length === 0 || Object.keys(payload).length === 0) {
         throw new Error("Shopify source capture returned an incomplete record envelope");
       }
-      const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
-      const status = asString(result.status) || asString(asRecord(result.result).status);
-      if (status && status !== "completed" && status !== "skipped") {
-        throw new Error(`Shopify record ingest returned ${status}`);
-      }
-      if (status === "skipped" || result.inserted === false || result.replayed === true) {
-        replayed += 1;
-      } else {
-        inserted += 1;
+      ingestRecords.push({ routing, payload });
+    }
+    if (ingestRecords.length > 0) {
+      const result = unwrap(await ctx.nex.record.ingest_many({ records: ingestRecords }));
+      inserted = Number(result.inserted);
+      replayed = Number(result.replayed);
+      if (
+        !Number.isSafeInteger(inserted) ||
+        inserted < 0 ||
+        !Number.isSafeInteger(replayed) ||
+        replayed < 0 ||
+        inserted + replayed !== ingestRecords.length
+      ) {
+        throw new Error("Shopify Record batch ingest returned invalid counts");
       }
     }
     const commit = unwrap(

@@ -82,6 +82,7 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
     payload: { canonical_id: canonicalId, hops: 0 },
   }));
   const get = vi.fn(async () => ({ ok: true, payload: { record } }));
+  const getMany = vi.fn(async () => ({ ok: true, payload: { records: [record] } }));
   let attachment: Record<string, unknown> | null = options.replayed
     ? {
         id: "facet-customer-1",
@@ -168,7 +169,7 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
   return {
     record,
     nex: {
-      records: { get },
+      records: { get, get_many: getMany },
       contacts: { observe },
       entities: { resolve },
       memory: {
@@ -184,6 +185,7 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
     },
     calls: {
       get,
+      getMany,
       observe,
       resolve,
       facetsGet,
@@ -341,6 +343,25 @@ describe("Shopify customer identity projection", () => {
       }),
     ).resolves.toMatchObject({ projected: true, record_id: "record-row-1" });
     expect(fixture.calls.get).toHaveBeenCalledWith({ id: "record-row-1" });
+  });
+
+  it("loads and projects a grouped customer event batch", async () => {
+    const fixture = nexFixture({ replayed: true });
+    await expect(
+      shopifyCustomerIdentityJob({
+        input: {
+          events: [
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: fixture.record.id },
+            },
+          ],
+        },
+        nex: fixture.nex,
+      }),
+    ).resolves.toMatchObject({ projected: true, records: 1, customers: 1, ignored: 0 });
+    expect(fixture.calls.getMany).toHaveBeenCalledWith({ ids: ["record-row-1"] });
+    expect(fixture.calls.get).not.toHaveBeenCalled();
   });
 
   it("skips non-customer Shopify records without touching identity", async () => {
