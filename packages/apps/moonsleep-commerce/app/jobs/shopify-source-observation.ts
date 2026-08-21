@@ -183,8 +183,20 @@ export default async function shopifySourceObservationJob(
       }
       const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
       const status = asString(result.status) || asString(asRecord(result.result).status);
-      if (status && status !== "completed" && status !== "skipped") {
+      const durableDespiteDownstreamFailure =
+        status === "failed" && (result.inserted === true || result.replayed === true);
+      if (
+        status &&
+        status !== "completed" &&
+        status !== "skipped" &&
+        !durableDespiteDownstreamFailure
+      ) {
         throw new Error(`Shopify record ingest returned ${status}`);
+      }
+      if (durableDespiteDownstreamFailure) {
+        ctx.log.warn(
+          "Shopify record was durable even though a downstream event subscriber failed",
+        );
       }
       if (status === "skipped" || result.inserted === false || result.replayed === true) {
         replayed += 1;
