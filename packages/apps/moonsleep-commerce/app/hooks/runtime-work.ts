@@ -22,6 +22,7 @@ const SOURCE_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-source-observation.ts", import.meta.url),
 );
 const SOURCE_JOB_LANE_ID = "adapter_io";
+const SOURCE_JOB_TIMEOUT_MS = 15 * 60 * 1000;
 const JOB_SPECS = Object.freeze([
   {
     name: CUSTOMER_JOB_NAME,
@@ -274,6 +275,7 @@ async function ensureJob(
   const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
   const laneId = "config" in spec ? SOURCE_JOB_LANE_ID : "";
+  const timeoutMs = "config" in spec ? SOURCE_JOB_TIMEOUT_MS : null;
   if (existing) {
     const id = asString(existing.id);
     let configNeedsUpdate = false;
@@ -289,6 +291,7 @@ async function ensureJob(
       asString(existing.script_path) !== spec.scriptPath ||
       configNeedsUpdate ||
       (laneId !== "" && asString(existing.lane_id) !== laneId) ||
+      (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
       asString(existing.status) !== spec.status;
     if (!needsUpdate) {
       return id;
@@ -300,6 +303,7 @@ async function ensureJob(
         script_path: spec.scriptPath,
         ...(configNeedsUpdate ? { config_json: configJson } : {}),
         ...(laneId ? { lane_id: laneId } : {}),
+        ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
         status: spec.status,
         created_by: appId,
       }),
@@ -314,6 +318,7 @@ async function ensureJob(
       script_path: spec.scriptPath,
       ...(configJson ? { config_json: configJson } : {}),
       ...(laneId ? { lane_id: laneId } : {}),
+      ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
       status: spec.status,
       created_by: appId,
     }),

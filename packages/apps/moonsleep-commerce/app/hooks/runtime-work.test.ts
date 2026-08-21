@@ -207,10 +207,11 @@ describe("MoonSleep commerce runtime work", () => {
     });
     expect(fixture.runtime.jobs.create).toHaveBeenCalledTimes(14);
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(2)) {
-      expect(call[0]).toMatchObject({ lane_id: "adapter_io" });
+      expect(call[0]).toMatchObject({ lane_id: "adapter_io", timeout_ms: 900_000 });
     }
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(0, 2)) {
       expect(call[0]).not.toHaveProperty("lane_id");
+      expect(call[0]).not.toHaveProperty("timeout_ms");
     }
     expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
     for (const call of fixture.runtime.schedules.create.mock.calls) {
@@ -274,6 +275,7 @@ describe("MoonSleep commerce runtime work", () => {
           config_json: JSON.stringify({ family }),
           status: "active",
           lane_id: "adapter_io",
+          timeout_ms: 900_000,
         })),
         {
           id: "job-2",
@@ -339,6 +341,7 @@ describe("MoonSleep commerce runtime work", () => {
         config_json: JSON.stringify({ family, connection_id: "shopify-production" }),
         status: "active",
         lane_id: "adapter_io",
+        timeout_ms: 900_000,
       })),
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
         id: `schedule-${index + 1}`,
@@ -363,6 +366,47 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.schedules.slice(0, 2).map((schedule) => schedule.enabled)).toEqual([1, 1]);
   });
 
+  it("repairs the bounded source timeout without replacing its binding or schedule state", async () => {
+    const fixture = runtimeFixture({
+      jobs: SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
+        id: `job-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        description,
+        script_path: new URL("../jobs/shopify-source-observation.ts", import.meta.url).pathname,
+        config_json: JSON.stringify({ family, connection_id: "shopify-production" }),
+        status: "active",
+        lane_id: "adapter_io",
+        timeout_ms: index === 0 ? null : 900_000,
+      })),
+      schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
+        id: `schedule-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        job_definition_id: `job-${index + 1}`,
+        expression,
+        timezone: "UTC",
+        enabled: index === 0 ? 1 : 0,
+      })),
+    });
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.update).toHaveBeenCalledTimes(1);
+    expect(fixture.runtime.jobs.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "job-1", timeout_ms: 900_000 }),
+    );
+    expect(fixture.runtime.jobs.update.mock.calls[0]?.[0]).not.toHaveProperty("config_json");
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "schedule-1", enabled: false }),
+    );
+    expect(fixture.jobs[0]?.config_json).toBe(
+      JSON.stringify({ family: "orders.delta", connection_id: "shopify-production" }),
+    );
+    expect(fixture.schedules[0]?.enabled).toBe(1);
+  });
+
   it("preserves a configured binding when repairing other source job metadata", async () => {
     const fixture = runtimeFixture({
       jobs: [
@@ -377,6 +421,7 @@ describe("MoonSleep commerce runtime work", () => {
           }),
           status: "active",
           lane_id: "workflow",
+          timeout_ms: 900_000,
         },
       ],
       schedules: [
