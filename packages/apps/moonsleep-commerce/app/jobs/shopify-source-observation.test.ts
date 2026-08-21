@@ -164,19 +164,15 @@ describe("Shopify source observation job", () => {
 
   it("commits a durably inserted page when an unrelated downstream subscriber fails", async () => {
     const test = fixture();
-    test.ingest
-      .mockReset()
-      .mockResolvedValueOnce({ payload: { status: "failed", result: { status: "failed" } } })
-      .mockResolvedValueOnce({ payload: { status: "skipped" } })
-      .mockResolvedValueOnce({
-        payload: { status: "completed", inserted: true, replayed: false },
-      });
+    test.ingest.mockReset().mockResolvedValue({
+      payload: { status: "failed", result: { status: "completed" } },
+    });
     await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
       records: 2,
       inserted: 2,
       replayed: 0,
     });
-    expect(test.ingest).toHaveBeenCalledTimes(3);
+    expect(test.ingest).toHaveBeenCalledTimes(2);
     expect(test.commit).toHaveBeenCalledTimes(1);
     expect(test.abort).not.toHaveBeenCalled();
     expect(test.ctx.log.warn).toHaveBeenCalledWith(
@@ -184,7 +180,7 @@ describe("Shopify source observation job", () => {
     );
   });
 
-  it("fails closed when an identical retry cannot prove the record durable", async () => {
+  it("fails closed when both aggregate and record ingest statuses fail", async () => {
     const test = fixture();
     test.ingest.mockReset().mockResolvedValue({
       payload: { status: "failed", result: { status: "failed" } },
@@ -192,7 +188,7 @@ describe("Shopify source observation job", () => {
     await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
       "Shopify record ingest returned failed",
     );
-    expect(test.ingest).toHaveBeenCalledTimes(2);
+    expect(test.ingest).toHaveBeenCalledTimes(1);
     expect(test.commit).not.toHaveBeenCalled();
     expect(test.abort).toHaveBeenCalledTimes(1);
   });
