@@ -27,8 +27,6 @@ const SOURCE_FAMILIES = new Set([
   "payouts.delta",
 ]);
 const CAPTURE_ID_RE = /^[0-9a-f]{32}$/;
-const INGEST_WRITE_BATCH_SIZE = 25;
-const INGEST_WRITE_BATCH_PAUSE_MS = 2_500;
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -114,12 +112,6 @@ function recordIngestParams(record: RuntimeRow): { routing: RuntimeRow; payload:
   return { routing, payload };
 }
 
-async function pauseBetweenWriteBatches(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, INGEST_WRITE_BATCH_PAUSE_MS);
-  });
-}
-
 function sourceJobConfig(ctx: ShopifySourceJobContext): {
   family: string;
   connectionId: string;
@@ -173,7 +165,7 @@ export default async function shopifySourceObservationJob(
   let inserted = 0;
   let replayed = 0;
   try {
-    for (const [index, record] of records.entries()) {
+    for (const record of records) {
       if (asString(record.operation) !== "record.ingest") {
         throw new Error("Shopify source capture returned an unsupported operation");
       }
@@ -190,15 +182,6 @@ export default async function shopifySourceObservationJob(
         replayed += 1;
       } else {
         inserted += 1;
-      }
-      if (
-        index + 1 < records.length &&
-        (index + 1) % INGEST_WRITE_BATCH_SIZE === 0
-      ) {
-        ctx.log.info(
-          `Shopify source ${family} pausing after bounded write batch ${index + 1}/${records.length}`,
-        );
-        await pauseBetweenWriteBatches();
       }
     }
     const commit = unwrap(

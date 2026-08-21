@@ -128,25 +128,15 @@ describe("Shopify source observation job", () => {
     );
   });
 
-  it("paces captured records in bounded write batches before committing the cursor", async () => {
-    vi.useFakeTimers();
-    try {
-      const test = fixture({ recordCount: 26 });
-      const result = shopifySourceObservationJob(test.ctx);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(test.ingest).toHaveBeenCalledTimes(25);
-      expect(test.commit).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(2_500);
-      await expect(result).resolves.toMatchObject({
-        records: 26,
-        inserted: 26,
-        replayed: 0,
-      });
-      expect(test.ingest).toHaveBeenCalledTimes(26);
-      expect(test.commit).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
+  it("does not add fixed sleeps between captured records", async () => {
+    const test = fixture({ recordCount: 324 });
+    await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
+      records: 324,
+      inserted: 324,
+      replayed: 0,
+    });
+    expect(test.ingest).toHaveBeenCalledTimes(324);
+    expect(test.commit).toHaveBeenCalledTimes(1);
   });
 
   it("aborts without advancing the cursor for an unexpected ingest status", async () => {
