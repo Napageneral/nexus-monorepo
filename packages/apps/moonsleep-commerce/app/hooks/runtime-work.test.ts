@@ -11,13 +11,13 @@ const SOURCE_FIXTURES = [
     "orders-delta",
     "orders.delta",
     "Capture one bounded Shopify order delta page and durably ingest its exact records",
-    "0 * * * * *",
+    "0 0-59/20 * * * *",
   ],
   [
     "customers-delta",
     "customers.delta",
     "Capture one bounded Shopify customer delta page and durably ingest its exact records",
-    "20 * * * * *",
+    "20 10-59/20 * * * *",
   ],
   [
     "inventory-hot",
@@ -190,7 +190,7 @@ describe("MoonSleep commerce runtime work", () => {
       expect(occurrences).toBeGreaterThan(0);
     }
 
-    expect(occupied.size).toBe(1495);
+    expect(occupied.size).toBe(811);
   });
 
   it("installs both Shopify projectors dormant pending production activation gates", async () => {
