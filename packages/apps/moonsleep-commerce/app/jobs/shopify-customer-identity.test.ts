@@ -288,6 +288,26 @@ describe("Shopify customer identity projection", () => {
     expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
   });
 
+  it("does not mistake an empty continuation page for a second active customer facet", async () => {
+    const fixture = nexFixture({ replayed: true });
+    const firstPage = await fixture.calls.facetsList();
+    fixture.calls.facetsList.mockReset();
+    fixture.calls.facetsList
+      .mockResolvedValueOnce({ ...firstPage, next_cursor: "empty-continuation" })
+      .mockResolvedValueOnce({ items: [] });
+
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
+      projected: true,
+      customer_facet_outcome: "adopted_existing",
+    });
+    expect(fixture.calls.facetsList).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ cursor: "empty-continuation" }),
+    );
+  });
+
   it("adopts the deterministic active facet after a production cardinality conflict", async () => {
     const fixture = nexFixture();
     await projectShopifyCustomerIdentity(fixture.nex, fixture.record);

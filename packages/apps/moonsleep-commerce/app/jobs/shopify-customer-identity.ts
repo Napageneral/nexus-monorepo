@@ -246,7 +246,7 @@ async function ensureCustomerEvidenceProfiles(nex: NexIdentityClient): Promise<v
 function activeCustomerFacetRows(value: unknown): RuntimeRow[] {
   const payload = unwrapPayload(value);
   const rows = Array.isArray(payload.items) ? payload.items.map(asRecord) : [];
-  if (rows.length > 1 || payload.next_cursor) {
+  if (rows.length > 1) {
     throw new Error("canonical Entity has more than one active MoonSleep Customer Facet");
   }
   return rows;
@@ -298,15 +298,25 @@ async function listActiveCustomerFacets(
   nex: NexIdentityClient,
   entityId: string,
 ): Promise<RuntimeRow[]> {
-  return activeCustomerFacetRows(
-    await nex.facets.attachments.list({
-      subject_class: "nex.entity",
-      subject_id: entityId,
-      facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
-      lifecycle_state: "active",
-      limit: 2,
-    }),
-  );
+  const params = {
+    subject_class: "nex.entity",
+    subject_id: entityId,
+    facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
+    lifecycle_state: "active",
+    limit: 2,
+  };
+  const firstPayload = unwrapPayload(await nex.facets.attachments.list(params));
+  const first = activeCustomerFacetRows(firstPayload);
+  const nextCursor = asString(firstPayload.next_cursor);
+  if (nextCursor) {
+    const second = activeCustomerFacetRows(
+      await nex.facets.attachments.list({ ...params, cursor: nextCursor }),
+    );
+    if (second.length > 0) {
+      throw new Error("canonical Entity has more than one active MoonSleep Customer Facet");
+    }
+  }
+  return first;
 }
 
 async function ensureCustomerRoleEvidence(params: {
