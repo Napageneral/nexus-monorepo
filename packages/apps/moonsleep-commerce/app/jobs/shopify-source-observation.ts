@@ -182,33 +182,11 @@ export default async function shopifySourceObservationJob(
         throw new Error("Shopify source capture returned an incomplete record envelope");
       }
       const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
-      const nestedResult = asRecord(result.result);
-      const nestedStatus = asString(nestedResult.status);
-      const status = asString(result.status) || nestedStatus;
-      const durableDespiteDownstreamFailure =
-        status === "failed" &&
-        asArray(nestedResult.stages).some(
-          (stage) =>
-            asString(stage.stage) === "finalizeRequest" && !asString(stage.error),
-        );
-      if (
-        status &&
-        status !== "completed" &&
-        status !== "skipped" &&
-        !durableDespiteDownstreamFailure
-      ) {
+      const status = asString(result.status) || asString(asRecord(result.result).status);
+      if (status && status !== "completed" && status !== "skipped") {
         throw new Error(`Shopify record ingest returned ${status}`);
       }
-      if (durableDespiteDownstreamFailure) {
-        ctx.log.warn(
-          "Shopify record was durable even though a downstream event subscriber failed",
-        );
-      }
-      if (
-        nestedStatus === "skipped" ||
-        (!durableDespiteDownstreamFailure &&
-          (status === "skipped" || result.inserted === false || result.replayed === true))
-      ) {
+      if (status === "skipped" || result.inserted === false || result.replayed === true) {
         replayed += 1;
       } else {
         inserted += 1;

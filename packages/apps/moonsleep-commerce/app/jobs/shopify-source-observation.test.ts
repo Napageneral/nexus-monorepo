@@ -162,52 +162,6 @@ describe("Shopify source observation job", () => {
     });
   });
 
-  it("commits a durably inserted page when an unrelated downstream subscriber fails", async () => {
-    const test = fixture();
-    test.ingest.mockReset().mockResolvedValue({
-      payload: {
-        status: "failed",
-        result: {
-          status: "failed",
-          stages: [
-            { stage: "executeOperation", error: "subscriber failed" },
-            { stage: "finalizeRequest", duration_ms: 1 },
-          ],
-        },
-      },
-    });
-    await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
-      records: 2,
-      inserted: 2,
-      replayed: 0,
-    });
-    expect(test.ingest).toHaveBeenCalledTimes(2);
-    expect(test.commit).toHaveBeenCalledTimes(1);
-    expect(test.abort).not.toHaveBeenCalled();
-    expect(test.ctx.log.warn).toHaveBeenCalledWith(
-      "Shopify record was durable even though a downstream event subscriber failed",
-    );
-  });
-
-  it("fails closed when the finalizeRequest stage fails", async () => {
-    const test = fixture();
-    test.ingest.mockReset().mockResolvedValue({
-      payload: {
-        status: "failed",
-        result: {
-          status: "failed",
-          stages: [{ stage: "finalizeRequest", error: "record store unavailable" }],
-        },
-      },
-    });
-    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
-      "Shopify record ingest returned failed",
-    );
-    expect(test.ingest).toHaveBeenCalledTimes(1);
-    expect(test.commit).not.toHaveBeenCalled();
-    expect(test.abort).toHaveBeenCalledTimes(1);
-  });
-
   it("releases the exact capture and leaves the cursor uncommitted after ingest failure", async () => {
     const test = fixture({ failAt: 2 });
     await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(

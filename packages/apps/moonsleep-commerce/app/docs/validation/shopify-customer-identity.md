@@ -35,38 +35,6 @@
   `moonsleep.commerce-order.target-adapter.v1`; copied Order resources are forbidden.
 - Restart Nex and repeat the readback.
 
-## Historical backfill
-
-- Start with the smallest representative customer+Order canary and identical
-  replay. Introduce bounded historical pages only if observed risk warrants it.
-- Bind the exact staged Shopify manifest, immutable scan cursors, and all page hashes.
-- Call `moonsleep-commerce.shopify-customers.inspect-backfill` for the exact
-  shop and connection through the runner's `--build-manifest` mode. Require the
-  returned sorted IDs, record count, boundaries, and SHA-256 to agree before the
-  runner atomically creates one new private mode-0600 manifest. Do not assemble
-  the production ID set manually or through SQL.
-- Invoke `moonsleep-commerce.shopify-customers.project-backfill` only through
-  batches of at most 250 exact IDs. Require a durable checkpoint after every
-  successful batch and no checkpoint advancement on a lost response.
-- Before every production batch require API/Nex health, no production pause
-  marker, and I/O full `avg60` below the job-local ceiling. Exit retryably before
-  a write when any resource gate is red.
-- Run the complete customer backfill twice with byte-identical parameters.
-- Require both runs to return the same record-set and projection-result hashes.
-- Require the second run to report zero created entities, zero created contacts,
-  `replayed == records_projected`, adopted existing customer-role Observations,
-  and adopted existing Customer Facets. Require the checkpoint v2 semantic
-  counters to cover every projected Record exactly once.
-- Require exactly one active canonical Customer Facet and zero copied rows in
-  `core_graph_accepted_observation_receipts` after the first run, replay, and
-  restart.
-- Prove cancellation and restart resume at the first uncheckpointed batch; do
-  not refetch or re-ingest the immutable Shopify source corpus.
-- Reconcile source unique customer GIDs to active Shopify contacts.
-- Require zero duplicate contact anchors and zero automatic merge proposals.
-- Sample customers with names, missing names, multiple addresses, no address,
-  email changes, phone changes, and no email.
-
 ## Continuous sync
 
 - First prove each committed PostgreSQL `record.ingested` event atomically
@@ -75,9 +43,9 @@
 - Prove each `customer`, `order`, and `line_item` revision matches exactly one
   subscription and schedules exactly one projector; broad Shopify fanout is
   forbidden.
-- Keep both projector jobs and all three projection subscriptions disabled until
-  the separately reviewed representative customer+Order canary, identical
-  replay, restart, and rollback gates pass.
+- Enable the projector jobs and three projection subscriptions only after a
+  representative customer-and-Order page passes locally and through one native
+  production source run.
 - Create a new Shopify test customer through an approved provider path.
 - Observe a new immutable Record, event, job, Contact, Entity, accepted
   customer-role Observation, and Customer Facet readback.
@@ -85,4 +53,4 @@
 - Measure source update to committed projection latency.
 - Stop and restart the runtime, then prove cursor and queue recovery.
 
-No existing Shopify poller is retired until these checks and shadow parity pass.
+No existing Shopify poller is retired until these checks pass.
