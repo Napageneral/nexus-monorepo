@@ -271,6 +271,23 @@ describe("Shopify customer identity projection", () => {
     );
   });
 
+  it("binds evidence idempotency to the immutable Record payload", async () => {
+    const first = nexFixture();
+    const second = nexFixture();
+    second.record.payload_sha256 = "c".repeat(64);
+
+    await projectShopifyCustomerIdentity(first.nex, first.record);
+    await projectShopifyCustomerIdentity(second.nex, second.record);
+
+    const keys = (fixture: ReturnType<typeof nexFixture>) => [
+      fixture.calls.episodeCreate.mock.calls[0]?.[0].idempotencyKey,
+      fixture.calls.factCreate.mock.calls[0]?.[0].idempotencyKey,
+      fixture.calls.setCreate.mock.calls[0]?.[0].idempotencyKey,
+      fixture.calls.observationCommit.mock.calls[0]?.[0].idempotencyKey,
+    ];
+    expect(keys(first)).not.toEqual(keys(second));
+  });
+
   it("replays the same immutable observation without changing entity binding", async () => {
     const fixture = nexFixture({ replayed: true });
     await expect(

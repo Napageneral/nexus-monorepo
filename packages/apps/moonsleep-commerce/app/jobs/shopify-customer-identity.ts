@@ -336,7 +336,7 @@ async function ensureCustomerRoleEvidence(params: {
 
   await ensureCustomerEvidenceProfiles(params.nex);
   const sourceRef = immutableSourceRef(params.record);
-  const keyPrefix = `moonsleep-commerce:shopify-customer:${sourceRef.recordId}`;
+  const keyPrefix = `moonsleep-commerce:shopify-customer:${sourceRef.recordId}:${sourceRef.payloadSha256}`;
   const episodePayload = unwrapPayload(
     await params.nex.memory.evidence.episodes.create({
       title: `Shopify customer role evidence ${params.observation.contact_id}`,
