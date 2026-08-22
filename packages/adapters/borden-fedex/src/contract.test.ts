@@ -7,7 +7,7 @@ test("package manifest is a stable Borden FedEx adapter", () => {
   const manifest = JSON.parse(readFileSync(resolve("adapter.nexus.json"), "utf8"));
   assert.deepEqual(manifest, {
     id: "borden-fedex",
-    version: "0.1.0",
+    version: "0.1.1",
     displayName: "Borden FedEx Billing",
     description: "Read-only external-capture registration adapter for Borden FedEx invoice evidence.",
     platform: "fedex_billing_online",

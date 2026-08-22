@@ -1,7 +1,7 @@
 # Borden FedEx External Capture Adapter
 
 **Status:** CANONICAL
-**Last Updated:** 2026-08-14
+**Last Updated:** 2026-08-15
 
 ## Purpose
 
@@ -19,4 +19,4 @@ The setup flow accepts only this stable, non-secret identity metadata and an exa
 
 ## Authority boundary
 
-Source capture, invoice Record registration, reconciliation proposals, and Dispatch projection are four independently terminalized authorities. This adapter has none of those mutation authorities. Its backfill operation is intentionally empty because invoice registration is performed by the separately governed, receipt-producing source registration job.
+Source capture, invoice Record registration, reconciliation proposals, and Dispatch projection are four independently terminalized authorities. This adapter has none of those mutation authorities. It exposes neither monitor nor backfill capability because invoice capture and registration are performed by separately governed, receipt-producing jobs.
