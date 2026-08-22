@@ -222,9 +222,10 @@ func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[st
 		}
 		raw = encoded
 	}
-	digest := sha256.Sum256(raw)
+	providerObjectJSON := strings.ToValidUTF8(string(raw), "\ufffd")
+	digest := sha256.Sum256([]byte(providerObjectJSON))
 	return map[string]any{
-		"provider_object_json":   string(raw),
+		"provider_object_json":   providerObjectJSON,
 		"provider_object_sha256": hex.EncodeToString(digest[:]),
 	}
 }

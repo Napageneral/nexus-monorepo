@@ -193,6 +193,32 @@ func assertProviderPayloadEnvelope(t *testing.T, envelope map[string]any, source
 	}
 }
 
+func TestProviderPayloadEnvelopeHashesTheUTF8StringThatCrossesJSON(t *testing.T) {
+	sourceJSON := []byte{'{', '"', 'n', 'o', 't', 'e', '"', ':', '"', 0xff, '"', '}'}
+	envelope := providerPayloadEnvelope(
+		json.RawMessage(sourceJSON),
+		map[string]any{"note": "\ufffd"},
+		nil,
+	)
+
+	transport, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("marshal provider envelope: %v", err)
+	}
+	var received map[string]any
+	if err := json.Unmarshal(transport, &received); err != nil {
+		t.Fatalf("unmarshal transported provider envelope: %v", err)
+	}
+	providerJSON, ok := received["provider_object_json"].(string)
+	if !ok {
+		t.Fatalf("transported provider JSON is not a string: %#v", received)
+	}
+	digest := sha256.Sum256([]byte(providerJSON))
+	if got := received["provider_object_sha256"]; got != hex.EncodeToString(digest[:]) {
+		t.Fatalf("transport changed provider JSON without changing its digest: %#v", got)
+	}
+}
+
 func TestShopifyGraphQLTypedProjectionUsesOriginalProviderObjectBytes(t *testing.T) {
 	responseBody := []byte(`{"data":{"customers":{"edges":[{"cursor":"customer-44","node":{"id":"gid://shopify/Customer/44","displayName":"Jane Doe","updatedAt":"2026-07-20T10:05:00Z","provider_large_integer":9007199254740993123456789}}],"pageInfo":{"hasNextPage":false,"endCursor":"customer-44"}}}}`)
 
