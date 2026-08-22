@@ -756,6 +756,13 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
       ? [customerFacets.get(String(input.subject_id))]
       : [],
   }));
+  const facetsGet = vi.fn(async (input: Record<string, unknown>) => {
+    const attachment = [...customerFacets.values()].find(
+      (candidate) => candidate.id === input.id,
+    );
+    if (!attachment) throw new Error(`Facet ${String(input.id)} not found`);
+    return { attachment };
+  });
   const facetsCreate = vi.fn(async (input: Record<string, unknown>) => {
     const attachment = { ...input, instance_key: null, lifecycle_state: "active" };
     customerFacets.set(String(input.subject_id), attachment);
@@ -776,7 +783,7 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
         },
         sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
       },
-      facets: { attachments: { list: facetsList, create: facetsCreate } },
+      facets: { attachments: { get: facetsGet, list: facetsList, create: facetsCreate } },
     },
     recordsGet,
     observe,
