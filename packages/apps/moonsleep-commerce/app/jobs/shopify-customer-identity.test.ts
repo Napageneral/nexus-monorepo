@@ -107,9 +107,12 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
         redacted_fields: ["observation_refs", "relationships"],
       }
     : null;
-  const facetsList = vi.fn(async () => ({ items: attachment ? [attachment] : [] }));
   const facetsGet = vi.fn(async (params: Record<string, unknown>) => {
-    if (!attachment || attachment.id !== params.id) throw new Error("Facet not found");
+    if (!attachment) throw new Error(`Facet ${String(params.id)} not found`);
+    if (options.replayed && attachment.id === "facet-customer-1") {
+      attachment = { ...attachment, id: params.id };
+    }
+    if (attachment.id !== params.id) throw new Error(`Facet ${String(params.id)} not found`);
     return { attachment };
   });
   const facetsCreate = vi.fn(async (params: Record<string, unknown>) => {
@@ -181,7 +184,7 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
         },
         sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
       },
-      facets: { attachments: { get: facetsGet, list: facetsList, create: facetsCreate } },
+      facets: { attachments: { get: facetsGet, create: facetsCreate } },
     },
     calls: {
       get,
@@ -189,7 +192,6 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
       observe,
       resolve,
       facetsGet,
-      facetsList,
       facetsCreate,
       profilesList,
       profileRegister,
@@ -318,13 +320,8 @@ describe("Shopify customer identity projection", () => {
     expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
   });
 
-  it("does not mistake an empty continuation page for a second active customer facet", async () => {
+  it("loads an existing deterministic customer facet directly without a global list", async () => {
     const fixture = nexFixture({ replayed: true });
-    const firstPage = await fixture.calls.facetsList();
-    fixture.calls.facetsList.mockReset();
-    fixture.calls.facetsList
-      .mockResolvedValueOnce({ ...firstPage, next_cursor: "empty-continuation" })
-      .mockResolvedValueOnce({ items: [] });
 
     await expect(
       projectShopifyCustomerIdentity(fixture.nex, fixture.record),
@@ -332,16 +329,14 @@ describe("Shopify customer identity projection", () => {
       projected: true,
       customer_facet_outcome: "adopted_existing",
     });
-    expect(fixture.calls.facetsList).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ cursor: "empty-continuation" }),
-    );
+    expect(fixture.calls.facetsGet).toHaveBeenCalledOnce();
+    expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
   });
 
   it("adopts the deterministic active facet after a production cardinality conflict", async () => {
     const fixture = nexFixture();
     await projectShopifyCustomerIdentity(fixture.nex, fixture.record);
-    fixture.calls.facetsList.mockResolvedValue({ items: [] });
+    fixture.calls.facetsGet.mockRejectedValueOnce(new Error("Facet temporarily not found"));
     fixture.calls.facetsCreate.mockRejectedValueOnce(
       new Error("canonical subject already has an active attachment in this slot"),
     );

@@ -44,7 +44,6 @@ type NexIdentityClient = {
   facets: {
     attachments: {
       get(params: { id: string }): Promise<unknown>;
-      list(params: RuntimeRow): Promise<unknown>;
       create(params: RuntimeRow): Promise<unknown>;
     };
   };
@@ -241,15 +240,6 @@ async function ensureCustomerEvidenceProfiles(nex: NexIdentityClient): Promise<v
   }
 }
 
-function activeCustomerFacetRows(value: unknown): RuntimeRow[] {
-  const payload = unwrapPayload(value);
-  const rows = Array.isArray(payload.items) ? payload.items.map(asRecord) : [];
-  if (rows.length > 1) {
-    throw new Error("canonical Entity has more than one active MoonSleep Customer Facet");
-  }
-  return rows;
-}
-
 function assertCanonicalCustomerFacet(attachment: RuntimeRow, entityId: string): void {
   const observationRefs = Array.isArray(attachment.observation_refs)
     ? attachment.observation_refs.map(asString)
@@ -282,6 +272,20 @@ function assertCanonicalCustomerFacet(attachment: RuntimeRow, entityId: string):
   }
 }
 
+function customerFacetAttachmentId(canonicalEntityId: string): string {
+  return `facet-attachment:moonsleep.customer.v1:${sha256CanonicalJson({
+    facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
+    canonical_entity_id: canonicalEntityId,
+    domain_scope: CUSTOMER_FACET_DOMAIN_SCOPE,
+    attachment_slot: CUSTOMER_FACET_ATTACHMENT_SLOT,
+  }).slice(0, 32)}`;
+}
+
+function isFacetAttachmentNotFound(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("Facet ") && message.includes(" not found");
+}
+
 function isFacetAttachmentCardinalityConflict(error: unknown): boolean {
   const reasonCode = asString(asRecord(error).reasonCode);
   const message = String(error);
@@ -292,46 +296,31 @@ function isFacetAttachmentCardinalityConflict(error: unknown): boolean {
   );
 }
 
-async function listActiveCustomerFacets(
-  nex: NexIdentityClient,
-  entityId: string,
-): Promise<RuntimeRow[]> {
-  const params = {
-    subject_class: "nex.entity",
-    subject_id: entityId,
-    facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
-    lifecycle_state: "active",
-    limit: 2,
-  };
-  const firstPayload = unwrapPayload(await nex.facets.attachments.list(params));
-  const first = activeCustomerFacetRows(firstPayload);
-  const nextCursor = asString(firstPayload.next_cursor);
-  if (nextCursor) {
-    const second = activeCustomerFacetRows(
-      await nex.facets.attachments.list({ ...params, cursor: nextCursor }),
-    );
-    if (second.length > 0) {
-      throw new Error("canonical Entity has more than one active MoonSleep Customer Facet");
-    }
-  }
-  return first;
-}
-
 async function ensureCustomerRoleEvidence(params: {
   nex: NexIdentityClient;
   record: RuntimeRow;
   observation: ShopifyContactObservation;
   canonicalEntityId: string;
 }): Promise<RuntimeRow> {
-  const existingFacets = await listActiveCustomerFacets(params.nex, params.canonicalEntityId);
-  if (existingFacets[0]) {
-    assertCanonicalCustomerFacet(existingFacets[0], params.canonicalEntityId);
+  const attachmentId = customerFacetAttachmentId(params.canonicalEntityId);
+  try {
+    const exactPayload = unwrapPayload(
+      await params.nex.facets.attachments.get({ id: attachmentId }),
+    );
+    const existing = asRecord(
+      exactPayload.attachment ?? exactPayload.item ?? exactPayload.value,
+    );
+    assertCanonicalCustomerFacet(existing, params.canonicalEntityId);
     return {
       customer_observation_outcome: "adopted_existing",
-      customer_observation_id: asString(asRecord(existingFacets[0].basis).observation_id),
+      customer_observation_id: asString(asRecord(existing.basis).observation_id),
       customer_facet_outcome: "adopted_existing",
-      customer_facet_attachment_id: requireString(existingFacets[0], "id"),
+      customer_facet_attachment_id: requireString(existing, "id"),
     };
+  } catch (error) {
+    if (!isFacetAttachmentNotFound(error)) {
+      throw error;
+    }
   }
 
   await ensureCustomerEvidenceProfiles(params.nex);
@@ -458,13 +447,6 @@ async function ensureCustomerRoleEvidence(params: {
     commit_receipt_id: commitReceiptId,
     commit_receipt_sha256: sha256CanonicalJson(commitReceipt),
   };
-  const attachmentId = `facet-attachment:moonsleep.customer.v1:${sha256CanonicalJson({
-    facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
-    canonical_entity_id: params.canonicalEntityId,
-    domain_scope: CUSTOMER_FACET_DOMAIN_SCOPE,
-    attachment_slot: CUSTOMER_FACET_ATTACHMENT_SLOT,
-  }).slice(0, 32)}`;
-
   let attachmentPayload: RuntimeRow;
   try {
     attachmentPayload = unwrapPayload(
@@ -489,16 +471,13 @@ async function ensureCustomerRoleEvidence(params: {
     if (!isFacetAttachmentCardinalityConflict(error)) {
       throw error;
     }
-    const raced = await listActiveCustomerFacets(params.nex, params.canonicalEntityId);
-    let existing = raced[0];
-    if (!existing) {
-      try {
-        const exact = unwrapPayload(await params.nex.facets.attachments.get({ id: attachmentId }));
-        existing = asRecord(exact.attachment ?? exact.item ?? exact.value);
-      } catch {
-        throw error;
-      }
+    let exact: RuntimeRow;
+    try {
+      exact = unwrapPayload(await params.nex.facets.attachments.get({ id: attachmentId }));
+    } catch {
+      throw error;
     }
+    const existing = asRecord(exact.attachment ?? exact.item ?? exact.value);
     assertCanonicalCustomerFacet(existing, params.canonicalEntityId);
     return {
       customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
