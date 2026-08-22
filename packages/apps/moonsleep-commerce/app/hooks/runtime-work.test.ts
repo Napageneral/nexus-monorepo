@@ -210,7 +210,7 @@ describe("MoonSleep commerce runtime work", () => {
       expect(call[0]).toMatchObject({ lane_id: "adapter_io", timeout_ms: 900_000 });
     }
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(0, 2)) {
-      expect(call[0]).not.toHaveProperty("lane_id");
+      expect(call[0]).toMatchObject({ lane_id: "automation" });
       expect(call[0]).not.toHaveProperty("timeout_ms");
     }
     expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
@@ -266,6 +266,7 @@ describe("MoonSleep commerce runtime work", () => {
             "Observe Shopify customer contacts and verify canonical MoonSleep customer entities",
           script_path: expectedScript,
           status: "inactive",
+          lane_id: "automation",
         },
         ...SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
           id: `job-${index + 3}`,
@@ -284,6 +285,7 @@ describe("MoonSleep commerce runtime work", () => {
             "Project committed Shopify order and line-item revisions into typed commerce state",
           script_path: expectedCommerceScript,
           status: "inactive",
+          lane_id: "automation",
         },
       ],
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
@@ -327,6 +329,46 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.events.subscriptions.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+  });
+
+  it("repairs Shopify projectors that were defaulted into the workflow lane", async () => {
+    const fixture = runtimeFixture({
+      jobs: [
+        {
+          id: "job-1",
+          name: "moonsleep-commerce.shopify-customer-identity",
+          description:
+            "Observe Shopify customer contacts and verify canonical MoonSleep customer entities",
+          script_path: new URL("../jobs/shopify-customer-identity.ts", import.meta.url).pathname,
+          status: "inactive",
+          lane_id: "workflow",
+        },
+        {
+          id: "job-2",
+          name: "moonsleep-commerce.shopify-order-commerce",
+          description:
+            "Project committed Shopify order and line-item revisions into typed commerce state",
+          script_path: new URL("../jobs/shopify-order-commerce.ts", import.meta.url).pathname,
+          status: "inactive",
+          lane_id: "workflow",
+        },
+      ],
+    });
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.update).toHaveBeenCalledTimes(2);
+    expect(fixture.runtime.jobs.update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: "job-1", lane_id: "automation" }),
+    );
+    expect(fixture.runtime.jobs.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ id: "job-2", lane_id: "automation" }),
+    );
   });
 
   it("preserves configured source bindings and enabled schedules during rehydration", async () => {
