@@ -279,6 +279,9 @@ async function ensureJob(
   const timeoutMs = "config" in spec ? SOURCE_JOB_TIMEOUT_MS : null;
   if (existing) {
     const id = asString(existing.id);
+    const status = !("config" in spec) && asString(existing.status) === "active"
+      ? "active"
+      : spec.status;
     let configNeedsUpdate = false;
     if (configJson !== "") {
       if ("schedule" in spec) {
@@ -293,7 +296,7 @@ async function ensureJob(
       configNeedsUpdate ||
       asString(existing.lane_id) !== laneId ||
       (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
-      asString(existing.status) !== spec.status;
+      asString(existing.status) !== status;
     if (!needsUpdate) {
       return id;
     }
@@ -305,7 +308,7 @@ async function ensureJob(
         ...(configNeedsUpdate ? { config_json: configJson } : {}),
         ...(laneId ? { lane_id: laneId } : {}),
         ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
-        status: spec.status,
+        status,
         created_by: appId,
       }),
     );

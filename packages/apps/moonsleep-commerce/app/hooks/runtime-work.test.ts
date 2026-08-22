@@ -340,7 +340,7 @@ describe("MoonSleep commerce runtime work", () => {
           description:
             "Observe Shopify customer contacts and verify canonical MoonSleep customer entities",
           script_path: new URL("../jobs/shopify-customer-identity.ts", import.meta.url).pathname,
-          status: "inactive",
+          status: "active",
           lane_id: "workflow",
         },
         {
@@ -349,7 +349,7 @@ describe("MoonSleep commerce runtime work", () => {
           description:
             "Project committed Shopify order and line-item revisions into typed commerce state",
           script_path: new URL("../jobs/shopify-order-commerce.ts", import.meta.url).pathname,
-          status: "inactive",
+          status: "active",
           lane_id: "workflow",
         },
       ],
@@ -363,11 +363,11 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.jobs.update).toHaveBeenCalledTimes(2);
     expect(fixture.runtime.jobs.update).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ id: "job-1", lane_id: "automation" }),
+      expect.objectContaining({ id: "job-1", lane_id: "automation", status: "active" }),
     );
     expect(fixture.runtime.jobs.update).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ id: "job-2", lane_id: "automation" }),
+      expect.objectContaining({ id: "job-2", lane_id: "automation", status: "active" }),
     );
   });
 
