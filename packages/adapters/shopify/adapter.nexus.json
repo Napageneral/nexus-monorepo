@@ -1,6 +1,6 @@
 {
   "id": "shopify",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",
@@ -173,7 +173,7 @@
       }
     },
     "shopify.source.capture": {
-      "description": "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
+      "description": "Capture one bounded provider page or one verified immutable observation for a Shopify source family without advancing its durable cursor.",
       "action": "read",
       "connection_required": true,
       "mutates_remote": false,
@@ -196,6 +196,92 @@
               "marketing.delta",
               "payouts.delta"
             ]
+          },
+          "observation": {
+            "type": "object",
+            "properties": {
+              "projection_work_id": {
+                "type": "string",
+                "pattern": "^channelprojection_[0-9a-f]{32}$"
+              },
+              "observation_receipt_id": {
+                "type": "string",
+                "pattern": "^channelobs_[0-9a-f]{32}$"
+              },
+              "projection_target": {
+                "type": "string",
+                "enum": ["nex"]
+              },
+              "source_system": {
+                "type": "string",
+                "enum": ["shopify"]
+              },
+              "source_account_ref": {
+                "type": "string",
+                "enum": ["moonsleep"]
+              },
+              "source_stream": {
+                "type": "string",
+                "enum": [
+                  "orders/paid",
+                  "orders/updated",
+                  "orders/cancelled",
+                  "customers/created",
+                  "customers/updated"
+                ]
+              },
+              "external_receipt_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "semantic_revision_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "raw_body_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "verification_issuer": {
+                "type": "string",
+                "enum": ["shopify-hmac-sha256"]
+              },
+              "verification_receipt_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "observation_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "immutable_facts_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "immutable_facts": {
+                "type": "object",
+                "minProperties": 1
+              }
+            },
+            "required": [
+              "projection_work_id",
+              "observation_receipt_id",
+              "projection_target",
+              "source_system",
+              "source_account_ref",
+              "source_stream",
+              "external_receipt_id",
+              "semantic_revision_id",
+              "raw_body_sha256",
+              "verification_issuer",
+              "verification_receipt_sha256",
+              "observation_sha256",
+              "immutable_facts_sha256",
+              "immutable_facts"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

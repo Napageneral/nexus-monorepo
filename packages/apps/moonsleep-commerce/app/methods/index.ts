@@ -45,6 +45,16 @@ const PROJECTION_SPECS = Object.freeze({
 });
 const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
 const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
+const PROJECTION_WORK_ID_RE = /^channelprojection_[0-9a-f]{32}$/;
+const OBSERVATION_RECEIPT_ID_RE = /^channelobs_[0-9a-f]{32}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const OBSERVATION_STREAM_FAMILIES = Object.freeze({
+  "orders/paid": "orders.delta",
+  "orders/updated": "orders.delta",
+  "orders/cancelled": "orders.delta",
+  "customers/created": "customers.delta",
+  "customers/updated": "customers.delta",
+});
 
 type ShopifySourceIdentityObservation = {
   role: "store" | "integration";
@@ -64,6 +74,81 @@ function asRecord(value: unknown): RuntimeRow {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function requireExactObservationString(
+  row: RuntimeRow,
+  field: string,
+  maximum = 512,
+): string {
+  const value = asString(row[field]);
+  if (!value || row[field] !== value || Buffer.byteLength(value, "utf8") > maximum) {
+    throw new Error(`observation.${field} must be a trimmed non-empty string`);
+  }
+  return value;
+}
+
+function requireShopifyObservation(value: unknown, family: string): RuntimeRow | null {
+  if (value === undefined) return null;
+  const observation = asRecord(value);
+  if (Object.keys(observation).length === 0) {
+    throw new Error("observation must be an object");
+  }
+  const projectionWorkId = requireExactObservationString(
+    observation,
+    "projection_work_id",
+    50,
+  );
+  const observationReceiptId = requireExactObservationString(
+    observation,
+    "observation_receipt_id",
+    43,
+  );
+  if (!PROJECTION_WORK_ID_RE.test(projectionWorkId)) {
+    throw new Error("observation.projection_work_id is malformed");
+  }
+  if (!OBSERVATION_RECEIPT_ID_RE.test(observationReceiptId)) {
+    throw new Error("observation.observation_receipt_id is malformed");
+  }
+  if (requireExactObservationString(observation, "projection_target", 16) !== "nex") {
+    throw new Error("observation.projection_target must be nex");
+  }
+  if (requireExactObservationString(observation, "source_system", 16) !== "shopify") {
+    throw new Error("observation.source_system must be shopify");
+  }
+  if (requireExactObservationString(observation, "source_account_ref", 64) !== "moonsleep") {
+    throw new Error("observation.source_account_ref must be moonsleep");
+  }
+  const sourceStream = requireExactObservationString(observation, "source_stream", 64);
+  if (
+    OBSERVATION_STREAM_FAMILIES[
+      sourceStream as keyof typeof OBSERVATION_STREAM_FAMILIES
+    ] !== family
+  ) {
+    throw new Error("observation.source_stream does not match family");
+  }
+  requireExactObservationString(observation, "external_receipt_id");
+  requireExactObservationString(observation, "semantic_revision_id");
+  if (
+    requireExactObservationString(observation, "verification_issuer", 64) !==
+    "shopify-hmac-sha256"
+  ) {
+    throw new Error("observation.verification_issuer must be shopify-hmac-sha256");
+  }
+  for (const field of [
+    "raw_body_sha256",
+    "verification_receipt_sha256",
+    "observation_sha256",
+    "immutable_facts_sha256",
+  ]) {
+    if (!SHA256_RE.test(requireExactObservationString(observation, field, 64))) {
+      throw new Error(`observation.${field} must be a lowercase SHA-256 digest`);
+    }
+  }
+  if (Object.keys(asRecord(observation.immutable_facts)).length === 0) {
+    throw new Error("observation.immutable_facts must be a non-empty object");
+  }
+  return observation;
 }
 
 function unwrapPayload(value: unknown): RuntimeRow {
@@ -353,7 +438,6 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
 export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   const family = asString(ctx.params.family) as keyof typeof SOURCE_JOB_NAMES;
   const connectionId = asString(ctx.params.connection_id);
-  const requestId = asString(ctx.params.request_id);
   const jobName = SOURCE_JOB_NAMES[family];
   if (!jobName) {
     throw new Error("family is not an installed Shopify source job");
@@ -361,6 +445,11 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   if (!SOURCE_CONNECTION_ID_RE.test(connectionId)) {
     throw new Error("connection_id is malformed");
   }
+  const observation = requireShopifyObservation(ctx.params.observation, family);
+  const projectionWorkId = observation
+    ? asString(observation.projection_work_id)
+    : "";
+  const requestId = asString(ctx.params.request_id) || projectionWorkId;
   if (!SOURCE_REQUEST_ID_RE.test(requestId)) {
     throw new Error("request_id is malformed");
   }
@@ -381,10 +470,18 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   const invoked = unwrapPayload(
     await ctx.nex.jobs.invoke({
       job_id: jobId,
-      input: { family, connection_id: connectionId },
-      trigger_source: "moonsleep-commerce-manual",
+      input: {
+        family,
+        connection_id: connectionId,
+        ...(observation ? { observation } : {}),
+      },
+      trigger_source: observation
+        ? "moonsleep-commerce-shopify-observation"
+        : "moonsleep-commerce-manual",
       max_attempts: 3,
-      idempotency_key: `shopify-source:${family}:${requestId}`,
+      idempotency_key: observation
+        ? `shopify-observation:${projectionWorkId}`
+        : `shopify-source:${family}:${requestId}`,
     }),
   );
   const run = asRecord(invoked.run);
@@ -397,6 +494,12 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
     family,
     connection_id: connectionId,
     request_id: requestId,
+    ...(observation
+      ? {
+          projection_work_id: projectionWorkId,
+          observation_receipt_id: asString(observation.observation_receipt_id),
+        }
+      : {}),
     job_definition_id: jobId,
     run_id: runId,
     provider_write_authority: false,

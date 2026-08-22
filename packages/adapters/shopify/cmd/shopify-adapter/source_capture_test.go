@@ -2,15 +2,218 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
+
+func immutableObservationFixture(stream string, facts map[string]any) map[string]any {
+	return map[string]any{
+		"projection_work_id":          "channelprojection_11111111111111111111111111111111",
+		"observation_receipt_id":      "channelobs_22222222222222222222222222222222",
+		"projection_target":           "nex",
+		"source_system":               "shopify",
+		"source_account_ref":          "moonsleep",
+		"source_stream":               stream,
+		"external_receipt_id":         "f5d13f46-6d83-4a93-baf8-acdeec37893a",
+		"semantic_revision_id":        "8328002633890:2026-08-22T20:00:00Z",
+		"raw_body_sha256":             strings.Repeat("3", 64),
+		"verification_issuer":         "shopify-hmac-sha256",
+		"verification_receipt_sha256": strings.Repeat("4", 64),
+		"observation_sha256":          strings.Repeat("5", 64),
+		"immutable_facts_sha256":      strings.Repeat("6", 64),
+		"immutable_facts":             facts,
+	}
+}
+
+func TestImmutableObservationUsesCanonicalBuildersWithoutProviderCallOrCursorAdvance(t *testing.T) {
+	t.Cleanup(resetShopifyGlobals)
+	sourceStateFixture(t)
+	var providerCalls atomic.Int64
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		providerCalls.Add(1)
+		http.Error(w, "provider call forbidden", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	shopifyHTTPClient = server.Client()
+	ctx := nexadapter.AdapterContext[struct{}]{
+		Context:      context.Background(),
+		ConnectionID: "shopify-primary",
+		Runtime:      shopifyRuntimeContextForServer(server.URL),
+	}
+	initial := shopifySourceFamilyState{
+		CursorISO:      "2026-08-22T19:00:00Z",
+		ProviderCursor: "123",
+	}
+	_, err := withLockedSourceState("shopify-primary", func(state *shopifySourceState) (struct{}, error) {
+		state.Families["orders.delta"] = initial
+		state.Families["customers.delta"] = initial
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name              string
+		family            string
+		stream            string
+		facts             map[string]any
+		externalRecordIDs []string
+	}{
+		{
+			name:   "order and line item",
+			family: "orders.delta",
+			stream: "orders/paid",
+			facts: map[string]any{
+				"id":           8328002633890,
+				"order_number": 17916,
+				"name":         "#17916",
+				"created_at":   "2026-08-22T19:59:00Z",
+				"updated_at":   "2026-08-22T20:00:00Z",
+				"currency":     "USD",
+				"total_price":  "129.00",
+				"line_items": []any{
+					map[string]any{"id": 991, "quantity": 1, "price": "129.00"},
+				},
+			},
+			externalRecordIDs: []string{"order:8328002633890", "line_item:8328002633890:991"},
+		},
+		{
+			name:   "customer",
+			family: "customers.delta",
+			stream: "customers/updated",
+			facts: map[string]any{
+				"id":             771,
+				"display_name":   "Ada Lovelace",
+				"first_name":     "Ada",
+				"last_name":      "Lovelace",
+				"email":          "ada@example.com",
+				"created_at":     "2026-08-22T19:59:00Z",
+				"updated_at":     "2026-08-22T20:00:00Z",
+				"verified_email": true,
+			},
+			externalRecordIDs: []string{"customer:771"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			observation := immutableObservationFixture(test.stream, test.facts)
+			observation["semantic_revision_id"] = test.stream + ":" + fmt.Sprint(test.facts["id"]) + ":2026-08-22T20:00:00Z"
+			payload := map[string]any{
+				"family":      test.family,
+				"observation": observation,
+			}
+			method := declaredShopifyMethods()["shopify.source.capture"]
+			firstRaw, err := method.Handler(ctx, nexadapter.AdapterMethodRequest{
+				ConnectionID: "shopify-primary",
+				Payload:      payload,
+			})
+			if err != nil {
+				t.Fatalf("first observation capture: %v", err)
+			}
+			first := firstRaw.(shopifySourceCaptureResult)
+			if !first.Complete || len(first.Records) != len(test.externalRecordIDs) {
+				t.Fatalf("unexpected first capture: %#v", first)
+			}
+			for index, want := range test.externalRecordIDs {
+				if got := first.Records[index].Payload.ExternalRecordID; got != want {
+					t.Fatalf("record %d id = %q, want %q", index, got, want)
+				}
+			}
+			commitRaw, err := declaredShopifyMethods()["shopify.source.commit"].Handler(ctx, nexadapter.AdapterMethodRequest{
+				ConnectionID: "shopify-primary",
+				Payload: map[string]any{
+					"family": test.family, "capture_id": first.CaptureID,
+				},
+			})
+			if err != nil {
+				t.Fatalf("commit observation: %v", err)
+			}
+			commit := commitRaw.(shopifySourceCommitResult)
+			if !commit.Complete || commit.CursorISO != initial.CursorISO || commit.ProviderCursor != initial.ProviderCursor {
+				t.Fatalf("observation advanced polling cursor: %#v", commit)
+			}
+
+			replayRaw, err := method.Handler(ctx, nexadapter.AdapterMethodRequest{
+				ConnectionID: "shopify-primary",
+				Payload:      payload,
+			})
+			if err != nil {
+				t.Fatalf("replay observation capture: %v", err)
+			}
+			replay := replayRaw.(shopifySourceCaptureResult)
+			if replay.CaptureID != first.CaptureID {
+				t.Fatalf("capture id changed on exact replay: %s != %s", replay.CaptureID, first.CaptureID)
+			}
+			for index := range first.Records {
+				if replay.Records[index].Payload.ExternalRecordID != first.Records[index].Payload.ExternalRecordID {
+					t.Fatalf("record identity changed on replay")
+				}
+			}
+			if _, err := declaredShopifyMethods()["shopify.source.abort"].Handler(ctx, nexadapter.AdapterMethodRequest{
+				ConnectionID: "shopify-primary",
+				Payload: map[string]any{
+					"family": test.family, "capture_id": replay.CaptureID,
+				},
+			}); err != nil {
+				t.Fatalf("abort replay: %v", err)
+			}
+		})
+	}
+	if providerCalls.Load() != 0 {
+		t.Fatalf("immutable observations made %d provider calls", providerCalls.Load())
+	}
+}
+
+func TestExpiredImmutableObservationLeaseCannotRewritePollingCheckpoint(t *testing.T) {
+	sourceStateFixture(t)
+	const connectionID = "shopify-primary"
+	const family = "orders.delta"
+	initial := shopifySourceFamilyState{
+		CursorISO:      "2026-08-22T19:00:00Z",
+		ProviderCursor: "123",
+		PageCursor:     "poll-page-4",
+		WindowSince:    "2026-08-22T18:00:00Z",
+		WindowThrough:  "2026-08-22T19:30:00Z",
+	}
+	observation, err := parseShopifyImmutableObservation(
+		immutableObservationFixture("orders/updated", map[string]any{"id": 8328002633890}),
+		family,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
+	_, err = withLockedSourceState(connectionID, func(state *shopifySourceState) (struct{}, error) {
+		state.Families[family] = initial
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := beginObservationSourceCapture(connectionID, shopifySourceFamilies[family], observation, started); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := beginSourceCapture(connectionID, shopifySourceFamilies[family], started.Add(shopifySourceLeaseTTL+time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lease.ProviderCursor != initial.ProviderCursor || lease.PageCursor != initial.PageCursor || lease.RequestSince != initial.WindowSince || lease.WindowThrough != initial.WindowThrough {
+		t.Fatalf("expired observation lease rewrote polling state: %#v", lease)
+	}
+}
 
 func sourceStateFixture(t *testing.T) string {
 	t.Helper()
@@ -311,6 +514,26 @@ func TestSourceMethodCatalogIsBoundedAndRemoteReadOnly(t *testing.T) {
 	}
 	if err := json.Unmarshal(raw, &descriptor); err != nil {
 		t.Fatal(err)
+	}
+	publishedCapture, ok := descriptor.Methods["shopify.source.capture"]
+	if !ok {
+		t.Fatal("adapter.nexus.json does not publish shopify.source.capture")
+	}
+	for label, pair := range map[string][2]any{
+		"params":   {publishedCapture.Params, capture.Params},
+		"response": {publishedCapture.Response, capture.Response},
+	} {
+		publishedJSON, err := json.Marshal(pair[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		executableJSON, err := json.Marshal(pair[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(publishedJSON, executableJSON) {
+			t.Fatalf("published source capture %s differs\npublished: %s\nexecutable: %s", label, publishedJSON, executableJSON)
+		}
 	}
 	published, ok := descriptor.Methods["shopify.source.checkpoint.adopt"]
 	if !ok {

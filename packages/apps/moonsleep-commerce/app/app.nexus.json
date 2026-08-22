@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.27",
+  "version": "0.3.28",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -68,7 +68,7 @@
       }
     },
     "moonsleep-commerce.shopify-source.trigger": {
-      "description": "Queue one exact Shopify source family immediately through its durable Nex job without enabling the recurring schedule.",
+      "description": "Queue one exact Shopify source family or verified immutable Shopify observation through its durable Nex job without enabling the recurring schedule.",
       "action": "write",
       "access": "authenticated",
       "params": {
@@ -102,9 +102,99 @@
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^[a-zA-Z0-9._:-]+$"
+          },
+          "observation": {
+            "type": "object",
+            "properties": {
+              "projection_work_id": {
+                "type": "string",
+                "pattern": "^channelprojection_[0-9a-f]{32}$"
+              },
+              "observation_receipt_id": {
+                "type": "string",
+                "pattern": "^channelobs_[0-9a-f]{32}$"
+              },
+              "projection_target": {
+                "type": "string",
+                "enum": ["nex"]
+              },
+              "source_system": {
+                "type": "string",
+                "enum": ["shopify"]
+              },
+              "source_account_ref": {
+                "type": "string",
+                "enum": ["moonsleep"]
+              },
+              "source_stream": {
+                "type": "string",
+                "enum": [
+                  "orders/paid",
+                  "orders/updated",
+                  "orders/cancelled",
+                  "customers/created",
+                  "customers/updated"
+                ]
+              },
+              "external_receipt_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "semantic_revision_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "raw_body_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "verification_issuer": {
+                "type": "string",
+                "enum": ["shopify-hmac-sha256"]
+              },
+              "verification_receipt_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "observation_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "immutable_facts_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "immutable_facts": {
+                "type": "object",
+                "minProperties": 1
+              }
+            },
+            "required": [
+              "projection_work_id",
+              "observation_receipt_id",
+              "projection_target",
+              "source_system",
+              "source_account_ref",
+              "source_stream",
+              "external_receipt_id",
+              "semantic_revision_id",
+              "raw_body_sha256",
+              "verification_issuer",
+              "verification_receipt_sha256",
+              "observation_sha256",
+              "immutable_facts_sha256",
+              "immutable_facts"
+            ],
+            "additionalProperties": false
           }
         },
-        "required": ["family", "connection_id", "request_id"],
+        "required": ["family", "connection_id"],
+        "anyOf": [
+          { "required": ["request_id"] },
+          { "required": ["observation"] }
+        ],
         "additionalProperties": false
       },
       "response": {

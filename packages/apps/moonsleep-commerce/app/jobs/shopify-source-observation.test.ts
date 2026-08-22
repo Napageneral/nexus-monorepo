@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import shopifySourceObservationJob from "./shopify-source-observation.js";
 
-function record(id: string) {
+function record(id: string, containerId = "order") {
   return {
     operation: "record.ingest",
     routing: {
@@ -11,7 +11,7 @@ function record(id: string) {
       sender_id: "store",
       receiver_id: "moonsleep",
       container_kind: "group",
-      container_id: "order",
+      container_id: containerId,
     },
     payload: {
       external_record_id: id,
@@ -129,6 +129,68 @@ describe("Shopify source observation job", () => {
     expect(test.ingest.mock.invocationCallOrder[0]).toBeLessThan(
       test.commit.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("passes an immutable observation into capture and returns a terminal digest", async () => {
+    const test = fixture({ recordCount: 2 });
+    const observation = {
+      projection_work_id: `channelprojection_${"1".repeat(32)}`,
+      observation_receipt_id: `channelobs_${"2".repeat(32)}`,
+      projection_target: "nex",
+      source_system: "shopify",
+      source_account_ref: "moonsleep",
+      source_stream: "orders/updated",
+      external_receipt_id: "receipt-1",
+      semantic_revision_id: "orders/updated:1:revision-1",
+      raw_body_sha256: "3".repeat(64),
+      verification_issuer: "shopify-hmac-sha256",
+      verification_receipt_sha256: "4".repeat(64),
+      observation_sha256: "5".repeat(64),
+      immutable_facts_sha256: "6".repeat(64),
+      immutable_facts: { id: 1 },
+    };
+    test.ctx.input.observation = observation;
+    test.capture.mockResolvedValueOnce({
+      payload: {
+        version: 1,
+        family: "orders.delta",
+        capture_id: "0123456789abcdef0123456789abcdef",
+        records: [record("order:1", "order"), record("line_item:1:1", "line_item")],
+        complete: true,
+      },
+    });
+
+    const result = await shopifySourceObservationJob(test.ctx);
+
+    expect(test.capture).toHaveBeenCalledWith({
+      connection_id: "shopify-production",
+      family: "orders.delta",
+      observation,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      status: "completed",
+      records: 2,
+      inserted: 2,
+      replayed: 0,
+      family_counts: { line_item: 1, order: 1 },
+      projection_work_id: observation.projection_work_id,
+      observation_receipt_id: observation.observation_receipt_id,
+    });
+    expect(result.result_sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("reports an exact all-Record replay as replay with a stable terminal digest", async () => {
+    const test = fixture({ recordCount: 2 });
+    test.ingest.mockResolvedValue({
+      payload: { records: 2, inserted: 0, replayed: 2 },
+    });
+
+    const first = await shopifySourceObservationJob(test.ctx);
+    const second = await shopifySourceObservationJob(test.ctx);
+
+    expect(first).toMatchObject({ status: "replay", inserted: 0, replayed: 2 });
+    expect(second.result_sha256).toBe(first.result_sha256);
   });
 
   it("does not add fixed sleeps between captured records", async () => {
