@@ -26,6 +26,9 @@ const (
 
 var safeShopifyStateToken = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 var shopifyProviderCursorPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+var shopifyProjectionWorkIDPattern = regexp.MustCompile(`^channelprojection_[0-9a-f]{32}$`)
+var shopifyObservationReceiptIDPattern = regexp.MustCompile(`^channelobs_[0-9a-f]{32}$`)
+var shopifySHA256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 const shopifyFinanceCheckpointConfirmation = "ADOPT_SHOPIFY_FINANCE_SINCE_ID_V1"
 
@@ -140,16 +143,34 @@ var shopifySourceFamilyValues = []string{
 }
 
 type shopifySourceLease struct {
-	CaptureID          string `json:"capture_id"`
-	StartedAt          string `json:"started_at"`
-	ExpiresAt          string `json:"expires_at"`
-	RequestSince       string `json:"request_since"`
-	WindowThrough      string `json:"window_through"`
-	ProviderCursor     string `json:"provider_cursor,omitempty"`
-	PageCursor         string `json:"page_cursor,omitempty"`
-	NextCursor         string `json:"next_cursor,omitempty"`
-	NextProviderCursor string `json:"next_provider_cursor,omitempty"`
-	Complete           bool   `json:"complete"`
+	CaptureID            string `json:"capture_id"`
+	StartedAt            string `json:"started_at"`
+	ExpiresAt            string `json:"expires_at"`
+	RequestSince         string `json:"request_since"`
+	WindowThrough        string `json:"window_through"`
+	ProviderCursor       string `json:"provider_cursor,omitempty"`
+	PageCursor           string `json:"page_cursor,omitempty"`
+	NextCursor           string `json:"next_cursor,omitempty"`
+	NextProviderCursor   string `json:"next_provider_cursor,omitempty"`
+	Complete             bool   `json:"complete"`
+	ObservationReceiptID string `json:"observation_receipt_id,omitempty"`
+}
+
+type shopifyImmutableObservation struct {
+	ProjectionWorkID          string          `json:"projection_work_id"`
+	ObservationReceiptID      string          `json:"observation_receipt_id"`
+	ProjectionTarget          string          `json:"projection_target"`
+	SourceSystem              string          `json:"source_system"`
+	SourceAccountRef          string          `json:"source_account_ref"`
+	SourceStream              string          `json:"source_stream"`
+	ExternalReceiptID         string          `json:"external_receipt_id"`
+	SemanticRevisionID        string          `json:"semantic_revision_id"`
+	RawBodySHA256             string          `json:"raw_body_sha256"`
+	VerificationIssuer        string          `json:"verification_issuer"`
+	VerificationReceiptSHA256 string          `json:"verification_receipt_sha256"`
+	ObservationSHA256         string          `json:"observation_sha256"`
+	ImmutableFactsSHA256      string          `json:"immutable_facts_sha256"`
+	ImmutableFacts            json.RawMessage `json:"immutable_facts"`
 }
 
 type shopifySourceFamilyState struct {
@@ -338,6 +359,170 @@ func highestShopifyProviderCursor(records []nexadapter.AdapterInboundRecord) (st
 	return highest, nil
 }
 
+func shopifyObservationFamily(stream string) string {
+	switch strings.TrimSpace(stream) {
+	case "orders/paid", "orders/updated", "orders/cancelled":
+		return "orders.delta"
+	case "customers/created", "customers/updated":
+		return "customers.delta"
+	default:
+		return ""
+	}
+}
+
+func shopifyImmutableObservationSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"projection_work_id":          map[string]any{"type": "string", "pattern": "^channelprojection_[0-9a-f]{32}$"},
+			"observation_receipt_id":      map[string]any{"type": "string", "pattern": "^channelobs_[0-9a-f]{32}$"},
+			"projection_target":           map[string]any{"type": "string", "enum": []string{"nex"}},
+			"source_system":               map[string]any{"type": "string", "enum": []string{"shopify"}},
+			"source_account_ref":          map[string]any{"type": "string", "enum": []string{"moonsleep"}},
+			"source_stream":               map[string]any{"type": "string", "enum": []string{"orders/paid", "orders/updated", "orders/cancelled", "customers/created", "customers/updated"}},
+			"external_receipt_id":         map[string]any{"type": "string", "minLength": 1, "maxLength": 512},
+			"semantic_revision_id":        map[string]any{"type": "string", "minLength": 1, "maxLength": 512},
+			"raw_body_sha256":             map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"verification_issuer":         map[string]any{"type": "string", "minLength": 1, "maxLength": 256},
+			"verification_receipt_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"observation_sha256":          map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"immutable_facts_sha256":      map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+			"immutable_facts":             map[string]any{"type": "object", "minProperties": 1},
+		},
+		"required": []string{
+			"projection_work_id", "observation_receipt_id", "projection_target",
+			"source_system", "source_account_ref", "source_stream",
+			"external_receipt_id", "semantic_revision_id", "raw_body_sha256",
+			"verification_issuer", "verification_receipt_sha256", "observation_sha256",
+			"immutable_facts_sha256", "immutable_facts",
+		},
+		"additionalProperties": false,
+	}
+}
+
+func exactObservationText(value, field string, maximum int) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed != value || len([]byte(trimmed)) > maximum {
+		return "", fmt.Errorf("Shopify observation %s must be a trimmed non-empty string", field)
+	}
+	return trimmed, nil
+}
+
+func parseShopifyImmutableObservation(value any, family string) (shopifyImmutableObservation, error) {
+	if value == nil {
+		return shopifyImmutableObservation{}, errors.New("Shopify immutable observation is absent")
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return shopifyImmutableObservation{}, fmt.Errorf("marshal Shopify immutable observation: %w", err)
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	var observation shopifyImmutableObservation
+	if err := decoder.Decode(&observation); err != nil {
+		return shopifyImmutableObservation{}, fmt.Errorf("decode Shopify immutable observation: %w", err)
+	}
+	if !shopifyProjectionWorkIDPattern.MatchString(observation.ProjectionWorkID) {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation projection_work_id is malformed")
+	}
+	if !shopifyObservationReceiptIDPattern.MatchString(observation.ObservationReceiptID) {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation observation_receipt_id is malformed")
+	}
+	if observation.ProjectionTarget != "nex" {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation projection_target must be nex")
+	}
+	if observation.SourceSystem != "shopify" {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation source_system must be shopify")
+	}
+	if observation.SourceAccountRef != "moonsleep" {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation source_account_ref must be moonsleep")
+	}
+	if shopifyObservationFamily(observation.SourceStream) != family {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation source_stream does not match family")
+	}
+	if observation.ExternalReceiptID, err = exactObservationText(observation.ExternalReceiptID, "external_receipt_id", 512); err != nil {
+		return shopifyImmutableObservation{}, err
+	}
+	if observation.SemanticRevisionID, err = exactObservationText(observation.SemanticRevisionID, "semantic_revision_id", 512); err != nil {
+		return shopifyImmutableObservation{}, err
+	}
+	if observation.VerificationIssuer, err = exactObservationText(observation.VerificationIssuer, "verification_issuer", 256); err != nil {
+		return shopifyImmutableObservation{}, err
+	}
+	for field, digest := range map[string]string{
+		"raw_body_sha256":             observation.RawBodySHA256,
+		"verification_receipt_sha256": observation.VerificationReceiptSHA256,
+		"observation_sha256":          observation.ObservationSHA256,
+		"immutable_facts_sha256":      observation.ImmutableFactsSHA256,
+	} {
+		if !shopifySHA256Pattern.MatchString(digest) {
+			return shopifyImmutableObservation{}, fmt.Errorf("Shopify observation %s must be a lowercase SHA-256 digest", field)
+		}
+	}
+	var facts map[string]json.RawMessage
+	if len(observation.ImmutableFacts) == 0 || json.Unmarshal(observation.ImmutableFacts, &facts) != nil || len(facts) == 0 {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation immutable_facts must be a non-empty object")
+	}
+	return observation, nil
+}
+
+func immutableObservationCaptureID(family string, observation shopifyImmutableObservation) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		family,
+		observation.ProjectionWorkID,
+		observation.ObservationReceiptID,
+		observation.ObservationSHA256,
+		observation.ImmutableFactsSHA256,
+	}, "\n")))
+	return hex.EncodeToString(digest[:16])
+}
+
+func recoverExpiredSourceLease(familyState shopifySourceFamilyState) shopifySourceFamilyState {
+	if familyState.Lease == nil {
+		return familyState
+	}
+	if familyState.Lease.ObservationReceiptID == "" {
+		familyState.WindowSince = familyState.Lease.RequestSince
+		familyState.WindowThrough = familyState.Lease.WindowThrough
+		familyState.PageCursor = familyState.Lease.PageCursor
+		familyState.WindowProviderCursor = familyState.Lease.NextProviderCursor
+	}
+	familyState.Lease = nil
+	return familyState
+}
+
+func beginObservationSourceCapture(connectionID string, spec shopifySourceFamilySpec, observation shopifyImmutableObservation, now time.Time) (shopifySourceLease, error) {
+	return withLockedSourceState(connectionID, func(state *shopifySourceState) (shopifySourceLease, error) {
+		familyState := state.Families[spec.Name]
+		captureID := immutableObservationCaptureID(spec.Name, observation)
+		if familyState.Lease != nil {
+			expiresAt, err := time.Parse(time.RFC3339Nano, familyState.Lease.ExpiresAt)
+			if err != nil || now.Before(expiresAt) {
+				if familyState.Lease.CaptureID == captureID && familyState.Lease.ObservationReceiptID == observation.ObservationReceiptID {
+					return *familyState.Lease, nil
+				}
+				return shopifySourceLease{}, fmt.Errorf("Shopify source family %s already has an active capture", spec.Name)
+			}
+			familyState = recoverExpiredSourceLease(familyState)
+		}
+		startedAt := now.UTC().Format(time.RFC3339Nano)
+		lease := shopifySourceLease{
+			CaptureID:            captureID,
+			StartedAt:            startedAt,
+			ExpiresAt:            now.UTC().Add(shopifySourceLeaseTTL).Format(time.RFC3339Nano),
+			RequestSince:         startedAt,
+			WindowThrough:        startedAt,
+			ProviderCursor:       familyState.ProviderCursor,
+			PageCursor:           familyState.PageCursor,
+			Complete:             true,
+			ObservationReceiptID: observation.ObservationReceiptID,
+		}
+		familyState.Lease = &lease
+		state.Families[spec.Name] = familyState
+		return lease, nil
+	})
+}
+
 func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now time.Time) (shopifySourceLease, error) {
 	return withLockedSourceState(connectionID, func(state *shopifySourceState) (shopifySourceLease, error) {
 		familyState := state.Families[spec.Name]
@@ -346,11 +531,7 @@ func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now t
 			if err != nil || now.Before(expiresAt) {
 				return shopifySourceLease{}, fmt.Errorf("Shopify source family %s already has an active capture", spec.Name)
 			}
-			familyState.WindowSince = familyState.Lease.RequestSince
-			familyState.WindowThrough = familyState.Lease.WindowThrough
-			familyState.PageCursor = familyState.Lease.PageCursor
-			familyState.WindowProviderCursor = familyState.Lease.NextProviderCursor
-			familyState.Lease = nil
+			familyState = recoverExpiredSourceLease(familyState)
 		}
 
 		requestSince := now.Add(-spec.InitialLookback)
@@ -437,7 +618,10 @@ func commitSourceCapture(connectionID, family, captureID string) (shopifySourceC
 		if lease == nil || lease.CaptureID != captureID {
 			return shopifySourceCommitResult{}, errors.New("Shopify source capture is absent or no longer current")
 		}
-		if lease.Complete {
+		if lease.ObservationReceiptID != "" {
+			// Immutable observations share the same family lease only to serialize
+			// ingest custody. They never own or advance the polling checkpoint.
+		} else if lease.Complete {
 			familyState.CursorISO = lease.WindowThrough
 			if lease.NextProviderCursor != "" {
 				familyState.ProviderCursor = lease.NextProviderCursor
@@ -596,6 +780,196 @@ func captureShopifySource(ctx context.Context, state *shopifyState, spec shopify
 	}
 }
 
+type shopifyObservedCustomerAddress struct {
+	ID           any    `json:"id"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Name         string `json:"name"`
+	Company      string `json:"company"`
+	Address1     string `json:"address1"`
+	Address2     string `json:"address2"`
+	City         string `json:"city"`
+	Province     string `json:"province"`
+	ProvinceCode string `json:"province_code"`
+	Country      string `json:"country"`
+	CountryCode  string `json:"country_code"`
+	Zip          string `json:"zip"`
+	Phone        string `json:"phone"`
+}
+
+func observedCustomerAddress(address shopifyObservedCustomerAddress) shopifyGraphQLCustomerAddress {
+	return shopifyGraphQLCustomerAddress{
+		ID:            rawScalarString(address.ID),
+		FirstName:     address.FirstName,
+		LastName:      address.LastName,
+		Name:          address.Name,
+		Company:       address.Company,
+		Address1:      address.Address1,
+		Address2:      address.Address2,
+		City:          address.City,
+		Province:      address.Province,
+		ProvinceCode:  address.ProvinceCode,
+		Country:       address.Country,
+		CountryCodeV2: address.CountryCode,
+		Zip:           address.Zip,
+		Phone:         address.Phone,
+	}
+}
+
+func observedCustomerTags(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		parts := strings.Split(typed, ",")
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if tag := strings.TrimSpace(part); tag != "" {
+				out = append(out, tag)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, value := range typed {
+			if tag := strings.TrimSpace(rawScalarString(value)); tag != "" {
+				out = append(out, tag)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func decodeObservedCustomer(raw json.RawMessage) (shopifyGraphQLCustomer, error) {
+	providerPayload, err := decodeProviderJSONObject(raw)
+	if err != nil {
+		return shopifyGraphQLCustomer{}, err
+	}
+	providerID := rawScalarString(providerPayload["id"])
+	if providerID == "" {
+		return shopifyGraphQLCustomer{}, errors.New("Shopify customer observation omitted id")
+	}
+	if strings.HasPrefix(providerID, "gid://shopify/Customer/") {
+		var customer shopifyGraphQLCustomer
+		if err := json.Unmarshal(raw, &customer); err != nil {
+			return shopifyGraphQLCustomer{}, err
+		}
+		return customer, nil
+	}
+	var rest struct {
+		DisplayName    string                           `json:"display_name"`
+		FirstName      string                           `json:"first_name"`
+		LastName       string                           `json:"last_name"`
+		Email          string                           `json:"email"`
+		Phone          string                           `json:"phone"`
+		CreatedAt      string                           `json:"created_at"`
+		UpdatedAt      string                           `json:"updated_at"`
+		Tags           any                              `json:"tags"`
+		State          string                           `json:"state"`
+		VerifiedEmail  bool                             `json:"verified_email"`
+		DefaultAddress *shopifyObservedCustomerAddress  `json:"default_address"`
+		Addresses      []shopifyObservedCustomerAddress `json:"addresses"`
+	}
+	if err := json.Unmarshal(raw, &rest); err != nil {
+		return shopifyGraphQLCustomer{}, err
+	}
+	addresses := make([]shopifyGraphQLCustomerAddress, 0, len(rest.Addresses))
+	for _, address := range rest.Addresses {
+		addresses = append(addresses, observedCustomerAddress(address))
+	}
+	var defaultAddress *shopifyGraphQLCustomerAddress
+	if rest.DefaultAddress != nil {
+		converted := observedCustomerAddress(*rest.DefaultAddress)
+		defaultAddress = &converted
+	}
+	displayName := strings.TrimSpace(rest.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(strings.Join([]string{rest.FirstName, rest.LastName}, " "))
+	}
+	return shopifyGraphQLCustomer{
+		ID:                 "gid://shopify/Customer/" + providerID,
+		DisplayName:        displayName,
+		FirstName:          rest.FirstName,
+		LastName:           rest.LastName,
+		Email:              rest.Email,
+		Phone:              rest.Phone,
+		CreatedAt:          rest.CreatedAt,
+		UpdatedAt:          rest.UpdatedAt,
+		Tags:               observedCustomerTags(rest.Tags),
+		State:              rest.State,
+		VerifiedEmail:      rest.VerifiedEmail,
+		DefaultAddress:     defaultAddress,
+		Addresses:          addresses,
+		rawProviderJSON:    append(json.RawMessage(nil), raw...),
+		rawProviderPayload: providerPayload,
+	}, nil
+}
+
+func immutableObservationSourceRequest(observation shopifyImmutableObservation) shopifySourceRequest {
+	return shopifySourceRequest{
+		Path: "/events/" + observation.SourceStream,
+		Request: map[string]any{
+			"projection_work_id":          observation.ProjectionWorkID,
+			"observation_receipt_id":      observation.ObservationReceiptID,
+			"projection_target":           observation.ProjectionTarget,
+			"source_system":               observation.SourceSystem,
+			"source_account_ref":          observation.SourceAccountRef,
+			"source_stream":               observation.SourceStream,
+			"external_receipt_id":         observation.ExternalReceiptID,
+			"semantic_revision_id":        observation.SemanticRevisionID,
+			"raw_body_sha256":             observation.RawBodySHA256,
+			"verification_issuer":         observation.VerificationIssuer,
+			"verification_receipt_sha256": observation.VerificationReceiptSHA256,
+			"observation_sha256":          observation.ObservationSHA256,
+			"immutable_facts_sha256":      observation.ImmutableFactsSHA256,
+		},
+	}
+}
+
+func captureShopifyImmutableObservation(state *shopifyState, spec shopifySourceFamilySpec, observation shopifyImmutableObservation) ([]nexadapter.AdapterInboundRecord, error) {
+	sourceRequest := immutableObservationSourceRequest(observation)
+	switch spec.Name {
+	case "orders.delta":
+		var order shopifyOrder
+		if err := json.Unmarshal(observation.ImmutableFacts, &order); err != nil {
+			return nil, fmt.Errorf("decode Shopify order observation: %w", err)
+		}
+		orderID := int64String(order.ID)
+		if orderID == "" || !strings.HasPrefix(observation.SemanticRevisionID, orderID+":") {
+			return nil, errors.New("Shopify order observation semantic revision does not match facts id")
+		}
+		records := make([]nexadapter.AdapterInboundRecord, 0, 1+len(order.LineItems))
+		if record := buildOrderRecord(state, order, sourceRequest); record.Operation != "" {
+			records = append(records, record)
+		}
+		for _, lineItem := range order.LineItems {
+			if record := buildLineItemRecord(state, order, lineItem, sourceRequest); record.Operation != "" {
+				records = append(records, record)
+			}
+		}
+		if len(records) == 0 || len(records) > shopifySourceMaxRecords {
+			return nil, fmt.Errorf("Shopify order observation expanded to %d records", len(records))
+		}
+		return records, nil
+	case "customers.delta":
+		customer, err := decodeObservedCustomer(observation.ImmutableFacts)
+		if err != nil {
+			return nil, fmt.Errorf("decode Shopify customer observation: %w", err)
+		}
+		customerID := shopifyNumericGID(customer.ID)
+		if customerID == "" || !strings.HasPrefix(observation.SemanticRevisionID, customerID+":") {
+			return nil, errors.New("Shopify customer observation semantic revision does not match facts id")
+		}
+		record := buildCustomerRecord(state, customer, sourceRequest)
+		if record.Operation == "" {
+			return nil, errors.New("Shopify customer observation did not produce a canonical Record")
+		}
+		return []nexadapter.AdapterInboundRecord{record}, nil
+	default:
+		return nil, errors.New("Shopify immutable observations support only orders.delta and customers.delta")
+	}
+}
+
 func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload map[string]any) (any, error) {
 	state, err := loadShopifyState(ctx)
 	if err != nil {
@@ -605,6 +979,38 @@ func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload
 	spec, err := sourceFamilySpec(family)
 	if err != nil {
 		return nil, err
+	}
+	observationValue, hasObservation := payload["observation"]
+	if hasObservation {
+		observation, err := parseShopifyImmutableObservation(observationValue, spec.Name)
+		if err != nil {
+			return nil, err
+		}
+		lease, err := beginObservationSourceCapture(state.ConnectionID, spec, observation, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		records, err := captureShopifyImmutableObservation(state, spec, observation)
+		if err != nil {
+			abandonSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID)
+			return nil, err
+		}
+		if err := finishSourceCapture(state.ConnectionID, spec.Name, lease.CaptureID, "", lease.NextProviderCursor, true); err != nil {
+			return nil, err
+		}
+		return shopifySourceCaptureResult{
+			Version:        shopifySourceStateVersion,
+			Family:         spec.Name,
+			ConnectionID:   state.ConnectionID,
+			ShopDomain:     state.ShopDomain,
+			CaptureID:      lease.CaptureID,
+			RequestSince:   lease.RequestSince,
+			WindowThrough:  lease.WindowThrough,
+			ProviderCursor: lease.ProviderCursor,
+			PageCursor:     lease.PageCursor,
+			Complete:       true,
+			Records:        records,
+		}, nil
 	}
 	lease, err := beginSourceCapture(state.ConnectionID, spec, time.Now().UTC())
 	if err != nil {

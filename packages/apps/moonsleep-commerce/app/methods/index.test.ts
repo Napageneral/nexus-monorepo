@@ -369,6 +369,101 @@ describe("Shopify source manual trigger", () => {
     });
   });
 
+  it("queues one immutable observation through the existing source job without a provider call", async () => {
+    const invoke = vi.fn(async () => ({ payload: { run: { id: "run-observation-1" } } }));
+    const observation = {
+      projection_work_id: `channelprojection_${"1".repeat(32)}`,
+      observation_receipt_id: `channelobs_${"2".repeat(32)}`,
+      projection_target: "nex",
+      source_system: "shopify",
+      source_account_ref: "moonsleep",
+      source_stream: "orders/paid",
+      external_receipt_id: "f5d13f46-6d83-4a93-baf8-acdeec37893a",
+      semantic_revision_id: "8328002633890:2026-08-22T20:00:00Z",
+      raw_body_sha256: "3".repeat(64),
+      verification_issuer: "cloudflare:moonsleep-meta-capi",
+      verification_receipt_sha256: "4".repeat(64),
+      observation_sha256: "5".repeat(64),
+      immutable_facts_sha256: "6".repeat(64),
+      immutable_facts: {
+        id: 8328002633890,
+        updated_at: "2026-08-22T20:00:00Z",
+        line_items: [{ id: 1, quantity: 1 }],
+      },
+    };
+    const ctx = {
+      params: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation,
+      },
+      nex: {
+        jobs: {
+          list: vi.fn(async () => ({
+            payload: {
+              jobs: [
+                {
+                  id: "job-orders",
+                  name: "moonsleep-commerce.shopify-source.orders-delta",
+                  status: "active",
+                },
+              ],
+            },
+          })),
+          invoke,
+        },
+      },
+    };
+
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      queued: true,
+      family: "orders.delta",
+      request_id: observation.projection_work_id,
+      projection_work_id: observation.projection_work_id,
+      observation_receipt_id: observation.observation_receipt_id,
+      job_definition_id: "job-orders",
+      run_id: "run-observation-1",
+      provider_write_authority: false,
+    });
+    expect(invoke).toHaveBeenCalledWith({
+      job_id: "job-orders",
+      input: { family: "orders.delta", connection_id: "shopify-primary", observation },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}`,
+    });
+  });
+
+  it("rejects an observation whose source stream disagrees with the source family", async () => {
+    const invoke = vi.fn();
+    await expect(
+      triggerShopifySource({
+        params: {
+          family: "customers.delta",
+          connection_id: "shopify-primary",
+          observation: {
+            projection_work_id: `channelprojection_${"1".repeat(32)}`,
+            observation_receipt_id: `channelobs_${"2".repeat(32)}`,
+            projection_target: "nex",
+            source_system: "shopify",
+            source_account_ref: "moonsleep",
+            source_stream: "orders/updated",
+            external_receipt_id: "receipt-1",
+            semantic_revision_id: "1:revision-1",
+            raw_body_sha256: "3".repeat(64),
+            verification_issuer: "cloudflare:moonsleep-meta-capi",
+            verification_receipt_sha256: "4".repeat(64),
+            observation_sha256: "5".repeat(64),
+            immutable_facts_sha256: "6".repeat(64),
+            immutable_facts: { id: 1 },
+          },
+        },
+        nex: { jobs: { list: vi.fn(), invoke } },
+      } as never),
+    ).rejects.toThrow("source_stream does not match family");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed requests and inactive jobs before queue mutation", async () => {
     const invoke = vi.fn();
     const base = {

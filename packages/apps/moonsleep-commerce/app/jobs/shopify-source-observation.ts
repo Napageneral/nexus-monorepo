@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 type RuntimeRow = Record<string, unknown>;
 
 type ShopifySourceJobContext = {
@@ -151,10 +153,12 @@ export default async function shopifySourceObservationJob(
   ctx: ShopifySourceJobContext,
 ): Promise<RuntimeRow> {
   const { family, connectionId } = sourceJobConfig(ctx);
+  const observation = asRecord(ctx.input.observation);
   const capture = unwrap(
     await ctx.nex.shopify.source.capture({
       connection_id: connectionId,
       family,
+      ...(Object.keys(observation).length > 0 ? { observation } : {}),
     }),
   );
   const captureId = requireString(capture, "capture_id");
@@ -166,6 +170,7 @@ export default async function shopifySourceObservationJob(
   let replayed = 0;
   try {
     const ingestRecords: Array<{ routing: RuntimeRow; payload: RuntimeRow }> = [];
+    const familyCounts: RuntimeRow = {};
     for (const record of records) {
       if (asString(record.operation) !== "record.ingest") {
         throw new Error("Shopify source capture returned an unsupported operation");
@@ -174,6 +179,12 @@ export default async function shopifySourceObservationJob(
       if (Object.keys(routing).length === 0 || Object.keys(payload).length === 0) {
         throw new Error("Shopify source capture returned an incomplete record envelope");
       }
+      const metadata = asRecord(payload.metadata);
+      const recordFamily = asString(metadata.family) || asString(routing.container_id);
+      if (!recordFamily) {
+        throw new Error("Shopify source capture returned a Record without a family");
+      }
+      familyCounts[recordFamily] = Number(familyCounts[recordFamily] || 0) + 1;
       ingestRecords.push({ routing, payload });
     }
     if (ingestRecords.length > 0) {
@@ -203,18 +214,35 @@ export default async function shopifySourceObservationJob(
     ctx.log.info(
       `Shopify source ${family} committed ${records.length} records (${inserted} inserted, ${replayed} replayed)`,
     );
-    return {
+    const sortedFamilyCounts = Object.fromEntries(
+      Object.entries(familyCounts).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const terminal = {
       ok: true,
+      status: records.length > 0 && inserted === 0 ? "replay" : "completed",
       family,
       connection_id: connectionId,
       capture_id: captureId,
       records: records.length,
+      family_counts: sortedFamilyCounts,
       inserted,
       replayed,
       complete: commit.complete === true,
       cursor_iso: asString(commit.cursor_iso) || null,
       page_cursor_present: Boolean(asString(commit.page_cursor)),
+      ...(Object.keys(observation).length > 0
+        ? {
+            projection_work_id: asString(observation.projection_work_id),
+            observation_receipt_id: asString(observation.observation_receipt_id),
+          }
+        : {}),
       provider_write_authority: false,
+    };
+    return {
+      ...terminal,
+      result_sha256: createHash("sha256")
+        .update(JSON.stringify(terminal), "utf8")
+        .digest("hex"),
     };
   } catch (error) {
     await abortCapture({ ctx, family, connectionId, captureId });

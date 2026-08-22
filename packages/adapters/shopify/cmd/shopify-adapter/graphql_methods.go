@@ -215,7 +215,7 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		methods[name] = method
 	}
 	methods["shopify.source.capture"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-		Description: "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
+		Description: "Capture one bounded provider page or one verified immutable observation for a Shopify source family without advancing its durable cursor.",
 		Action:      "read",
 		Params: map[string]any{
 			"type": "object",
@@ -224,6 +224,7 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 					"type": "string",
 					"enum": shopifySourceFamilyValues,
 				},
+				"observation": shopifyImmutableObservationSchema(),
 			},
 			"required":             []string{"family"},
 			"additionalProperties": false,
