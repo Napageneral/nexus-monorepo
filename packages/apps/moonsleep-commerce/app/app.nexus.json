@@ -152,8 +152,7 @@
               },
               "verification_issuer": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 256
+                "enum": ["shopify-hmac-sha256"]
               },
               "verification_receipt_sha256": {
                 "type": "string",

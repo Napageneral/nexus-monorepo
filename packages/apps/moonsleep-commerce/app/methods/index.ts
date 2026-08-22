@@ -129,7 +129,12 @@ function requireShopifyObservation(value: unknown, family: string): RuntimeRow |
   }
   requireExactObservationString(observation, "external_receipt_id");
   requireExactObservationString(observation, "semantic_revision_id");
-  requireExactObservationString(observation, "verification_issuer", 256);
+  if (
+    requireExactObservationString(observation, "verification_issuer", 64) !==
+    "shopify-hmac-sha256"
+  ) {
+    throw new Error("observation.verification_issuer must be shopify-hmac-sha256");
+  }
   for (const field of [
     "raw_body_sha256",
     "verification_receipt_sha256",

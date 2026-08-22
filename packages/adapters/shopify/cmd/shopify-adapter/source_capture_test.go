@@ -28,7 +28,7 @@ func immutableObservationFixture(stream string, facts map[string]any) map[string
 		"external_receipt_id":         "f5d13f46-6d83-4a93-baf8-acdeec37893a",
 		"semantic_revision_id":        "8328002633890:2026-08-22T20:00:00Z",
 		"raw_body_sha256":             strings.Repeat("3", 64),
-		"verification_issuer":         "cloudflare:moonsleep-meta-capi",
+		"verification_issuer":         "shopify-hmac-sha256",
 		"verification_receipt_sha256": strings.Repeat("4", 64),
 		"observation_sha256":          strings.Repeat("5", 64),
 		"immutable_facts_sha256":      strings.Repeat("6", 64),
@@ -110,7 +110,7 @@ func TestImmutableObservationUsesCanonicalBuildersWithoutProviderCallOrCursorAdv
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			observation := immutableObservationFixture(test.stream, test.facts)
-			observation["semantic_revision_id"] = fmt.Sprint(test.facts["id"]) + ":2026-08-22T20:00:00Z"
+			observation["semantic_revision_id"] = test.stream + ":" + fmt.Sprint(test.facts["id"]) + ":2026-08-22T20:00:00Z"
 			payload := map[string]any{
 				"family":      test.family,
 				"observation": observation,

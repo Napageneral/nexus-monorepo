@@ -383,7 +383,7 @@ func shopifyImmutableObservationSchema() map[string]any {
 			"external_receipt_id":         map[string]any{"type": "string", "minLength": 1, "maxLength": 512},
 			"semantic_revision_id":        map[string]any{"type": "string", "minLength": 1, "maxLength": 512},
 			"raw_body_sha256":             map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
-			"verification_issuer":         map[string]any{"type": "string", "minLength": 1, "maxLength": 256},
+			"verification_issuer":         map[string]any{"type": "string", "enum": []string{"shopify-hmac-sha256"}},
 			"verification_receipt_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
 			"observation_sha256":          map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
 			"immutable_facts_sha256":      map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -446,8 +446,8 @@ func parseShopifyImmutableObservation(value any, family string) (shopifyImmutabl
 	if observation.SemanticRevisionID, err = exactObservationText(observation.SemanticRevisionID, "semantic_revision_id", 512); err != nil {
 		return shopifyImmutableObservation{}, err
 	}
-	if observation.VerificationIssuer, err = exactObservationText(observation.VerificationIssuer, "verification_issuer", 256); err != nil {
-		return shopifyImmutableObservation{}, err
+	if observation.VerificationIssuer != "shopify-hmac-sha256" {
+		return shopifyImmutableObservation{}, errors.New("Shopify observation verification_issuer must be shopify-hmac-sha256")
 	}
 	for field, digest := range map[string]string{
 		"raw_body_sha256":             observation.RawBodySHA256,
@@ -934,9 +934,8 @@ func captureShopifyImmutableObservation(state *shopifyState, spec shopifySourceF
 		if err := json.Unmarshal(observation.ImmutableFacts, &order); err != nil {
 			return nil, fmt.Errorf("decode Shopify order observation: %w", err)
 		}
-		orderID := int64String(order.ID)
-		if orderID == "" || !strings.HasPrefix(observation.SemanticRevisionID, orderID+":") {
-			return nil, errors.New("Shopify order observation semantic revision does not match facts id")
+		if int64String(order.ID) == "" {
+			return nil, errors.New("Shopify order observation omitted facts id")
 		}
 		records := make([]nexadapter.AdapterInboundRecord, 0, 1+len(order.LineItems))
 		if record := buildOrderRecord(state, order, sourceRequest); record.Operation != "" {
@@ -956,9 +955,8 @@ func captureShopifyImmutableObservation(state *shopifyState, spec shopifySourceF
 		if err != nil {
 			return nil, fmt.Errorf("decode Shopify customer observation: %w", err)
 		}
-		customerID := shopifyNumericGID(customer.ID)
-		if customerID == "" || !strings.HasPrefix(observation.SemanticRevisionID, customerID+":") {
-			return nil, errors.New("Shopify customer observation semantic revision does not match facts id")
+		if shopifyNumericGID(customer.ID) == "" {
+			return nil, errors.New("Shopify customer observation omitted facts id")
 		}
 		record := buildCustomerRecord(state, customer, sourceRequest)
 		if record.Operation == "" {
