@@ -497,6 +497,18 @@ export async function projectParsedShopifyLineItem(
   parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>,
   knownParentCurrency?: string,
 ): Promise<RuntimeRow> {
+  const currency = await resolveLineItemCurrency(nex, parsed, knownParentCurrency);
+  return validateObservationResult(
+    await nex.commerce["line-items"].observe({ ...parsed.inputWithoutCurrency, currency }),
+    parsed,
+  );
+}
+
+async function resolveLineItemCurrency(
+  nex: ShopifyCommerceClient,
+  parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>,
+  knownParentCurrency?: string,
+): Promise<string> {
   let currency = asString(knownParentCurrency);
   if (!currency) {
     const parent = unwrapPayload(
@@ -514,10 +526,7 @@ export async function projectParsedShopifyLineItem(
   } else if (!/^[A-Z]{3}$/.test(currency)) {
     throw new Error(`Shopify line item parent currency is invalid: ${parsed.orderId}`);
   }
-  return validateObservationResult(
-    await nex.commerce["line-items"].observe({ ...parsed.inputWithoutCurrency, currency }),
-    parsed,
-  );
+  return currency;
 }
 
 function lineItemObservationInput(
@@ -649,7 +658,7 @@ export default async function shopifyOrderCommerceJob(
     entry,
     input: await prepareShopifyOrderInput(ctx.nex, entry.parsed),
   }));
-  if (ctx.nex.commerce.orders.observe_many) {
+  if (preparedOrders.length > 0 && ctx.nex.commerce.orders.observe_many) {
     const payload = unwrapPayload(
       await ctx.nex.commerce.orders.observe_many({
         observations: preparedOrders.map(({ input }) => input),
@@ -674,11 +683,23 @@ export default async function shopifyOrderCommerceJob(
       asString(entry.parsed.input.currency),
     ]),
   );
+  const missingParents = new Map<
+    string,
+    Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>
+  >();
+  for (const entry of lineItems) {
+    if (!orderCurrencyById.has(entry.parsed.orderId)) {
+      missingParents.set(entry.parsed.orderId, entry.parsed);
+    }
+  }
+  await mapWithConcurrency([...missingParents.entries()], 32, async ([orderId, parsed]) => {
+    orderCurrencyById.set(orderId, await resolveLineItemCurrency(ctx.nex, parsed));
+  });
   const preparedLineItems = lineItems.map((entry) => ({
     entry,
     input: lineItemObservationInput(entry.parsed, orderCurrencyById.get(entry.parsed.orderId)),
   }));
-  if (ctx.nex.commerce["line-items"].observe_many) {
+  if (preparedLineItems.length > 0 && ctx.nex.commerce["line-items"].observe_many) {
     const payload = unwrapPayload(
       await ctx.nex.commerce["line-items"].observe_many({
         observations: preparedLineItems.map(({ input }) => input),

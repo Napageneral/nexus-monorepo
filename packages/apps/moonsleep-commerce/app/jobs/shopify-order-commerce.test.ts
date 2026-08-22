@@ -481,4 +481,41 @@ describe("Shopify order and line-item commerce projection", () => {
     expect(client.commerce.orders.get).not.toHaveBeenCalled();
     expect(client.commerce["line-items"].observe_many).toHaveBeenCalledTimes(1);
   });
+
+  it("skips an empty Order batch when a chunk contains only line items", async () => {
+    const line = lineItemRecord();
+    const ordersObserveMany = vi.fn();
+    const lineItemsObserveMany = vi.fn(
+      async ({ observations }: { observations: unknown[] }) => ({
+        results: observations.map(() => receipt(String(line.id))),
+      }),
+    );
+    const client = {
+      records: {
+        get_many: vi.fn(async () => ({ records: [line] })),
+      },
+      contacts: { resolve: vi.fn(), observe: vi.fn() },
+      entities: { resolve: vi.fn() },
+      commerce: {
+        orders: {
+          observe_many: ordersObserveMany,
+          get: vi.fn(async () => ({ found: true, revision: { currency: "USD" } })),
+        },
+        "line-items": {
+          observe_many: lineItemsObserveMany,
+        },
+      },
+    } as unknown as ShopifyCommerceClient;
+
+    await expect(
+      shopifyOrderCommerceJob({
+        input: {
+          events: [{ type: "record.ingested", properties: { record_id: line.id } }],
+        },
+        nex: client,
+      }),
+    ).resolves.toMatchObject({ projected: true, records: 1, orders: 0, line_items: 1 });
+    expect(ordersObserveMany).not.toHaveBeenCalled();
+    expect(lineItemsObserveMany).toHaveBeenCalledTimes(1);
+  });
 });
