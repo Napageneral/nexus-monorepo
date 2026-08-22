@@ -588,7 +588,8 @@ export function buildShopifyCustomerObservation(
   ) {
     throw new Error("Shopify customer identity anchors disagree");
   }
-  const sourceObservationId = requireString(record, "id");
+  const sourceRef = immutableSourceRef(record);
+  const sourceObservationId = `${sourceRef.recordId}:${sourceRef.payloadSha256}`;
   const observedAt = asNonNegativeInteger(record.timestamp);
   if (observedAt == null) {
     throw new Error("Shopify customer record timestamp must be a non-negative safe integer");

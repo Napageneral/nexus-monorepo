@@ -210,12 +210,23 @@ describe("Shopify customer identity projection", () => {
       platform: "shopify",
       space_id: "moonsleepco.myshopify.com",
       contact_id: "gid://shopify/Customer/7123456789",
-      source_observation_id: "record-row-1",
+      source_observation_id: `record-row-1:${"b".repeat(64)}`,
       observed_at: 1_721_234_567_890,
       contact_name: "Rina Alvarez",
       entity_name: "Rina Alvarez",
       tags: ["Customer", "Shopify"],
     });
+  });
+
+  it("binds the contact observation identity to the immutable Record payload", () => {
+    const first = buildShopifyCustomerObservation(customerRecord());
+    const second = buildShopifyCustomerObservation(
+      customerRecord({ payload_sha256: "c".repeat(64) }),
+    );
+
+    expect(first.source_observation_id).toBe(`record-row-1:${"b".repeat(64)}`);
+    expect(second.source_observation_id).toBe(`record-row-1:${"c".repeat(64)}`);
+    expect(second.source_observation_id).not.toBe(first.source_observation_id);
   });
 
   it("observes, resolves and verifies the canonical customer entity through public Nex operations", async () => {
