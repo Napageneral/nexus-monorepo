@@ -29,6 +29,11 @@ const SOURCE_FAMILIES = new Set([
   "payouts.delta",
 ]);
 const CAPTURE_ID_RE = /^[0-9a-f]{32}$/;
+const BATCH_SOURCE_RECORD_TYPES = new Set([
+  "shopify.customer",
+  "shopify.order",
+  "shopify.line_item",
+]);
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -114,6 +119,25 @@ function recordIngestParams(record: RuntimeRow): { routing: RuntimeRow; payload:
   return { routing, payload };
 }
 
+function canUseShopifySourceBatch(
+  records: Array<{ routing: RuntimeRow; payload: RuntimeRow }>,
+): boolean {
+  let sharedRoute = "";
+  return records.every(({ routing, payload }, index) => {
+    const sourceRecordType = asString(asRecord(payload.metadata).source_record_type);
+    const route = JSON.stringify({
+      adapter: routing.adapter ?? null,
+      platform: routing.platform ?? null,
+      connection_id: routing.connection_id ?? null,
+      sender_id: routing.sender_id ?? null,
+      receiver_id: routing.receiver_id ?? null,
+      space_id: routing.space_id ?? null,
+    });
+    if (index === 0) sharedRoute = route;
+    return BATCH_SOURCE_RECORD_TYPES.has(sourceRecordType) && route === sharedRoute;
+  });
+}
+
 function sourceJobConfig(ctx: ShopifySourceJobContext): {
   family: string;
   connectionId: string;
@@ -187,7 +211,7 @@ export default async function shopifySourceObservationJob(
       familyCounts[recordFamily] = Number(familyCounts[recordFamily] || 0) + 1;
       ingestRecords.push({ routing, payload });
     }
-    if (ingestRecords.length > 0) {
+    if (ingestRecords.length > 0 && canUseShopifySourceBatch(ingestRecords)) {
       const result = unwrap(await ctx.nex.record.ingest_many({ records: ingestRecords }));
       inserted = Number(result.inserted);
       replayed = Number(result.replayed);
@@ -199,6 +223,19 @@ export default async function shopifySourceObservationJob(
         inserted + replayed !== ingestRecords.length
       ) {
         throw new Error("Shopify Record batch ingest returned invalid counts");
+      }
+    } else {
+      for (const record of ingestRecords) {
+        const result = unwrap(await ctx.nex.record.ingest(record));
+        const status = asString(result.status) || asString(asRecord(result.result).status);
+        if (status && status !== "completed" && status !== "skipped") {
+          throw new Error(`Shopify Record ingest returned ${status}`);
+        }
+        if (status === "skipped" || result.inserted === false || result.replayed === true) {
+          replayed += 1;
+        } else {
+          inserted += 1;
+        }
       }
     }
     const commit = unwrap(
