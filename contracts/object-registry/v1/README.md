@@ -1,5 +1,12 @@
 # Object registry v1
 
+> **Current implementation contract:** the canonical target state is
+> [Canonical Projected Objects](../../../docs/specs/canonical-projected-objects.md).
+> Version 1 remains the current catalog and migration input until the canonical
+> registry and Canonical Object Kernel replace it. Its planned,
+> compatibility, read-model, per-owner adapter, and physical-storage structure
+> must not be treated as the target architecture.
+
 `registry.json` is the sole canonical source for the shared Nex and MoonSleep
 object catalog. `registry.schema.json` describes its contract, and
 `registry-tools.mjs` validates identities, relationships, aliases, repository

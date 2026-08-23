@@ -2,7 +2,7 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-08-14
-**Related:** [Shared object registry](../../contracts/object-registry/v1/README.md), [Continuous evidence and review](continuous-evidence-late-arriving-evidence-and-review.md)
+**Related:** [Canonical Projected Objects](canonical-projected-objects.md), [Shared object registry](../../contracts/object-registry/v1/README.md), [Continuous evidence and review](continuous-evidence-late-arriving-evidence-and-review.md)
 
 ---
 
@@ -216,6 +216,13 @@ may say role or profile when that is clearer to a human.
 A domain creates an independent Resource only when the noun has a stable
 identity, lifecycle, and authority that is not merely an extension of a core
 object.
+
+The canonical identity, revision, targeting, resolution, projection, and Core
+Graph contract for every MoonSleep domain Resource is defined by
+[Canonical Projected Objects](canonical-projected-objects.md). Domain ownership
+means ownership of vocabulary, schemas, relationships, and projection
+semantics; it does not require a per-Resource storage, resolver, or permanent
+Projector implementation.
 
 Orders, order lines, packages, fulfillment obligations, purchase orders,
 invoices, payments, returns, refunds, carrier incidents, claims, lots, and
