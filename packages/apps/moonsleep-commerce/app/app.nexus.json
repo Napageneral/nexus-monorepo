@@ -1,6 +1,6 @@
 {
   "id": "moonsleep-commerce",
-  "version": "0.3.29",
+  "version": "0.3.30",
   "displayName": "MoonSleep Commerce",
   "description": "Project exact Shopify records into MoonSleep identity and typed commerce state through public Nex operations.",
   "skill": "./SKILL.md",
@@ -301,7 +301,7 @@
           "record_ids": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 50,
+            "maxItems": 100,
             "uniqueItems": true,
             "items": {
               "type": "string",

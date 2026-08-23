@@ -11,35 +11,16 @@ type NexIdentityClient = {
   contacts: {
     observe(params: ShopifyContactObservation): Promise<unknown>;
   };
-  entities: {
-    resolve(params: { entity_id: string }): Promise<unknown>;
-  };
   memory: {
     evidence: {
       profiles: {
         list(params: Record<string, never>): Promise<unknown>;
         register(params: RuntimeRow): Promise<unknown>;
       };
-      episodes: {
-        create(params: RuntimeRow): Promise<unknown>;
-      };
-      facts: {
-        create_from_episode(params: RuntimeRow): Promise<unknown>;
-      };
-      observations: {
-        head: {
-          get(params: { headKey: string }): Promise<unknown>;
-        };
-        commit(params: RuntimeRow): Promise<unknown>;
-      };
     };
-    sets: {
-      create(params: RuntimeRow): Promise<unknown>;
-      members: {
-        add(params: RuntimeRow): Promise<unknown>;
-      };
-      seal(params: RuntimeRow): Promise<unknown>;
-    };
+  };
+  semantics: {
+    apply(params: RuntimeRow): Promise<unknown>;
   };
   facets: {
     attachments: {
@@ -51,12 +32,10 @@ type NexIdentityClient = {
 
 const CUSTOMER_FACT_PROFILE_ID = "commerce.customer.reference_fact.v1";
 const CUSTOMER_OBSERVATION_PROFILE_ID = "commerce.customer.current.v1";
-const CUSTOMER_SET_PROFILE_ID = "commerce.customer.evidence_set.v1";
 const CUSTOMER_PROFILE_VERSION = "1.0.0";
 const CUSTOMER_PROFILE_OWNER = "@moonsleep/continuous-evidence";
 const CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256 =
   "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c";
-const CUSTOMER_RESOLVER_ID = "commerce-customer-current";
 const CUSTOMER_FACET_DEFINITION_ID = "moonsleep.customer.v1";
 const CUSTOMER_FACET_DEFINITION_VERSION = 1;
 const CUSTOMER_FACET_DOMAIN_SCOPE = "moonsleep";
@@ -286,31 +265,26 @@ function isFacetAttachmentNotFound(error: unknown): boolean {
   return message.includes("Facet ") && message.includes(" not found");
 }
 
-function isFacetAttachmentCardinalityConflict(error: unknown): boolean {
-  const reasonCode = asString(asRecord(error).reasonCode);
-  const message = String(error);
-  return (
-    reasonCode === "facet_attachment_cardinality_conflict" ||
-    message.includes("facet_attachment_cardinality_conflict") ||
-    message.includes("canonical subject already has an active attachment in this slot")
-  );
-}
-
-async function ensureCustomerRoleEvidence(params: {
-  nex: NexIdentityClient;
+type PreparedCustomerIdentity = {
   record: RuntimeRow;
   observation: ShopifyContactObservation;
+  observed: RuntimeRow;
+  entity: RuntimeRow;
+  contact: RuntimeRow;
   canonicalEntityId: string;
-}): Promise<RuntimeRow> {
-  const attachmentId = customerFacetAttachmentId(params.canonicalEntityId);
+};
+
+async function existingCustomerRole(
+  nex: NexIdentityClient,
+  canonicalEntityId: string,
+): Promise<RuntimeRow | null> {
+  const attachmentId = customerFacetAttachmentId(canonicalEntityId);
   try {
-    const exactPayload = unwrapPayload(
-      await params.nex.facets.attachments.get({ id: attachmentId }),
-    );
+    const exactPayload = unwrapPayload(await nex.facets.attachments.get({ id: attachmentId }));
     const existing = asRecord(
       exactPayload.attachment ?? exactPayload.item ?? exactPayload.value,
     );
-    assertCanonicalCustomerFacet(existing, params.canonicalEntityId);
+    assertCanonicalCustomerFacet(existing, canonicalEntityId);
     return {
       customer_observation_outcome: "adopted_existing",
       customer_observation_id: asString(asRecord(existing.basis).observation_id),
@@ -322,179 +296,86 @@ async function ensureCustomerRoleEvidence(params: {
       throw error;
     }
   }
+  return null;
+}
 
-  await ensureCustomerEvidenceProfiles(params.nex);
-  const sourceRef = immutableSourceRef(params.record);
-  const keyPrefix = `moonsleep-commerce:shopify-customer:${sourceRef.recordId}:${sourceRef.payloadSha256}`;
-  const episodePayload = unwrapPayload(
-    await params.nex.memory.evidence.episodes.create({
-      title: `Shopify customer role evidence ${params.observation.contact_id}`,
-      purpose:
-        "Project one immutable Shopify customer Record into canonical customer-role evidence",
-      sourceRecordRefs: [sourceRef],
-      metadata: {
-        platform: "shopify",
-        shop_domain: params.observation.space_id,
-        customer_ref: params.observation.contact_id,
-      },
-      sealedBy: "job:moonsleep-commerce.shopify-customer-identity",
-      idempotencyKey: `${keyPrefix}:episode:v1`,
-    }),
+function semanticCustomerRoleInput(customers: PreparedCustomerIdentity[]): RuntimeRow {
+  const ordered = [...customers].sort((left, right) =>
+    immutableSourceRef(left.record).recordId.localeCompare(immutableSourceRef(right.record).recordId),
   );
-  const episode = asRecord(episodePayload.item);
-  const episodeId = requireString(episode, "episode_id");
-
-  const factPayload = unwrapPayload(
-    await params.nex.memory.evidence.facts.create_from_episode({
+  const cohortKey = sha256CanonicalJson(
+    ordered.map((customer) => immutableSourceRef(customer.record)),
+  );
+  const records: RuntimeRow = {};
+  const facts: RuntimeRow[] = [];
+  const observations: RuntimeRow[] = [];
+  const objects: RuntimeRow[] = [];
+  ordered.forEach((customer, index) => {
+    const recordRef = `customer${index}`;
+    const factRef = `fact${index}`;
+    const observationRef = `observation${index}`;
+    records[recordRef] = immutableSourceRef(customer.record);
+    facts.push({
+      ref: factRef,
       profileId: CUSTOMER_FACT_PROFILE_ID,
       profileVersion: CUSTOMER_PROFILE_VERSION,
+      subject: { subjectType: "commerce_customer", subjectId: customer.observation.contact_id },
       payload: {
-        customer_ref: params.observation.contact_id,
+        customer_ref: customer.observation.contact_id,
         identity_state: "source_anchored",
       },
-      summary: `Shopify identifies ${params.observation.contact_id} as a MoonSleep customer.`,
-      subjectType: "commerce_customer",
-      subjectRef: params.observation.contact_id,
-      producerId: CUSTOMER_RESOLVER_ID,
-      producerVersion: CUSTOMER_PROJECTOR_VERSION,
-      extractionPolicyRef: "policy:moonsleep-commerce-shopify-customer-role-v1",
-      episodeId,
-      sourceRecordRefs: [sourceRef],
-      asOf: params.observation.observed_at,
-      idempotencyKey: `${keyPrefix}:fact:v1`,
-    }),
-  );
-  const fact = asRecord(asRecord(factPayload.item).fact);
-  const factId = requireString(fact, "id");
-
-  const setPayload = unwrapPayload(
-    await params.nex.memory.sets.create({
-      definitionId: "evidence_set_v1",
-      idempotencyKey: `${keyPrefix}:set:v1`,
-      evidenceScope: {
-        domain: "moonsleep.commerce",
-        purpose: CUSTOMER_SET_PROFILE_ID,
-        resolverId: CUSTOMER_RESOLVER_ID,
-        resolverPolicyVersion: CUSTOMER_PROFILE_VERSION,
-        targetProfileId: CUSTOMER_OBSERVATION_PROFILE_ID,
-        targetProfileVersion: CUSTOMER_PROFILE_VERSION,
-        allowedFactProfiles: [
-          { profileId: CUSTOMER_FACT_PROFILE_ID, profileVersion: CUSTOMER_PROFILE_VERSION },
-        ],
-        sourceManifestSha256: CUSTOMER_PROFILE_SOURCE_MANIFEST_SHA256,
-      },
-    }),
-  );
-  const setId = requireString(asRecord(setPayload.set), "id");
-  await params.nex.memory.sets.members.add({
-    setId,
-    memberType: "element",
-    memberId: factId,
-    position: 0,
-  });
-  await params.nex.memory.sets.seal({
-    setId,
-    sealedBy: "job:moonsleep-commerce.shopify-customer-identity",
-  });
-
-  const headKey = `moonsleep.commerce:shopify-customer:${params.observation.space_id}:${params.observation.contact_id}`;
-  const headPayload = unwrapPayload(
-    await params.nex.memory.evidence.observations.head.get({ headKey }),
-  );
-  const head = asRecord(headPayload.item);
-  const headObservation = asRecord(head.observation);
-  let expectedHeadId: string | null = asString(head.head_element_id) || null;
-  if (
-    asString(asRecord(headObservation.metadata).input_set_id) === setId &&
-    asString(headObservation.id)
-  ) {
-    expectedHeadId = asString(headObservation.parent_id) || null;
-  }
-
-  const commitPayload = unwrapPayload(
-    await params.nex.memory.evidence.observations.commit({
-      headKey,
-      expectedHeadId,
-      inputSetId: setId,
+      summary: `Shopify identifies ${customer.observation.contact_id} as a MoonSleep customer.`,
+      evidence: [recordRef],
+      asOf: customer.observation.observed_at,
+    });
+    observations.push({
+      ref: observationRef,
       profileId: CUSTOMER_OBSERVATION_PROFILE_ID,
       profileVersion: CUSTOMER_PROFILE_VERSION,
+      headKey: `moonsleep.commerce:shopify-customer:${customer.observation.space_id}:${customer.observation.contact_id}`,
+      subject: { subjectType: "commerce_customer", subjectId: customer.observation.contact_id },
+      facts: [{ ref: factRef, disposition: "supports" }],
       payload: {
-        customer_ref: params.observation.contact_id,
+        customer_ref: customer.observation.contact_id,
         current_state: "customer",
         review_state: "source_anchored",
       },
-      summary: `${params.observation.contact_id} has the MoonSleep customer role.`,
-      subjectType: "commerce_customer",
-      subjectRef: params.observation.contact_id,
-      factDispositions: [{ factElementId: factId, disposition: "supports" }],
-      resolverId: CUSTOMER_RESOLVER_ID,
-      resolverVersion: CUSTOMER_PROJECTOR_VERSION,
-      resolverPolicyVersion: CUSTOMER_PROFILE_VERSION,
-      actorRef: "job:moonsleep-commerce.shopify-customer-identity",
-      policyRef: "policy:moonsleep-commerce-shopify-customer-role-v1",
-      idempotencyKey: `${keyPrefix}:observation:v1`,
-      asOf: params.observation.observed_at,
-    }),
-  );
-  const committed = asRecord(commitPayload.item);
-  const customerObservation = asRecord(committed.observation);
-  const commitReceipt = asRecord(committed.receipt);
-  const customerObservationId = requireString(customerObservation, "id");
-  const commitReceiptId = requireString(commitReceipt, "receipt_id");
-  const basis = {
-    basis_type: "accepted_observation",
-    observation_id: customerObservationId,
-    commit_receipt_id: commitReceiptId,
-    commit_receipt_sha256: sha256CanonicalJson(commitReceipt),
-  };
-  let attachmentPayload: RuntimeRow;
-  try {
-    attachmentPayload = unwrapPayload(
-      await params.nex.facets.attachments.create({
-        id: attachmentId,
-        facet_definition_id: CUSTOMER_FACET_DEFINITION_ID,
-        definition_version: CUSTOMER_FACET_DEFINITION_VERSION,
-        subject_class: "nex.entity",
-        subject_id: params.canonicalEntityId,
-        domain_scope: CUSTOMER_FACET_DOMAIN_SCOPE,
-        attachment_slot: CUSTOMER_FACET_ATTACHMENT_SLOT,
-        effective_from: params.observation.observed_at,
+      summary: `${customer.observation.contact_id} has the MoonSleep customer role.`,
+      previous: null,
+      asOf: customer.observation.observed_at,
+    });
+    objects.push({
+      ref: `facet${index}`,
+      objectType: "facet_attachment",
+      id: customerFacetAttachmentId(customer.canonicalEntityId),
+      attributes: {
+        facetDefinitionId: CUSTOMER_FACET_DEFINITION_ID,
+        definitionVersion: CUSTOMER_FACET_DEFINITION_VERSION,
+        subject: { subjectClass: "nex.entity", subjectId: customer.canonicalEntityId },
+        domainScope: CUSTOMER_FACET_DOMAIN_SCOPE,
+        attachmentSlot: CUSTOMER_FACET_ATTACHMENT_SLOT,
+        effectiveFrom: customer.observation.observed_at,
         values: {},
-        relationships: [],
-        observation_refs: [customerObservationId],
-        privacy_class: "restricted",
-        basis,
-        idempotency_key: `${attachmentId}:create`,
-      }),
-    );
-  } catch (error) {
-    if (!isFacetAttachmentCardinalityConflict(error)) {
-      throw error;
-    }
-    let exact: RuntimeRow;
-    try {
-      exact = unwrapPayload(await params.nex.facets.attachments.get({ id: attachmentId }));
-    } catch {
-      throw error;
-    }
-    const existing = asRecord(exact.attachment ?? exact.item ?? exact.value);
-    assertCanonicalCustomerFacet(existing, params.canonicalEntityId);
-    return {
-      customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
-      customer_observation_id: customerObservationId,
-      customer_facet_outcome: "adopted_existing",
-      customer_facet_attachment_id: requireString(existing, "id"),
-    };
-  }
-  const attachment = asRecord(
-    attachmentPayload.value ?? attachmentPayload.item ?? attachmentPayload.attachment,
-  );
-  assertCanonicalCustomerFacet(attachment, params.canonicalEntityId);
+        observationRefs: [observationRef],
+        privacyClass: "restricted",
+      },
+      basisObservation: observationRef,
+    });
+  });
   return {
-    customer_observation_outcome: commitPayload.reused === true ? "replayed" : "accepted",
-    customer_observation_id: customerObservationId,
-    customer_facet_outcome: attachmentPayload.replayed === true ? "adopted_existing" : "attached",
-    customer_facet_attachment_id: requireString(attachment, "id"),
+    idempotencyKey: `moonsleep-commerce:shopify-customers:${cohortKey}:v1`,
+    actorRef: `job:moonsleep-commerce.shopify-customer-identity@${CUSTOMER_PROJECTOR_VERSION}`,
+    policyRef: "policy:moonsleep-commerce-shopify-customer-role-v1",
+    records,
+    episode: {
+      ref: "shopifyCustomerCohort",
+      title: `Shopify customer role evidence cohort (${ordered.length})`,
+      purpose: "Project immutable Shopify customer Records into canonical customer-role evidence",
+      metadata: { platform: "shopify", customers: ordered.length },
+    },
+    facts,
+    observations,
+    objects,
   };
 }
 
@@ -606,6 +487,16 @@ export async function projectShopifyCustomerIdentity(
   record: unknown,
   options: { allowLegacyText?: boolean } = {},
 ): Promise<RuntimeRow> {
+  const [projected] = await projectShopifyCustomerIdentities(nex, [record], options);
+  return projected!;
+}
+
+async function prepareCustomerIdentity(
+  nex: NexIdentityClient,
+  recordValue: unknown,
+  options: { allowLegacyText?: boolean },
+): Promise<PreparedCustomerIdentity> {
+  const record = asRecord(recordValue);
   const observation = buildShopifyCustomerObservation(record, options);
   const observed = unwrapPayload(await nex.contacts.observe(observation));
   const entity = asRecord(observed.entity);
@@ -622,34 +513,84 @@ export async function projectShopifyCustomerIdentity(
   ) {
     throw new Error("Nex committed a different Shopify contact observation");
   }
+  return { record, observation, observed, entity, contact, canonicalEntityId };
+}
 
-  const resolution = unwrapPayload(await nex.entities.resolve({ entity_id: observedEntityId }));
-  if (asString(resolution.canonical_id) !== canonicalEntityId) {
-    throw new Error("Nex canonical entity resolution disagrees with contact observation");
+async function applyCustomerRoles(
+  nex: NexIdentityClient,
+  customers: PreparedCustomerIdentity[],
+): Promise<Map<string, RuntimeRow>> {
+  const roles = new Map<string, RuntimeRow>();
+  const inspected = await mapWithConcurrency(customers, 32, async (customer) => ({
+    customer,
+    existing: await existingCustomerRole(nex, customer.canonicalEntityId),
+  }));
+  const missing: PreparedCustomerIdentity[] = [];
+  for (const { customer, existing } of inspected) {
+    const recordId = immutableSourceRef(customer.record).recordId;
+    if (existing) roles.set(recordId, existing);
+    else missing.push(customer);
   }
+  if (missing.length === 0) return roles;
 
-  const customerRole = await ensureCustomerRoleEvidence({
-    nex,
-    record: asRecord(record),
-    observation,
-    canonicalEntityId,
+  await ensureCustomerEvidenceProfiles(nex);
+  const ordered = [...missing].sort((left, right) =>
+    immutableSourceRef(left.record).recordId.localeCompare(immutableSourceRef(right.record).recordId),
+  );
+  const applied = unwrapPayload(await nex.semantics.apply(semanticCustomerRoleInput(ordered)));
+  if (asString(applied.status) !== "committed" || applied.actionAuthority !== false) {
+    throw new Error("Nex did not return a terminal non-authoritative semantic customer receipt");
+  }
+  const observations = asRecord(applied.observations);
+  const objects = asRecord(applied.objects);
+  ordered.forEach((customer, index) => {
+    const observation = asRecord(observations[`observation${index}`]);
+    const object = asRecord(objects[`facet${index}`]);
+    const customerObservationId = requireString(observation, "observationId");
+    const attachmentId = requireString(object, "objectId");
+    const expectedAttachmentId = customerFacetAttachmentId(customer.canonicalEntityId);
+    if (attachmentId !== expectedAttachmentId || asString(object.objectType) !== "facet_attachment") {
+      throw new Error("Nex semantic customer receipt returned a different canonical Facet");
+    }
+    roles.set(immutableSourceRef(customer.record).recordId, {
+      customer_observation_outcome: observation.reused === true ? "replayed" : "accepted",
+      customer_observation_id: customerObservationId,
+      customer_facet_outcome: object.reused === true ? "adopted_existing" : "attached",
+      customer_facet_attachment_id: attachmentId,
+    });
   });
+  return roles;
+}
 
-  return {
-    projected: true,
-    replayed: observed.replayed === true,
-    created_entity: observed.created_entity === true,
-    created_contact: observed.created_contact === true,
-    contact_id: requireString(contact, "id"),
-    observed_entity_id: observedEntityId,
-    canonical_entity_id: canonicalEntityId,
-    shop_domain: observation.space_id,
-    shopify_customer_gid: observation.contact_id,
-    source_observation_id: observation.source_observation_id,
-    tags: [...observation.tags],
-    tag_contract: "compatibility_hint",
-    ...customerRole,
-  };
+export async function projectShopifyCustomerIdentities(
+  nex: NexIdentityClient,
+  records: unknown[],
+  options: { allowLegacyText?: boolean } = {},
+): Promise<RuntimeRow[]> {
+  const customers = await mapWithConcurrency(records, 32, (record) =>
+    prepareCustomerIdentity(nex, record, options),
+  );
+  const roles = await applyCustomerRoles(nex, customers);
+  return customers.map(({ record, observation, observed, entity, contact, canonicalEntityId }) => {
+    const customerRole = roles.get(immutableSourceRef(record).recordId);
+    if (!customerRole) throw new Error("Nex omitted a Shopify customer semantic receipt");
+    const observedEntityId = requireString(entity, "id");
+    return {
+      projected: true,
+      replayed: observed.replayed === true,
+      created_entity: observed.created_entity === true,
+      created_contact: observed.created_contact === true,
+      contact_id: requireString(contact, "id"),
+      observed_entity_id: observedEntityId,
+      canonical_entity_id: canonicalEntityId,
+      shop_domain: observation.space_id,
+      shopify_customer_gid: observation.contact_id,
+      source_observation_id: observation.source_observation_id,
+      tags: [...observation.tags],
+      tag_contract: "compatibility_hint",
+      ...customerRole,
+    };
+  });
 }
 
 async function mapWithConcurrency<T, R>(
@@ -694,8 +635,9 @@ export default async function shopifyCustomerIdentityJob(
           asString(shopifyRecordSourceMetadata(record).family) === "customer",
       );
     const loadedAt = performance.now();
-    await mapWithConcurrency(customers, 4, async ({ record }) =>
-      projectShopifyCustomerIdentity(ctx.nex, record),
+    await projectShopifyCustomerIdentities(
+      ctx.nex,
+      customers.map(({ record }) => record),
     );
     const finishedAt = performance.now();
     return {

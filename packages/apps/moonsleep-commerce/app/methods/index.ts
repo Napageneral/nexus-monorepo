@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { NexAppMethodHandler } from "../../../../../nex/src/runtime/domains/apps/context.js";
 import {
   buildShopifyCustomerObservation,
-  projectShopifyCustomerIdentity,
+  projectShopifyCustomerIdentities,
 } from "../jobs/shopify-customer-identity.js";
 import {
   SHOPIFY_SOURCE_SCHEDULES,
@@ -11,7 +11,7 @@ import {
 
 type RuntimeRow = Record<string, unknown>;
 
-const MAX_COHORT_RECORDS = 50;
+const MAX_COHORT_RECORDS = 100;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
 const MOONSLEEP_OPS_ENTITY_ID = "entity_moonsleep_ops";
 const SOURCE_JOB_NAMES = Object.freeze({
@@ -851,22 +851,28 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
   // Validate the entire requested cohort before the first identity observation.
   // The observation itself is replay-safe, so a retry after a downstream failure
   // cannot create a second entity, contact, or observation for the same record.
-  const records: Array<{ id: string; record: RuntimeRow }> = [];
-  for (const id of recordIds) {
-    const response = unwrapPayload(await ctx.nex.records.get({ id }));
-    const record = asRecord(response.record);
+  const loaded = unwrapPayload(await ctx.nex.records.get_many({ ids: recordIds }));
+  const loadedRecords = Array.isArray(loaded.records) ? loaded.records.map(asRecord) : [];
+  const byId = new Map(loadedRecords.map((record) => [asString(record.id), record]));
+  const records: Array<{ id: string; record: RuntimeRow }> = recordIds.map((id) => {
+    const record = byId.get(id) ?? {};
+    if (Object.keys(record).length === 0) {
+      throw new Error(`Shopify customer cohort did not load immutable Record ${id}`);
+    }
     buildShopifyCustomerObservation(record, { allowLegacyText: true });
-    records.push({ id, record });
-  }
+    return { id, record };
+  });
 
-  const results: RuntimeRow[] = [];
-  const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
-  for (const entry of records) {
-    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record, {
-      allowLegacyText: true,
-    });
-    results.push({ record_id: entry.id, ...projected });
-  }
+  const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentities>[0];
+  const projected = await projectShopifyCustomerIdentities(
+    identityClient,
+    records.map(({ record }) => record),
+    { allowLegacyText: true },
+  );
+  const results: RuntimeRow[] = projected.map((result, index) => ({
+    record_id: records[index]!.id,
+    ...result,
+  }));
 
   return {
     state: "succeeded",
