@@ -16,7 +16,9 @@
         "identity_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["product_revision_id"],
+          "required": [
+            "product_revision_id"
+          ],
           "properties": {
             "product_revision_id": {
               "type": "string",
@@ -27,7 +29,11 @@
         "attributes_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["product_family_id", "revision_label", "revision_state"],
+          "required": [
+            "product_family_id",
+            "revision_label",
+            "revision_state"
+          ],
           "properties": {
             "product_family_id": {
               "type": "string",
@@ -42,10 +48,16 @@
               "minLength": 1
             },
             "effective_from": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "effective_through": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "specification": {
               "type": "object"
@@ -56,11 +68,18 @@
           {
             "relationship_id": "supersedes",
             "cardinality": "optional_one",
-            "target_object_type_ids": ["moonsleep.product_revision"]
+            "target_object_type_ids": [
+              "moonsleep.product_revision"
+            ]
           }
         ],
-        "accepted_input_terms": ["product_revision", "product version"],
-        "search_terms": ["product revision"],
+        "accepted_input_terms": [
+          "product_revision",
+          "product version"
+        ],
+        "search_terms": [
+          "product revision"
+        ],
         "resolution_binding": "nex.canonical-object-kernel.v1"
       },
       {
@@ -74,7 +93,9 @@
         "identity_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["purchase_order_id"],
+          "required": [
+            "purchase_order_id"
+          ],
           "properties": {
             "purchase_order_id": {
               "type": "string",
@@ -85,20 +106,34 @@
         "attributes_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["supplier_name", "status", "currency", "units_ordered"],
+          "required": [
+            "supplier_name",
+            "status",
+            "currency",
+            "units_ordered"
+          ],
           "properties": {
             "supplier_name": {
               "type": "string",
               "minLength": 1
             },
             "supplier_reference": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "sku_key": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "ordered_at": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "status": {
               "type": "string",
@@ -113,10 +148,16 @@
               "minimum": 0
             },
             "unit_cost": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "notes": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "terms": {
               "type": "object"
@@ -127,11 +168,19 @@
           {
             "relationship_id": "orders_revision",
             "cardinality": "optional_many",
-            "target_object_type_ids": ["moonsleep.product_revision"]
+            "target_object_type_ids": [
+              "moonsleep.product_revision"
+            ]
           }
         ],
-        "accepted_input_terms": ["inventory_purchase_order", "supply_order"],
-        "search_terms": ["PO", "purchase order"],
+        "accepted_input_terms": [
+          "inventory_purchase_order",
+          "supply_order"
+        ],
+        "search_terms": [
+          "PO",
+          "purchase order"
+        ],
         "resolution_binding": "nex.canonical-object-kernel.v1"
       },
       {
@@ -145,7 +194,9 @@
         "identity_schema": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id"],
+          "required": [
+            "id"
+          ],
           "properties": {
             "id": {
               "type": "string",
@@ -164,40 +215,71 @@
               "type": "string"
             },
             "space_id": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "space_name": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "container_id": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "container_kind": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "container_name": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "thread_id": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "thread_name": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "created_at": {
               "type": "integer"
             },
             "deleted_at": {
-              "type": ["integer", "null"]
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "metadata_json": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         },
         "relationship_slots": [],
-        "accepted_input_terms": ["channel"],
-        "search_terms": ["communication channel"],
+        "accepted_input_terms": [
+          "channel"
+        ],
+        "search_terms": [
+          "communication channel"
+        ],
         "resolution_binding": "nex.channel.native-row-resolver.v1"
       }
     ]
