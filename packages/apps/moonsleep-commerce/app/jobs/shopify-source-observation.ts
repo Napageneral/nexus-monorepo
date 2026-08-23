@@ -31,6 +31,7 @@ const SOURCE_FAMILIES = new Set([
 const CAPTURE_ID_RE = /^[0-9a-f]{32}$/;
 const BATCH_SOURCE_RECORD_TYPES = new Set([
   "shopify.customer",
+  "shopify.inventory",
   "shopify.order",
   "shopify.line_item",
 ]);
@@ -206,13 +207,6 @@ export default async function shopifySourceObservationJob(
       const metadata = asRecord(payload.metadata);
       const sourceRecordType = asString(metadata.source_record_type);
       const recordFamily = asString(metadata.family) || asString(routing.container_id);
-      if (!BATCH_SOURCE_RECORD_TYPES.has(sourceRecordType)) {
-        // Non-message Shopify source records must not enter the generic channel
-        // delivery projection. Their immutable provider identity and source
-        // thread remain intact; omitting only container_id makes the generic
-        // Record path channel-neutral.
-        delete routing.container_id;
-      }
       if (!recordFamily) {
         throw new Error("Shopify source capture returned a Record without a family");
       }
