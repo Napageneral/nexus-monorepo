@@ -63,6 +63,11 @@ Its stable address is:
 object_type_id + canonical_object_id
 ```
 
+The kernel derives `canonical_object_id` deterministically from the registered
+identity contract ID and validated identity inputs. A projecting agent supplies
+those inputs; it cannot choose an unrelated object ID. Replaying the same type,
+contract, and identity inputs therefore reaches the same object.
+
 ### Object Revision
 
 An Object Revision is one immutable, complete projected state of a Canonical
@@ -132,6 +137,11 @@ contain proposals, read views, receipts, compiler custody, rebuildable rows,
 historical compatibility objects, or physical storage names posing as business
 language.
 
+The executable declaration contract is
+[`contracts/object-registry/v2`](../../contracts/object-registry/v2/README.md).
+Registry v1 is retained only as research and migration input while concepts
+converge independently.
+
 A declaration contains only what the generic kernel needs to handle the type:
 
 - one stable `object_type_id`;
@@ -168,7 +178,7 @@ defineObjectType({
     shipments: "moonsleep.supply_shipment",
   },
   ownerDomain: "moonsleep.supply",
-})
+});
 ```
 
 If the declaration is published, the type is immediately targetable,
@@ -259,31 +269,35 @@ interface:
 ```ts
 objects.publish_revision({
   objectTypeId,
-  canonicalObjectId,
+  identity,
   expectedCurrentRevisionId,
   attributes,
   relationships,
   supportingObservationIds,
   projectionProducerId,
   projectionContractId,
-})
+});
 ```
 
 The kernel:
 
 1. requires a registered Canonical Object Type;
-2. validates the canonical identity contract;
+2. validates the identity inputs and derives the stable canonical address from
+   the type's exact identity contract;
 3. validates attributes and relationships against the exact registry digest;
 4. verifies the supporting Observations and their accepted state;
 5. computes canonical semantic and evidence-basis digests;
 6. treats an exact replay as an idempotent no-op;
 7. compare-and-sets the expected current revision;
-8. appends an immutable revision when semantic state changes;
+8. appends an immutable revision when projected state or its evidence basis
+   changes;
 9. publishes revision-linked Core Graph relationships; and
 10. advances the current head atomically.
 
-New evidence that does not change projected semantic state does not create a
-revision. Changed attributes, relationships, or business state do.
+An exact replay includes the same projected state, evidence basis, producer,
+projection contract, and registry digest. Changed attributes, relationships,
+business state, or supporting evidence append a revision. The stable canonical
+identity does not change.
 
 The kernel records who produced a revision, but the registry does not
 permanently bind the type to that producer.
@@ -300,7 +314,7 @@ objects.resolve_many([
     observedSubjectId,
     revisionId,
   },
-])
+]);
 ```
 
 `revisionId` is optional and selects the current head when absent. Each input

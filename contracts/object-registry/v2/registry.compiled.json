@@ -1,0 +1,10 @@
+{
+  "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
+  "registry_digest": "77b7fe8da6df29b1bcd9566187f28f5175208265bdfd5a60e72c131ff510ea15",
+  "registry": {
+    "registry_id": "nex.canonical_objects",
+    "schema_version": "2.0.0",
+    "entries": []
+  },
+  "declarations": []
+}
