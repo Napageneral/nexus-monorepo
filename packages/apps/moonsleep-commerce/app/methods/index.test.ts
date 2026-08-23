@@ -763,8 +763,9 @@ function customerRecord(recordId: string, customerId: string) {
 
 function context(recordById: Record<string, ReturnType<typeof customerRecord>>) {
   const seenObservations = new Set<string>();
-  const customerFacets = new Map<string, Record<string, unknown>>();
-  const recordsGet = vi.fn(async ({ id }: { id: string }) => ({ record: recordById[id] }));
+  const recordsGetMany = vi.fn(async ({ ids }: { ids: string[] }) => ({
+    records: ids.map((id) => recordById[id]).filter(Boolean),
+  }));
   const observe = vi.fn(async (input: Record<string, unknown>) => {
     const contactId = String(input.contact_id);
     const suffix = contactId.split("/").at(-1);
@@ -786,10 +787,6 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
       replayed: wasSeen,
     };
   });
-  const resolve = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
-    canonical_id: entity_id,
-  }));
-  const tagsList = vi.fn(async () => ({ tags: ["Customer", "Shopify"] }));
   const profilesList = vi.fn(async () => ({
     items: [
       {
@@ -821,67 +818,43 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
     },
     reused: false,
   }));
-  const episodeCreate = vi.fn(async (input: Record<string, unknown>) => ({
-    item: { episode_id: `episode-${String(input.idempotencyKey)}` },
-  }));
-  const factCreate = vi.fn(async (input: Record<string, unknown>) => ({
-    item: { fact: { id: `fact-${String(input.idempotencyKey)}` } },
-  }));
-  const setCreate = vi.fn(async (input: Record<string, unknown>) => ({
-    set: { id: `set-${String(input.idempotencyKey)}` },
-  }));
-  const memberAdd = vi.fn(async () => ({ ok: true }));
-  const setSeal = vi.fn(async () => ({ seal: { setId: "set" }, reused: false }));
-  const headGet = vi.fn(async () => ({ item: null }));
-  const observationCommit = vi.fn(async (input: Record<string, unknown>) => {
-    const subjectRef = String(input.subjectRef);
-    return {
-      item: {
-        observation: { id: `observation-${subjectRef}` },
-        receipt: {
-          receipt_id: `receipt-${subjectRef}`,
-          operation_type: "observation_commit",
-        },
-      },
-      reused: false,
-    };
-  });
-  const facetsList = vi.fn(async (input: Record<string, unknown>) => ({
-    items: customerFacets.has(String(input.subject_id))
-      ? [customerFacets.get(String(input.subject_id))]
-      : [],
-  }));
   const facetsGet = vi.fn(async (input: Record<string, unknown>) => {
-    const attachment = [...customerFacets.values()].find(
-      (candidate) => candidate.id === input.id,
-    );
-    if (!attachment) throw new Error(`Facet ${String(input.id)} not found`);
-    return { attachment };
+    throw new Error(`Facet ${String(input.id)} not found`);
   });
-  const facetsCreate = vi.fn(async (input: Record<string, unknown>) => {
-    const attachment = { ...input, instance_key: null, lifecycle_state: "active" };
-    customerFacets.set(String(input.subject_id), attachment);
-    return { value: attachment, replayed: false };
+  const semanticsApply = vi.fn(async (input: Record<string, unknown>) => {
+    const observations = input.observations as Array<Record<string, unknown>>;
+    const objects = input.objects as Array<Record<string, unknown>>;
+    return {
+      status: "committed",
+      actionAuthority: false,
+      observations: Object.fromEntries(
+        observations.map((item, index) => [
+          item.ref,
+          { observationId: `observation-${index}`, receiptId: `receipt-${index}`, reused: false },
+        ]),
+      ),
+      objects: Object.fromEntries(
+        objects.map((item) => [
+          item.ref,
+          { objectId: item.id, objectType: "facet_attachment", reused: false },
+        ]),
+      ),
+    };
   });
   return {
     params: { record_ids: Object.keys(recordById) },
     nex: {
-      records: { get: recordsGet },
+      records: { get_many: recordsGetMany },
       contacts: { observe },
-      entities: { resolve, tags: { list: tagsList } },
       memory: {
-        evidence: {
-          profiles: { list: profilesList, register: profileRegister },
-          episodes: { create: episodeCreate },
-          facts: { create_from_episode: factCreate },
-          observations: { head: { get: headGet }, commit: observationCommit },
-        },
-        sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
+        evidence: { profiles: { list: profilesList, register: profileRegister } },
       },
-      facets: { attachments: { get: facetsGet, list: facetsList, create: facetsCreate } },
+      semantics: { apply: semanticsApply },
+      facets: { attachments: { get: facetsGet } },
     },
-    recordsGet,
+    recordsGetMany,
     observe,
+    semanticsApply,
   };
 }
 
@@ -897,7 +870,7 @@ describe("Shopify customer cohort projector", () => {
     await expect(projectShopifyCustomerCohort(ctx as never)).rejects.toThrow(
       "only accepts Shopify records",
     );
-    expect(ctx.recordsGet).toHaveBeenCalledTimes(2);
+    expect(ctx.recordsGetMany).toHaveBeenCalledWith({ ids: ["record-1", "record-2"] });
     expect(ctx.observe).not.toHaveBeenCalled();
   });
 
@@ -917,6 +890,8 @@ describe("Shopify customer cohort projector", () => {
       provider_write_authority: false,
     });
     expect(ctx.observe).toHaveBeenCalledTimes(2);
+    expect(ctx.semanticsApply).toHaveBeenCalledOnce();
+    expect((ctx.semanticsApply.mock.calls[0]?.[0].objects as unknown[]).length).toBe(2);
   });
 
   it("rejects duplicate, untrimmed, empty, and oversized cohorts", async () => {
@@ -927,7 +902,7 @@ describe("Shopify customer cohort projector", () => {
       [" record-1"],
       ["x".repeat(513)],
       ["é".repeat(257)],
-      Array.from({ length: 51 }, (_, index) => `record-${index}`),
+      Array.from({ length: 101 }, (_, index) => `record-${index}`),
     ]) {
       await expect(
         projectShopifyCustomerCohort({ ...ctx, params: { record_ids: recordIds } } as never),

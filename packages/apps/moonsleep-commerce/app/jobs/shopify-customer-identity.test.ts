@@ -77,10 +77,6 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
       merge_candidate: null,
     },
   }));
-  const resolve = vi.fn(async () => ({
-    ok: true,
-    payload: { canonical_id: canonicalId, hops: 0 },
-  }));
   const get = vi.fn(async () => ({ ok: true, payload: { record } }));
   const getMany = vi.fn(async () => ({ ok: true, payload: { records: [record] } }));
   let attachment: Record<string, unknown> | null = options.replayed
@@ -95,12 +91,7 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
         instance_key: null,
         lifecycle_state: "active",
         privacy_class: "restricted",
-        basis: {
-          basis_type: "accepted_observation",
-          observation_id: "observation-customer-1",
-          commit_receipt_id: "receipt-customer-1",
-          commit_receipt_sha256: "c".repeat(64),
-        },
+        basis: { basis_type: "accepted_observation", observation_id: "observation-customer-1" },
         observation_refs: [],
         values: {},
         relationships: [],
@@ -114,14 +105,6 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
     }
     if (attachment.id !== params.id) throw new Error(`Facet ${String(params.id)} not found`);
     return { attachment };
-  });
-  const facetsCreate = vi.fn(async (params: Record<string, unknown>) => {
-    attachment = {
-      ...params,
-      lifecycle_state: "active",
-      instance_key: null,
-    };
-    return { value: attachment, replayed: false };
   });
   const profilesList = vi.fn(async () => ({
     items: [
@@ -154,55 +137,44 @@ function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) 
     },
     reused: false,
   }));
-  const episodeCreate = vi.fn(async () => ({
-    item: { episode_id: "episode-customer-1" },
-  }));
-  const factCreate = vi.fn(async () => ({ item: { fact: { id: "fact-customer-1" } } }));
-  const setCreate = vi.fn(async () => ({ set: { id: "set-customer-1" } }));
-  const memberAdd = vi.fn(async () => ({ ok: true }));
-  const setSeal = vi.fn(async () => ({ seal: { setId: "set-customer-1" }, reused: false }));
-  const headGet = vi.fn(async () => ({ item: null }));
-  const observationCommit = vi.fn(async () => ({
-    item: {
-      observation: { id: "observation-customer-1" },
-      receipt: { receipt_id: "receipt-customer-1", operation_type: "observation_commit" },
-    },
-    reused: false,
-  }));
+  const semanticsApply = vi.fn(async (input: Record<string, unknown>) => {
+    const observations = input.observations as Array<Record<string, unknown>>;
+    const objects = input.objects as Array<Record<string, unknown>>;
+    const observationResults = Object.fromEntries(
+      observations.map((item, index) => [
+        item.ref,
+        {
+          observationId: `observation-customer-${index + 1}`,
+          receiptId: `receipt-customer-${index + 1}`,
+          reused: false,
+        },
+      ]),
+    );
+    const objectResults = Object.fromEntries(
+      objects.map((item, index) => [
+        item.ref,
+        { objectId: item.id, objectType: "facet_attachment", reused: false },
+      ]),
+    );
+    return {
+      status: "committed",
+      reused: false,
+      observations: observationResults,
+      objects: objectResults,
+      receiptSha256: "d".repeat(64),
+      actionAuthority: false,
+    };
+  });
   return {
     record,
     nex: {
       records: { get, get_many: getMany },
       contacts: { observe },
-      entities: { resolve },
-      memory: {
-        evidence: {
-          profiles: { list: profilesList, register: profileRegister },
-          episodes: { create: episodeCreate },
-          facts: { create_from_episode: factCreate },
-          observations: { head: { get: headGet }, commit: observationCommit },
-        },
-        sets: { create: setCreate, members: { add: memberAdd }, seal: setSeal },
-      },
-      facets: { attachments: { get: facetsGet, create: facetsCreate } },
+      memory: { evidence: { profiles: { list: profilesList, register: profileRegister } } },
+      semantics: { apply: semanticsApply },
+      facets: { attachments: { get: facetsGet } },
     },
-    calls: {
-      get,
-      getMany,
-      observe,
-      resolve,
-      facetsGet,
-      facetsCreate,
-      profilesList,
-      profileRegister,
-      episodeCreate,
-      factCreate,
-      setCreate,
-      memberAdd,
-      setSeal,
-      headGet,
-      observationCommit,
-    },
+    calls: { get, getMany, observe, facetsGet, profilesList, profileRegister, semanticsApply },
   };
 }
 
@@ -231,7 +203,7 @@ describe("Shopify customer identity projection", () => {
     expect(second.source_observation_id).not.toBe(first.source_observation_id);
   });
 
-  it("observes, resolves and verifies the canonical customer entity through public Nex operations", async () => {
+  it("observes the customer and applies its evidence and Facet in one deep operation", async () => {
     const fixture = nexFixture();
     await expect(
       projectShopifyCustomerIdentity(fixture.nex, fixture.record),
@@ -245,43 +217,35 @@ describe("Shopify customer identity projection", () => {
       tags: ["Customer", "Shopify"],
     });
     expect(fixture.calls.observe).toHaveBeenCalledOnce();
-    expect(fixture.calls.resolve).toHaveBeenCalledWith({ entity_id: "entity-shopify-customer-1" });
-    expect(fixture.calls.factCreate).toHaveBeenCalledWith(
+    expect(fixture.calls.semanticsApply).toHaveBeenCalledOnce();
+    expect(fixture.calls.semanticsApply).toHaveBeenCalledWith(
       expect.objectContaining({
-        profileId: "commerce.customer.reference_fact.v1",
-        sourceRecordRefs: [{ recordId: "record-row-1", payloadSha256: "b".repeat(64) }],
+        records: { customer0: { recordId: "record-row-1", payloadSha256: "b".repeat(64) } },
+        facts: [
+          expect.objectContaining({
+            profileId: "commerce.customer.reference_fact.v1",
+            evidence: ["customer0"],
+          }),
+        ],
+        observations: [
+          expect.objectContaining({
+            profileId: "commerce.customer.current.v1",
+            previous: null,
+          }),
+        ],
+        objects: [
+          expect.objectContaining({
+            objectType: "facet_attachment",
+            attributes: expect.objectContaining({
+              facetDefinitionId: "moonsleep.customer.v1",
+              subject: { subjectClass: "nex.entity", subjectId: "entity-shopify-customer-1" },
+              privacyClass: "restricted",
+            }),
+          }),
+        ],
       }),
     );
-    expect(fixture.calls.factCreate.mock.calls[0]?.[0]).not.toHaveProperty("entityIds");
-    expect(fixture.calls.factCreate.mock.calls[0]?.[0]).not.toHaveProperty("sourceJobId");
-    expect(fixture.calls.memberAdd).toHaveBeenCalledWith({
-      setId: "set-customer-1",
-      memberType: "element",
-      memberId: "fact-customer-1",
-      position: 0,
-    });
     expect(fixture.calls.profileRegister).toHaveBeenCalledTimes(2);
-    expect(fixture.calls.observationCommit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        profileId: "commerce.customer.current.v1",
-        subjectRef: "gid://shopify/Customer/7123456789",
-        expectedHeadId: null,
-      }),
-    );
-    expect(fixture.calls.observationCommit.mock.calls[0]?.[0]).not.toHaveProperty("entityIds");
-    expect(fixture.calls.observationCommit.mock.calls[0]?.[0]).not.toHaveProperty("sourceJobId");
-    expect(fixture.calls.facetsCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        facet_definition_id: "moonsleep.customer.v1",
-        subject_id: "entity-shopify-customer-1",
-        privacy_class: "restricted",
-        basis: expect.objectContaining({
-          basis_type: "accepted_observation",
-          observation_id: "observation-customer-1",
-          commit_receipt_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-        }),
-      }),
-    );
   });
 
   it("binds evidence idempotency to the immutable Record payload", async () => {
@@ -292,13 +256,9 @@ describe("Shopify customer identity projection", () => {
     await projectShopifyCustomerIdentity(first.nex, first.record);
     await projectShopifyCustomerIdentity(second.nex, second.record);
 
-    const keys = (fixture: ReturnType<typeof nexFixture>) => [
-      fixture.calls.episodeCreate.mock.calls[0]?.[0].idempotencyKey,
-      fixture.calls.factCreate.mock.calls[0]?.[0].idempotencyKey,
-      fixture.calls.setCreate.mock.calls[0]?.[0].idempotencyKey,
-      fixture.calls.observationCommit.mock.calls[0]?.[0].idempotencyKey,
-    ];
-    expect(keys(first)).not.toEqual(keys(second));
+    expect(first.calls.semanticsApply.mock.calls[0]?.[0].idempotencyKey).not.toBe(
+      second.calls.semanticsApply.mock.calls[0]?.[0].idempotencyKey,
+    );
   });
 
   it("replays the same immutable observation without changing entity binding", async () => {
@@ -316,8 +276,7 @@ describe("Shopify customer identity projection", () => {
     });
     expect(fixture.calls.profilesList).not.toHaveBeenCalled();
     expect(fixture.calls.profileRegister).not.toHaveBeenCalled();
-    expect(fixture.calls.observationCommit).not.toHaveBeenCalled();
-    expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
+    expect(fixture.calls.semanticsApply).not.toHaveBeenCalled();
   });
 
   it("loads an existing deterministic customer facet directly without a global list", async () => {
@@ -330,26 +289,6 @@ describe("Shopify customer identity projection", () => {
       customer_facet_outcome: "adopted_existing",
     });
     expect(fixture.calls.facetsGet).toHaveBeenCalledOnce();
-    expect(fixture.calls.facetsCreate).not.toHaveBeenCalled();
-  });
-
-  it("adopts the deterministic active facet after a production cardinality conflict", async () => {
-    const fixture = nexFixture();
-    await projectShopifyCustomerIdentity(fixture.nex, fixture.record);
-    fixture.calls.facetsGet.mockRejectedValueOnce(new Error("Facet temporarily not found"));
-    fixture.calls.facetsCreate.mockRejectedValueOnce(
-      new Error("canonical subject already has an active attachment in this slot"),
-    );
-
-    await expect(
-      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
-    ).resolves.toMatchObject({
-      projected: true,
-      customer_facet_outcome: "adopted_existing",
-    });
-    expect(fixture.calls.facetsGet).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^facet-attachment:moonsleep\.customer\.v1:/),
-    });
   });
 
   it("loads the committed record from a record.ingested event before projection", async () => {
@@ -385,6 +324,7 @@ describe("Shopify customer identity projection", () => {
     ).resolves.toMatchObject({ projected: true, records: 1, customers: 1, ignored: 0 });
     expect(fixture.calls.getMany).toHaveBeenCalledWith({ ids: ["record-row-1"] });
     expect(fixture.calls.get).not.toHaveBeenCalled();
+    expect(fixture.calls.semanticsApply).not.toHaveBeenCalled();
   });
 
   it("skips non-customer Shopify records without touching identity", async () => {
@@ -480,17 +420,6 @@ describe("Shopify customer identity projection", () => {
     expect(observation).not.toHaveProperty("merge_candidate");
     expect(observation).not.toHaveProperty("email");
     expect(observation).not.toHaveProperty("phone");
-  });
-
-  it("fails closed when canonical resolution disagrees with the observation", async () => {
-    const fixture = nexFixture({ canonicalId: "entity-canonical" });
-    fixture.calls.resolve.mockResolvedValueOnce({
-      ok: true,
-      payload: { canonical_id: "entity-other", hops: 1 },
-    });
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).rejects.toThrow(
-      /resolution disagrees/,
-    );
   });
 
   it("treats Entity tags as compatibility hints rather than customer-role authority", async () => {
