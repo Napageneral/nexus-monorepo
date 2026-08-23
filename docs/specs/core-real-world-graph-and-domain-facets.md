@@ -220,8 +220,9 @@ object.
 The canonical identity, revision, targeting, resolution, projection, and Core
 Graph contract for every MoonSleep domain Resource is defined by
 [Canonical Projected Objects](canonical-projected-objects.md). Domain ownership
-means ownership of vocabulary, schemas, relationships, and Projector semantics;
-it does not require a per-Resource storage or resolver implementation.
+means ownership of vocabulary, schemas, relationships, and projection
+semantics; it does not require a per-Resource storage, resolver, or permanent
+Projector implementation.
 
 Orders, order lines, packages, fulfillment obligations, purchase orders,
 invoices, payments, returns, refunds, carrier incidents, claims, lots, and

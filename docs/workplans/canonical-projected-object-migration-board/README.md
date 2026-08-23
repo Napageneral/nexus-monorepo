@@ -1,4 +1,4 @@
-# Canonical Projected Object Migration Board
+# Canonical Projected Object Foundation Board
 
 **Status:** WORKPLAN
 **Last Updated:** 2026-08-23
@@ -9,14 +9,46 @@
 
 ## Outcome
 
-Nex has one canonical object registry and one generic projected-object
-substrate. Declaring a legitimate `moonsleep.*` object type atomically gives
-its instances canonical identity, immutable revisions, direct Observation
-targeting, Core Graph relationships, exact resolution, and evidence lineage.
+Nex has one small Canonical Object Kernel. An authorized agent or deterministic
+producer can project any registered `moonsleep.*` object through two generic
+operations:
 
-Native Nex subjects resolve through native adapters at the same ordered batch
-seam. Historical vocabulary remains replayable without compatibility objects,
-fallback resolvers, duplicate graph heads, or rewritten historical cursors.
+```text
+objects.publish_revision
+objects.resolve_many
+```
+
+The kernel supplies stable identity, immutable revisions, current heads,
+Observation targeting, Core Graph relationships, exact resolution, and
+evidence lineage. Native Nex objects remain native and resolve through owner
+adapters at the same seam.
+
+The foundation is proven with Purchase Order and Product Revision. After that,
+objects converge one at a time according to business need. The board does not
+create a domain-family migration framework, permanent projector registry, or
+historical decoder subsystem.
+
+## Deliberate simplification
+
+The earlier 20-ticket plan incorrectly promoted implementation details and
+domain migrations into architectural phases. This board replaces it with six
+bounded tickets.
+
+These are no longer separate phases:
+
+- **Native dispatch** is an internal detail of `objects.resolve_many`.
+- **Channel binding** is one contained native adapter integration in CPO-003.
+- **Native reuse and Facet collapse** are `reuse | alias | create` vocabulary
+  decisions made per candidate.
+- **Canonical Supply declarations** are ordinary object declarations made when
+  those objects are needed.
+- **Supply projectors** are projecting agents or deterministic producers using
+  the generic publication operation.
+- **Historical decoding** is projection-time vocabulary interpretation, not a
+  standing subsystem.
+
+Disabled or superseded projectors and decoders are removal candidates. They are
+not prerequisites for the new foundation.
 
 ## Current baselines
 
@@ -28,168 +60,126 @@ fallback resolvers, duplicate graph heads, or rewritten historical cursors.
   - crosswalk lifecycle/fallback deletion: `cc4f53a095`
   - migration/materialization deletion: `2ec08313fd`
   - generalized historical-ledger verification: `2acbd3e73d`
+- Projecting and historical-interpretation agent:
+  `codex://threads/019fec90-be1c-7cc3-8961-5c05caadd78d`
 
-These hashes are planning baselines, not permission to ignore newer exact main
-at ticket execution. Every ticket starts from a clean worktree at then-current
-`origin/main` and records its immutable source commit.
-
-## Current gaps
-
-The current system has:
-
-- an object-registry v1 that mixes canonical objects, proposals, compatibility
-  aliases, evidence custody, read models, physical storage, and open gaps;
-- per-object Observation target declarations and duplicated adapter registries;
-- MoonSleep object identity and revision mechanics spread across domain tables;
-- hard-coded Nex and MoonSleep resolver paths;
-- packet terms and physical table names leaking into semantic vocabulary;
-- candidate packet nouns treated too readily as permanent object types; and
-- relationship vocabulary that has not yet received the same many-to-one
-  consolidation as object vocabulary.
+These hashes are planning baselines only. Each implementation ticket begins in
+a clean worktree at then-current exact `origin/main` and records its immutable
+source commit.
 
 ## Execution rules
 
-1. The canonical spec owns target state. Tickets may not redefine it.
-2. The registry is binary: incomplete candidates remain outside it.
-3. Every registered MoonSleep object uses the generic projected-object
-   implementation and is immediately resolvable and targetable.
-4. No ticket adds a per-object MoonSleep resolver or Observation adapter.
-5. Current physical tables are migration sources or optional read models, not
-   future semantic owners.
-6. Historical packets and cursors are never rewritten. Compatibility is a
-   versioned vocabulary decoder plus exact instance alias custody.
-7. Native Entity, Place, Channel, Loop, Commitment, and Facet identities remain
-   native and are never copied into MoonSleep projected-object storage.
-8. Read receipts remain deterministic result digests with no read-receipt
-   table, operator, or production workflow.
-9. Every production cutover is separately admitted, reversible or resumable,
-   and receipt-backed. Source merge is not production authorization.
-10. The active Supply historical cursor stays paused until CPO-013 proves the
-    canonical Supply family and explicitly releases it.
+1. Work one ticket at a time unless Tyler explicitly approves parallel work.
+2. The canonical spec owns target semantics; tickets may not invent a second
+   registry, projector system, decoder system, resolver system, or activation
+   lifecycle.
+3. Agents are first-class projecting producers. The registry never requires a
+   permanent projector declaration for an object type.
+4. Every registered `moonsleep.*` type uses the generic kernel immediately.
+5. Every candidate receives one `reuse | alias | create` decision before
+   registration. The exhaustive vocabulary census remains research input, not
+   a global gate.
+6. Migrate one object at a time unless two identities are demonstrably
+   inseparable.
+7. Delete replaced vocabulary and code as each concept converges. Do not carry
+   disabled projectors or decoders toward a final big-bang cleanup.
+8. Historical packets and cursors are never rewritten.
+9. Source merge is not production authorization. Every production change has
+   separate admission, readback, rollback or resume semantics, and receipts.
+10. The active historical cursor remains paused until the exact CPO-004 proof
+    and a separately approved resume transaction complete.
 
 ## Dependency DAG
 
 ```mermaid
 flowchart TD
-    CPO001[CPO-001 Canonical spec lock] --> CPO002[CPO-002 Independent canon alignment]
-
-    CPO002 --> CPO003[CPO-003 Registry v2 compiler]
-    CPO002 --> CPO004[CPO-004 Projected-object storage]
-    CPO002 --> CPO008[CPO-008 Validation ladder]
-    CPO002 --> CPO009[CPO-009 Object and relationship consolidation]
-
-    CPO003 --> CPO005[CPO-005 Publish and resolve module]
-    CPO004 --> CPO005
-
-    CPO005 --> CPO006[CPO-006 Observation and Core Graph integration]
-    CPO003 --> CPO007[CPO-007 Native dispatch and Channel binding]
-    CPO005 --> CPO007
-
-    CPO007 --> CPO010[CPO-010 Native reuse and Facet collapse]
-    CPO009 --> CPO010
-
-    CPO003 --> CPO011[CPO-011 Canonical Supply declarations]
-    CPO006 --> CPO011
-    CPO009 --> CPO011
-    CPO010 --> CPO011
-
-    CPO005 --> CPO012[CPO-012 Supply projectors and historical decoder]
-    CPO006 --> CPO012
-    CPO011 --> CPO012
-
-    CPO007 --> CPO013[CPO-013 Supply parity, cutover, and resume]
-    CPO008 --> CPO013
-    CPO012 --> CPO013
-
-    CPO013 --> CPO014[CPO-014 Commerce migration]
-    CPO013 --> CPO015[CPO-015 Fulfillment migration]
-    CPO013 --> CPO016[CPO-016 Claims migration]
-    CPO013 --> CPO017[CPO-017 Finance migration]
-    CPO013 --> CPO018[CPO-018 View and workspace convergence]
-
-    CPO014 --> CPO019[CPO-019 Legacy semantic hard cut]
-    CPO015 --> CPO019
-    CPO016 --> CPO019
-    CPO017 --> CPO019
-    CPO018 --> CPO019
-
-    CPO008 --> CPO020[CPO-020 Final proof, review, and archive]
-    CPO019 --> CPO020
+    CPO001[CPO-001 Simplified kernel contract] --> CPO002[CPO-002 Generic Canonical Object Kernel]
+    CPO002 --> CPO003[CPO-003 Observation, graph, and native resolution]
+    Channel[Completed native Channel resolver] --> CPO003
+    CPO003 --> CPO004[CPO-004 Agent projection proof]
+    CPO004 --> CPO005[CPO-005 Incremental object convergence]
+    CPO005 --> CPO006[CPO-006 Legacy deletion and foundation closure]
 ```
 
-The critical path is:
+The critical path is intentionally linear:
 
 ```text
-CPO-001 → CPO-002 → CPO-003/CPO-004 → CPO-005 → CPO-006/CPO-007
-        → CPO-010/CPO-011 → CPO-012 → CPO-013
-        → remaining family migrations → CPO-019 → CPO-020
+CPO-001 -> CPO-002 -> CPO-003 -> CPO-004 -> CPO-005 -> CPO-006
 ```
 
-CPO-008 and CPO-009 deliberately run early and in parallel. No Supply object
-declaration may bypass the consolidated candidate review, and no Supply cutover
-may precede the cleanroom proof contract.
+The only external implementation input is the already-completed native Channel
+resolver used by CPO-003. It does not block construction of the generic
+projected-object kernel in CPO-002.
 
 ## Ticket index
 
 | Ticket | State | Outcome | Depends on |
 | --- | --- | --- | --- |
-| [CPO-001](completed/CPO-001-canonical-spec-lock.md) | completed | Canonical target-state spec and board | — |
-| [CPO-002](not-started/CPO-002-independent-canon-alignment.md) | not started | Independent spec/corpus reconciliation | CPO-001 |
-| [CPO-003](not-started/CPO-003-registry-v2-compiler.md) | not started | Canonical-only registry and generated catalogs | CPO-002 |
-| [CPO-004](not-started/CPO-004-projected-object-storage.md) | not started | Generic identity, revision, and head storage | CPO-002 |
-| [CPO-005](not-started/CPO-005-publish-resolve-module.md) | not started | One publication and resolution interface | CPO-003, CPO-004 |
-| [CPO-006](not-started/CPO-006-observation-core-graph-integration.md) | not started | Uniform targeting and revision-linked graph | CPO-005 |
-| [CPO-007](not-started/CPO-007-native-dispatch-channel-binding.md) | not started | Native resolver dispatch and Channel binding | CPO-003, CPO-005, Channel branch |
-| [CPO-008](not-started/CPO-008-validation-ladder-cleanroom.md) | not started | Durable conformance and cleanroom proof | CPO-002 |
-| [CPO-009](not-started/CPO-009-object-relationship-consolidation.md) | not started | Approved object and relationship vocabulary | CPO-002 |
-| [CPO-010](not-started/CPO-010-native-reuse-facet-collapse.md) | not started | Remove duplicate core identities | CPO-007, CPO-009 |
-| [CPO-011](not-started/CPO-011-supply-declarations.md) | not started | Complete canonical Supply declarations | CPO-003, CPO-006, CPO-009, CPO-010 |
-| [CPO-012](not-started/CPO-012-supply-projectors-decoder.md) | not started | Supply revisions and historical decoding | CPO-005, CPO-006, CPO-011 |
-| [CPO-013](not-started/CPO-013-supply-cutover-resume.md) | not started | Supply parity, cutover, and cursor release | CPO-007, CPO-008, CPO-012 |
-| [CPO-014](not-started/CPO-014-commerce-migration.md) | not started | Commerce projected-object convergence | CPO-013 |
-| [CPO-015](not-started/CPO-015-fulfillment-migration.md) | not started | Fulfillment projected-object convergence | CPO-013 |
-| [CPO-016](not-started/CPO-016-claims-migration.md) | not started | Claims projected-object convergence | CPO-013 |
-| [CPO-017](not-started/CPO-017-finance-migration.md) | not started | Finance projected-object convergence | CPO-013 |
-| [CPO-018](not-started/CPO-018-view-workspace-convergence.md) | not started | Read views leave the identity registry | CPO-013 |
-| [CPO-019](not-started/CPO-019-legacy-semantic-hard-cut.md) | not started | Delete per-object adapters and duplicate authority | CPO-014 through CPO-018 |
-| [CPO-020](not-started/CPO-020-final-proof-review-archive.md) | not started | Complete proof, independent review, and archive | CPO-008, CPO-019 |
+| [CPO-001](completed/CPO-001-simplified-kernel-contract.md) | completed | Canonical two-operation, agent-projection contract | — |
+| [CPO-002](not-started/CPO-002-generic-canonical-object-kernel.md) | not started | Registry, identities, revisions, heads, provenance, and two generic operations | CPO-001 |
+| [CPO-003](not-started/CPO-003-observation-graph-native-resolution.md) | not started | Uniform targeting, revision-linked graph, and native Channel adapter binding | CPO-002, Channel branch |
+| [CPO-004](not-started/CPO-004-agent-projection-proof.md) | not started | Agent projects Purchase Order and Product Revision end to end, including historical terms | CPO-003 |
+| [CPO-005](not-started/CPO-005-incremental-object-convergence.md) | not started | Prove the repeatable one-object convergence loop and seed independent follow-on tickets | CPO-004 |
+| [CPO-006](not-started/CPO-006-legacy-deletion-foundation-closure.md) | not started | Delete superseded foundation-era machinery and close the foundation proof | CPO-005 |
+
+## What happens after CPO-006
+
+CPO-006 closes the foundation, not every future domain migration.
+
+Each additional candidate becomes a small independent ticket using the template
+established by CPO-005:
+
+```text
+classify -> declare if needed -> agent projects -> verify -> move consumers -> delete replacement
+```
+
+Examples may include Manufacturing Run, Supply Shipment, Joint Cargo Plan,
+Invoice, Claim, or another business-needed object. Their order is determined by
+the active evidence chronology and business need, not by a predeclared family
+sequence.
+
+The vocabulary census remains a reviewable ledger of candidates and aliases.
+It does not force all candidates to become objects and does not block an
+already-decided object from using the kernel.
 
 ## Repository ownership
 
-- **Umbrella repository** owns the canonical spec, registry contract, generated
-  cross-repository catalogs, vocabulary decisions, and this workplan.
-- **Nex core repository** owns generic storage, publication, resolution,
-  Observation targeting, Core Graph integration, native resolver dispatch, and
-  cleanroom substrate proof.
-- **MoonSleep repository** owns domain schemas, Projectors, object-family
-  migrations, parity reads, and production cutovers.
-- **Native Channel track** owns native Channel implementation. This board only
-  binds the single `nex.channel` entry to its completed resolver interface.
+- **Umbrella repository** owns the canonical specification, registry contract,
+  vocabulary decisions, and this board.
+- **Nex core repository** owns the Canonical Object Kernel, generic operations,
+  Observation targeting, Core Graph integration, owner-adapter seam, and
+  conformance cleanroom.
+- **MoonSleep repository** owns domain schemas, agent instructions or
+  deterministic projection logic when useful, exact consumers, and governed
+  production cutovers.
+- **Native domains** own their identity readers. The Channel track supplies the
+  completed `nex.channel` adapter implementation consumed by CPO-003.
 
 ## Board movement
 
 - A ticket lives in exactly one state directory.
 - Moving the file is the status change.
-- `in-progress` requires exact source commits and an owner.
+- `in-progress` requires an owner and exact current source commits.
 - `completed` requires every acceptance criterion and named validation result.
-- A source merge does not complete a production-cutover ticket.
-- When CPO-020 completes, archive this whole board under
-  `docs/archive/workplans/` and retain the validation ladder as active proof
-  corpus.
+- A source merge does not complete a production transaction.
+- CPO-006 archives this foundation board only after the kernel, proof objects,
+  replacement deletions, and continuation template are independently verified.
 
-## Global acceptance
+## Foundation acceptance
 
-- One canonical registry contains complete identity-bearing subject types only.
-- Every registered MoonSleep type uses the generic projected-object substrate.
-- Every canonical MoonSleep object is revisioned, resolvable, directly
-  targetable, and Core Graph addressable.
-- Native objects remain native behind the same ordered batch interface.
-- Every projected field and relationship traces through Observations, Facts,
-  and Records.
-- No duplicate semantic head, per-object adapter, active compatibility object,
-  or fuzzy identity inference remains.
-- Historical packets replay through a versioned decoder without cursor rewrite.
-- Read views and receipts remain outside the canonical object registry.
-- SQLite and PostgreSQL pass the same conformance suite.
-- The active Supply history resumes only after its exact canonical family passes
-  the named cutover gate.
+- One canonical registry contains complete identity-bearing object types only.
+- One deep module exposes `objects.publish_revision` and
+  `objects.resolve_many`.
+- Agents and deterministic producers use the same publication operation.
+- No permanent per-object MoonSleep resolver, target adapter, projector
+  registration, or historical decoder subsystem is required.
+- Purchase Order and Product Revision prove stable identity, idempotent replay,
+  immutable revision advancement, targetability, graph addressability,
+  resolution, and provenance.
+- `nex.channel` resolves through its native owner without Communication Stream
+  fallback or successor inference.
+- Read Views, receipts, and action authority remain outside the object registry.
+- Historical vocabulary is interpreted without rewriting packets or cursors.
+- Replaced disabled projectors, decoders, compatibility declarations, and
+  duplicate adapter paths are deleted.
+- SQLite and PostgreSQL pass the same interface-level cleanroom suite.

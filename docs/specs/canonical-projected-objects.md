@@ -2,35 +2,152 @@
 
 **Status:** CANONICAL
 **Last Updated:** 2026-08-23
-**Related:** [Nex Core Real-World Graph and Domain Facets](core-real-world-graph-and-domain-facets.md), [Continuous Evidence, Late-Arriving Evidence, and Review](continuous-evidence-late-arriving-evidence-and-review.md), [Canonical Projected Object Migration Board](../workplans/canonical-projected-object-migration-board/README.md)
+**Related:** [Nex Core Real-World Graph and Domain Facets](core-real-world-graph-and-domain-facets.md), [Continuous Evidence, Late-Arriving Evidence, and Review](continuous-evidence-late-arriving-evidence-and-review.md), [Canonical Projected Object Foundation Board](../workplans/canonical-projected-object-migration-board/README.md)
 
 ---
 
 ## Purpose
 
-Nex makes a legitimate domain object simple to define and uniform to use.
+MoonSleep domain objects are projections of evidence already ingested into Nex:
 
-Once a canonical object type is registered, every object of that type has the
-same complete behavior:
+```text
+Records -> Facts -> Observations -> projecting agent -> canonical object revision
+```
 
-- a stable canonical identity;
-- immutable revision history and a current head;
-- direct Observation targeting;
-- Core Graph addressability and typed relationships;
-- exact resolution through one ordered, fail-closed interface;
-- deterministic lineage to the Observations, Facts, and Records from which it
-  was projected; and
-- deterministic read receipts that require no durable read-custody workflow.
+This specification defines the small Nex foundation that makes every legitimate
+MoonSleep object uniformly identity-bearing, revisioned, targetable,
+graph-addressable, and resolvable.
 
-A domain author defines the object once. The projected-object substrate owns
-the repeated identity, history, validation, resolution, and graph mechanics.
+The foundation does not require a permanent projector implementation for each
+object type. An authorized agent, deterministic program, or human-guided
+workflow may project an object by calling the same generic publication
+operation.
 
-## Experience
+## Canonical decision
 
-Defining a new MoonSleep object requires one complete canonical declaration
-and a projector that assembles its state from accepted Observations. The domain
-author does not create a new object table, history table, head table, resolver,
-Observation adapter, alias resolver, or Core Graph writer.
+Nex provides one Canonical Object Kernel with two primary operations:
+
+```text
+objects.publish_revision
+objects.resolve_many
+```
+
+Registering a complete MoonSleep object type immediately gives every instance
+the behavior owned by that kernel. A domain author does not create a new object
+table, revision table, head table, resolver, Observation adapter, graph writer,
+projector registration, or activation workflow.
+
+There is no partially active registry entry. An incomplete candidate remains
+outside the canonical registry.
+
+## Canonical vocabulary
+
+### Canonical Object Type
+
+A Canonical Object Type is a registered class of independently meaningful
+real-world or operational subjects, such as Purchase Order, Product Revision,
+Manufacturing Run, Invoice, or Fulfillment Package.
+
+Its globally stable registry identifier is an `object_type_id`, for example
+`moonsleep.purchase_order`.
+
+### Canonical Object
+
+A Canonical Object is one stable instance of one Canonical Object Type. Its
+identity persists while its attributes, relationships, evidence basis, and
+business state change.
+
+Its stable address is:
+
+```text
+object_type_id + canonical_object_id
+```
+
+### Object Revision
+
+An Object Revision is one immutable, complete projected state of a Canonical
+Object. It records the state, relationships, predecessor revision, projection
+producer, and exact supporting Observations.
+
+### Projecting agent
+
+A projecting agent interprets Records, Facts, and Observations and proposes a
+complete Object Revision. The agent supplies domain judgment. It does not own
+object storage, revision history, target validation, resolution, or Core Graph
+mechanics.
+
+Deterministic code may act as a projecting producer through the same interface.
+"Projecting agent" is the canonical term when an agent performs the work;
+"Projector subsystem" is not part of this architecture.
+
+### Canonical Object Kernel
+
+The Canonical Object Kernel is the deep Nex module behind the two generic
+operations. It owns canonical identities, immutable revisions, current heads,
+provenance, relationship publication, exact resolution, and conformance for
+all projected MoonSleep object types.
+
+### Native Nex Object
+
+A Native Nex Object is a universal Nex subject, such as Entity, Place, Channel,
+Loop, Commitment, or Facet Attachment, whose identity is maintained by its
+native Nex domain. Native objects resolve through small owner adapters at the
+same resolution seam. They are not copied into MoonSleep projected-object
+storage.
+
+### Read View
+
+A Read View is a query or workspace over canonical objects, Facets, evidence,
+or other views. It does not acquire canonical identity merely because it is
+useful to display or query.
+
+## System model
+
+```mermaid
+flowchart LR
+    Record[Records] --> Fact[Facts]
+    Fact --> Observation[Observations]
+    Observation --> Agent[Projecting agent or deterministic producer]
+    Registry[Canonical object declaration] --> Kernel[Canonical Object Kernel]
+    Agent -->|objects.publish_revision| Kernel
+    Kernel --> Identity[Stable canonical identity]
+    Kernel --> Revision[Immutable revisions and current head]
+    Kernel --> Graph[Revision-linked Core Graph]
+    Observation -->|targets canonical address| Identity
+    Caller[Graph and object callers] -->|objects.resolve_many| Kernel
+```
+
+Records preserve immutable source material. Facts preserve source-grounded
+claims. Observations preserve accepted interpretations. Canonical Objects are
+the current domain projections assembled from that evidence.
+
+A Canonical Object is not an alternate evidence authority. Every projected
+attribute and relationship traces through accepted Observations to sealed Facts
+and immutable Records.
+
+## Canonical object declaration
+
+The registry contains only complete identity-bearing object types. It does not
+contain proposals, read views, receipts, compiler custody, rebuildable rows,
+historical compatibility objects, or physical storage names posing as business
+language.
+
+A declaration contains only what the generic kernel needs to handle the type:
+
+- one stable `object_type_id`;
+- preferred singular and plural names;
+- the canonical identity contract;
+- the immutable attribute schema;
+- relationship slots, cardinality, and target contracts;
+- accepted historical input terms;
+- non-authoritative human search terms;
+- owning domain; and
+- the resolution binding, which defaults to the generic projected-object
+  implementation for `moonsleep.*` types.
+
+The declaration does not name a permanent projector. Any authorized producer
+may publish a conforming revision. Publication authority belongs to normal Nex
+authorization policy, not to a second projector registry.
 
 Conceptually:
 
@@ -41,167 +158,70 @@ defineObjectType({
     singular: "Purchase Order",
     plural: "Purchase Orders",
   },
-  acceptedPacketTerms: ["inventory_purchase_order"],
-  searchTerms: ["PO", "supply order"],
+  acceptedInputTerms: ["inventory_purchase_order", "supply_order"],
+  searchTerms: ["PO"],
+  identityContractId: "moonsleep.purchase_order.identity.v1",
   attributes: purchaseOrderAttributes,
   relationships: {
     supplier: "nex.entity",
-    lots: "moonsleep.lot",
     productRevision: "moonsleep.product_revision",
-    paymentApplications: "moonsleep.payment_application",
     shipments: "moonsleep.supply_shipment",
   },
+  ownerDomain: "moonsleep.supply",
 })
 ```
 
-If the declaration is incomplete or contradictory, registry publication fails.
-If it is published, the type is canonical, resolvable, targetable, revisioned,
-and graph-addressable. There is no partial activation lifecycle inside the
-canonical registry.
+If the declaration is published, the type is immediately targetable,
+resolvable, revisioned, and graph-addressable. Registration is activation.
 
-## Canonical vocabulary
+## Object eligibility and vocabulary consolidation
 
-### Canonical Object Type
+A candidate becomes a Canonical Object Type only when the domain needs to:
 
-A Canonical Object Type is a registered class of independently meaningful
-real-world or operational subjects, such as Purchase Order, Product Revision,
-Manufacturing Run, Invoice, or Fulfillment Package.
-
-Its registry identifier is globally stable, for example
-`moonsleep.purchase_order`.
-
-### Canonical Object
-
-A Canonical Object is one stable instance of one Canonical Object Type. Its
-identity persists across every change in projected attributes, relationships,
-evidence, and lifecycle state.
-
-The stable address is the tuple of `object_type_id` and
-`canonical_object_id`.
-
-### Object Revision
-
-An Object Revision is one immutable, complete projected state of a Canonical
-Object. It contains the object's attributes, relationships, semantic digest,
-projector contract, predecessor revision, and exact supporting Observations.
-
-### Current Head
-
-The Current Head is the one Object Revision currently selected for a Canonical
-Object. Advancing the head never rewrites or deletes an earlier revision.
-
-### Projector
-
-A Projector deterministically assembles one proposed Object Revision from
-accepted Observations. A Projector supplies domain interpretation; it does not
-implement object storage, identity history, target validation, resolution, or
-Core Graph mechanics.
-
-### Projected-Object Substrate
-
-The Projected-Object Substrate is the deep Nex module that validates and
-publishes Object Revisions, advances Current Heads, exposes exact resolution,
-and publishes revision-linked Core Graph relationships for every registered
-MoonSleep object type.
-
-### Native Nex Object
-
-A Native Nex Object is a universal Nex subject such as Entity, Place, Channel,
-Loop, Commitment, or Facet Attachment whose identity is maintained by its
-native Nex domain. Native objects satisfy the same ordered resolution interface
-through native adapters. They are not copied into the MoonSleep
-Projected-Object Substrate.
-
-### Read View
-
-A Read View is a query or workspace over canonical objects, Facets, evidence,
-or other views. A route, filter, or projection handle does not make the view a
-Canonical Object.
-
-## System model
-
-```mermaid
-flowchart LR
-    Record[Records] --> Fact[Facts]
-    Fact --> Observation[Observations]
-
-    Registry[Canonical Object Registry] --> Projector[Domain Projector]
-    Observation --> Projector
-
-    subgraph Substrate[Generic Projected-Object Substrate]
-        Identity[Canonical Object Identity]
-        Revision[Immutable Object Revisions]
-        Head[Current Head]
-        Graph[Revision-linked Core Graph]
-    end
-
-    Projector --> Identity
-    Projector --> Revision
-    Revision --> Head
-    Revision --> Graph
-```
-
-Records preserve immutable source data. Facts preserve source-grounded claims.
-Observations preserve accepted interpretations. MoonSleep Canonical Objects are
-the domain projections assembled from those Observations.
-
-Every evidence-derived MoonSleep object attribute and relationship traces to
-accepted Observations, which trace to sealed Facts and immutable Records. A
-projected object never becomes an alternate evidence authority.
-
-## Registry contract
-
-The canonical registry contains only complete identity-bearing subject types.
-It does not contain proposals, read views, receipts, compiler custody rows,
-rebuildable projection rows, historical compatibility objects, or physical
-storage names posing as semantic types.
-
-Each entry declares:
-
-- one stable `object_type_id`;
-- preferred singular and plural names;
-- the identity contract for canonical instance IDs;
-- the immutable attribute schema;
-- owner-scoped relationship slots and target contracts;
-- accepted historical packet terms;
-- non-authoritative human search terms;
-- retired terms recognized only to return a correction; and
-- the implementation binding.
-
-Every `moonsleep.*` domain object entry binds to the same generic
-projected-object implementation. Native Nex entries bind to native adapters at
-the shared resolver seam.
-
-The registry has no planned, compatibility-only, resolvable-only, or
-targetable-later entries. Incomplete candidates live outside the canonical
-registry until their complete declaration and implementation are ready.
-
-Accepted packet terms are closed machine inputs and globally unambiguous.
-Search terms may overlap and never drive automatic normalization. Physical
-table, view, and field names are implementation metadata, not semantic aliases.
-
-## Object eligibility
-
-A noun becomes a Canonical Object only when the domain needs to:
-
-1. refer to it independently with a stable identity;
-2. preserve its changes as immutable revisions;
+1. refer to it independently with stable identity;
+2. preserve changes as immutable revisions;
 3. target it with Observations;
 4. relate other canonical objects to it; and
 5. resolve it independently over time.
 
-If those needs do not exist, the noun belongs elsewhere. Statuses normally
-become attributes or events. Revisions use the generic Object Revision model.
-Links normally become typed relationships. Source identifiers remain Record or
-Fact metadata. Receipts remain evidence custody. Collection rows normally
-become membership or Read Views.
+Each candidate receives exactly one decision:
 
-A noun found in a compiler packet or physical table is only a candidate. Its
-presence does not grant canonical object status.
+```text
+reuse | alias | create
+```
 
-## Projected object model
+- **Reuse** an existing Nex or MoonSleep object when identity and lifecycle are
+  the same. Domain-specific data may live in a Facet.
+- **Alias** another term when it names an existing concept.
+- **Create** a new canonical type only when it passes the eligibility test.
 
-The logical substrate contains:
+Examples:
+
+```text
+moonsleep.commitment          -> reuse nex.commitment
+moonsleep.communication_loop  -> reuse nex.loop
+Supply Organization           -> reuse nex.entity + Supply facet
+Facility                      -> reuse nex.place + Facility facet
+inventory_purchase_order      -> alias moonsleep.purchase_order
+supply_order                  -> alias moonsleep.purchase_order
+PO                            -> search term for moonsleep.purchase_order
+product_revision              -> alias moonsleep.product_revision
+product version               -> alias moonsleep.product_revision
+```
+
+Statuses normally become attributes or events. Source identifiers remain
+evidence metadata. Revision-like nouns use Object Revisions. Link-like nouns
+normally become relationships. Packet and table nouns are candidates, not
+automatic objects.
+
+Vocabulary research is an input ledger, not a global activation gate. A
+candidate may be decided and registered independently without waiting for every
+other domain noun to be adjudicated.
+
+## Generic logical model
+
+The kernel exposes one logical model even if SQLite and PostgreSQL use multiple
+physical tables and indexes:
 
 ```text
 Canonical Object Identity
@@ -218,121 +238,74 @@ Object Revision
 ├── attributes
 ├── relationships
 ├── supporting_observation_ids
-├── projector_contract_id
+├── projection_producer_id
+├── projection_contract_id
 ├── registry_digest
 ├── semantic_sha256
 ├── evidence_basis_sha256
 └── committed_at
 ```
 
-The physical SQLite and PostgreSQL implementations may use several normalized
-tables and indexes, but they expose this one logical model.
+Canonical identity and the first revision are committed atomically. Canonical
+Objects are never hard-deleted. Retirement, cancellation, supersession, merge,
+or other terminal meaning is represented by a new revision and explicit
+relationships supported by owner evidence.
 
-Canonical Object identity and the first Object Revision are committed
-atomically. A registered target address may appear in an Observation before
-materialization; resolution returns an explicit miss until the first revision
-exists.
+## Operation 1: `objects.publish_revision`
 
-Canonical Objects are never hard-deleted. Retirement, cancellation,
-supersession, or other terminal business meaning is represented in an immutable
-revision. Supersession and merge relationships are explicit owner evidence and
-are never inferred from similar attributes.
-
-## Revision publication interface
-
-Every Projector publishes through one interface:
+Every projecting agent and deterministic producer publishes through one
+interface:
 
 ```ts
-publishObjectRevision({
+objects.publish_revision({
   objectTypeId,
   canonicalObjectId,
-  expectedPreviousRevisionId,
+  expectedCurrentRevisionId,
   attributes,
   relationships,
   supportingObservationIds,
-  projectorContractId,
+  projectionProducerId,
+  projectionContractId,
 })
 ```
 
-The substrate:
+The kernel:
 
 1. requires a registered Canonical Object Type;
 2. validates the canonical identity contract;
 3. validates attributes and relationships against the exact registry digest;
-4. verifies every supporting Observation and its accepted state;
+4. verifies the supporting Observations and their accepted state;
 5. computes canonical semantic and evidence-basis digests;
 6. treats an exact replay as an idempotent no-op;
-7. uses compare-and-set against the expected Current Head;
-8. appends one immutable Object Revision when semantic state changes;
+7. compare-and-sets the expected current revision;
+8. appends an immutable revision when semantic state changes;
 9. publishes revision-linked Core Graph relationships; and
-10. advances the Current Head atomically.
+10. advances the current head atomically.
 
 New evidence that does not change projected semantic state does not create a
-new Object Revision. Its evidence and review history remains preserved in Nex
-Observations. A changed attribute, relationship, or terminal state creates a
-new revision.
+revision. Changed attributes, relationships, or business state do.
 
-Projector versions are replaceable implementations behind the publication
-interface. The registry does not permanently bind an object type to one
-Projector implementation. Every revision records the exact Projector contract
-that produced it.
+The kernel records who produced a revision, but the registry does not
+permanently bind the type to that producer.
 
-## Observation targeting
+## Operation 2: `objects.resolve_many`
 
-Every Canonical Object Type in this registry is directly targetable. An
-Observation target is:
-
-```text
-object_type_id + canonical_object_id + attribute path or relationship slot
-```
-
-The generic target validator:
-
-1. resolves the exact registry digest;
-2. validates the object type and target address;
-3. validates the attribute path or relationship slot;
-4. validates the target type and cardinality for relationships;
-5. commits the Observation without implicitly mutating object state; and
-6. makes the affected target available for deterministic reprojection.
-
-Observations do not directly rewrite object rows. Projectors consume accepted
-Observation heads and publish complete Object Revisions.
-
-Evidence pipeline objects such as Records, Facts, Fact Sets, Observations, and
-receipts are addressable through their native evidence contracts but are not
-Canonical Object Types in this registry merely because graph relationships may
-reference them.
-
-## Core Graph contract
-
-Every relationship on a projected object revision uses a registered,
-owner-scoped relationship slot. The revision owns the exact current target set
-for each slot.
-
-Current graph reads derive from Current Heads. Historical graph reads resolve
-the relationships captured by the requested Object Revision. Advancing a head
-never rewrites historical edges.
-
-A graph edge carries semantic relationship only. It grants no provider write,
-external action, financial posting, fulfillment, or communication authority.
-
-## Resolution interface
-
-All callers use one ordered batch interface:
+All callers resolve canonical subjects through one ordered batch interface:
 
 ```ts
-resolveSubjects([
+objects.resolve_many([
   {
     requestId,
     objectTypeId,
     observedSubjectId,
+    revisionId,
   },
 ])
 ```
 
-Registry dispatch groups requests by implementation and restores original
-request order. Each position returns either an explicit miss or the existing
-Core Graph resolved-subject custody:
+`revisionId` is optional and selects the current head when absent. Each input
+position returns either an explicit miss or the existing Core Graph custody
+fields:
 
 - `subject_class`;
 - `observed_subject_id`;
@@ -341,135 +314,181 @@ Core Graph resolved-subject custody:
 - `adapter_contract_id`; and
 - `read_receipt_sha256`.
 
-Every `moonsleep.*` domain object uses one generic projected-object resolver.
-Native Nex objects use native adapters behind the same interface.
+The kernel preserves request order, performs exact point reads, and fails
+closed on unknown types, ambiguous identity, cardinality defects, stale
+registry digests, malformed owner results, or missing required state.
 
-Resolvers use exact point reads, never fuzzy search. Unknown types, ambiguous
-identity, cardinality defects, stale registry digests, missing required state,
-or malformed adapter results fail closed.
+The read receipt is a deterministic digest of the request, registry digest,
+canonical identity, selected revision or native row, and complete owner read
+state. Resolution creates no receipt row and requires no receipt operator.
 
-The read receipt is a deterministic digest of the registry digest, request,
-canonical identity, selected revision or native row, semantic digest, and
-complete owner read state. Ordinary resolution writes no receipt row and
-requires no receipt operator or custody workflow.
+Every `moonsleep.*` projected object uses the generic implementation. Native
+Nex objects use owner adapters behind this same interface. Routing by
+resolution binding is an internal implementation detail, not a separate
+declaration system or migration phase.
 
-## Native object adapters
+## Observation targeting and Core Graph
 
-Native adapters preserve the identity and revision semantics of their Nex
-domain. They do not translate native objects into projected MoonSleep copies.
+Every registered Canonical Object Type is directly targetable. An Observation
+target is:
 
-For native Channel, the supplied immutable Channel row ID is canonical, deleted
-rows remain resolvable, the complete native read state including `deleted_at`
-is receipt-bound, and route fields never imply a successor. A Communication
-Stream or cross-domain view cannot replace native Channel resolution.
+```text
+object_type_id + canonical_object_id + attribute path or relationship slot
+```
 
-## Vocabulary and identity aliases
+The registered identity contract can validate a canonical address before its
+first revision exists. Until materialization, resolution returns an explicit
+miss. Publishing the first revision creates identity and state atomically.
 
-Vocabulary normalization and instance identity aliasing are separate.
+Observations do not directly mutate object state. They make accepted evidence
+available to projecting agents, which publish complete revisions.
 
-Vocabulary metadata on a Canonical Object Type maps an accepted historical
-packet term to one canonical type. It owns no identity, resolver, head, or
-authority.
+Relationships belong to exact Object Revisions. Current graph reads derive from
+current heads; historical graph reads use the requested revision. Advancing a
+head never rewrites historical edges.
 
-An instance identity alias maps one exact historical object address to one
-exact canonical object address. It requires explicit custody or reviewed owner
-evidence. Alias chains, cycles, fuzzy matching, and inferred successor identity
-are forbidden.
+Graph addressability grants no provider-write, fulfillment, accounting,
+communication, or other action authority.
 
-New packets emit canonical object type IDs. Historical packets remain replayable
-through a registry-digest-versioned decoder without creating active
-compatibility objects.
+## Agent projection and historical interpretation
 
-## Read views
+Agents are first-class projecting producers.
 
-Read Views live in owner view catalogs outside the canonical object registry.
-They name the Canonical Object Types and evidence contracts they compose but
-own no independent graph head, Observation target, resolver, or mutation
-authority.
+An agent may:
 
-If the business later requires a view noun to have independent stable identity,
-revision history, Observation targeting, and relationships, the noun is
-re-evaluated through the Object eligibility test and may become a Canonical
-Object Type.
+1. read Records, Facts, Observations, and existing canonical heads;
+2. apply current domain and vocabulary rules;
+3. assemble a complete proposed revision;
+4. publish it through `objects.publish_revision`; and
+5. verify the returned identity, revision, relationships, and provenance.
 
-## Determinism and replay
+Historical interpretation is this same activity over older evidence. When an
+old packet says `inventory_purchase_order`, an agent recognizes the accepted
+input term and publishes `moonsleep.purchase_order` through the normal
+operation.
 
-Given the same registry digest, accepted Observation heads, Projector contract,
-and canonical object identity, projection produces the same semantic payload
-and relationship set.
+Historical replay does not require a standing decoder subsystem, compatibility
+object, fallback resolver, duplicate graph head, or one decoder per object.
+Small deterministic decoders may remain only when they are active, correct,
+and materially simpler than agent interpretation. Disabled or superseded
+projectors and decoders are removed.
 
-Replaying an exact input is a no-op. Late-arriving or corrected evidence first
-changes Nex Facts or Observations. A Projector appends a new Object Revision
-only when the accepted domain understanding changes.
+Historical packets and cursors are never rewritten.
 
-No replay rewrites an earlier Record, Fact, Observation, Object Revision, or
-historical Core Graph relationship.
+## Native object resolution
+
+Native Nex objects remain owned by their native domains. A small adapter is
+needed only where native storage actually varies from the generic projected
+store.
+
+For `nex.channel`, the native owner adapter preserves the supplied immutable
+Channel row ID as canonical, resolves deleted rows, binds the complete row
+including `deleted_at` into the read digest, and never infers a successor from
+route fields. Communication Stream data is not a Channel resolver.
+
+Binding `nex.channel` is a contained part of the generic resolution operation,
+not a prerequisite for declaring projected MoonSleep objects.
+
+## Aliases and Read Views
+
+Vocabulary aliases live on the canonical type and own no identity, resolver,
+head, or authority. Exact instance identity aliases, when genuinely needed,
+map one historical address to one canonical address under explicit owner
+evidence. Alias chains, cycles, fuzzy matching, and inferred successors are
+forbidden.
+
+Read Views remain in owner view catalogs outside the identity registry. They
+compose canonical objects and evidence but own no independent head, target,
+resolver, or mutation authority.
+
+## Incremental object convergence
+
+After the kernel is proven, objects migrate independently. The complete loop
+for one candidate is:
+
+```text
+classify reuse | alias | create
+        -> register only if create
+        -> agent publishes canonical revision
+        -> verify target, resolution, graph, and provenance
+        -> move exact consumers
+        -> delete superseded vocabulary and code
+```
+
+There is no required Supply-wide, Commerce-wide, Claims-wide, or Finance-wide
+big-bang migration. A family may still be grouped when its identities are
+inseparable, but family membership alone is not a reason to couple cutovers.
+
+Legacy removal happens as each concept converges. The system does not preserve
+disabled projectors, decoders, adapters, or compatibility declarations for a
+future final migration.
 
 ## Action boundary
 
 Canonical objects represent accepted domain understanding. They do not confer
 authority to send messages, purchase labels, move inventory, post accounting
-entries, issue refunds, mutate providers, or perform any other external action.
+entries, issue refunds, mutate providers, or perform another external action.
 
-Actions require their own domain authorization and source-owned readback.
-Projection acceptance and action authority remain structurally separate.
+Actions require separate domain authorization and source-owned readback.
 
 ## Required conformance
 
-The registry compiler and substrate reject:
+The registry and kernel reject:
 
-- incomplete canonical declarations;
-- duplicate object type IDs or accepted packet terms;
-- physical storage names accepted as semantic type IDs;
-- read views, receipts, evidence rows, or compatibility objects in the
-  canonical registry;
-- MoonSleep object entries bound to per-object resolvers;
-- unregistered attribute paths or relationship slots;
+- incomplete or duplicate canonical declarations;
+- duplicate accepted input terms;
+- physical storage names accepted as canonical type IDs;
+- read views, receipts, custody rows, or compatibility objects in the registry;
+- permanent per-object MoonSleep resolver or projector registrations;
+- unregistered attributes or relationship slots;
 - relationship cardinality or target-contract violations;
 - publication from missing or unaccepted Observations;
-- stale-head revision publication;
+- stale-head publication;
 - non-deterministic replay;
-- alias cycles, chains, or ambiguous targets;
+- alias cycles, chains, fuzzy matches, or ambiguous targets;
 - resolver output with wrong order, cardinality, or custody shape; and
-- any implicit external action authority.
+- implicit external action authority.
 
-SQLite and PostgreSQL implementations satisfy the same conformance suite.
+SQLite and PostgreSQL implementations satisfy the same interface-level
+conformance suite.
 
 ## Rejected alternatives
 
-### Per-object tables and resolvers
+### Per-object storage, resolvers, and projector registrations
 
-Rejected because each new domain noun would recreate identity, revision,
-targeting, resolution, and graph machinery and would make current storage shape
-part of the semantic model.
+Rejected because each new noun would recreate generic mechanics and turn
+current implementation shape into domain architecture.
+
+### Permanent historical decoder subsystem
+
+Rejected because historical vocabulary interpretation happens at projection
+time and publishes through the same operation as current evidence.
+
+### Domain-family migration framework
+
+Rejected because the kernel is general and objects can converge independently.
+Migration order follows business need, not today's table or packet families.
 
 ### Partial activation states
 
-Rejected because a registry entry that is not resolvable and targetable creates
-ambiguous partial truth. Incomplete work remains outside the canonical
-registry.
+Rejected because a registry entry that is not fully targetable and resolvable
+creates ambiguous partial truth.
 
-### Separate Observation-adapter registry
+### Separate Observation-target registry
 
-Rejected for MoonSleep objects because targetability is uniform and generated
-from the canonical object declaration. Native Nex adapters vary only at the
-shared resolver seam.
+Rejected because targetability is generated from the canonical object
+declaration. Native storage varies only behind the shared resolution seam.
 
 ### Compatibility objects and resolver fallbacks
 
-Rejected because historical decoding requires vocabulary and exact instance
-alias custody, not duplicate semantic heads or active fallback owners.
+Rejected because aliases and projection-time interpretation preserve historical
+meaning without duplicate semantic heads or active fallback owners.
 
-### Physical storage as canonical language
+## Final invariant
 
-Rejected because tables and read models are implementations that can change
-without changing the business object.
-
-## Canonical decision
-
-MoonSleep Canonical Objects are uniform projections of Nex Records, Facts, and
-Observations. Declaring a legitimate object type once gives every instance
-stable identity, immutable revisions, direct targeting, Core Graph
-relationships, and exact resolution through one generic substrate. Native Nex
-objects remain native and satisfy the same resolver interface. Migration and
-current storage do not shape this target model.
+Declaring a legitimate MoonSleep object type makes the Canonical Object Kernel
+available immediately. An authorized agent or deterministic producer may then
+publish revisions derived from Nex Observations. Every published object has one
+stable identity, immutable history, direct targeting, revision-linked graph
+relationships, exact resolution, and evidence lineage through the same two
+operations.

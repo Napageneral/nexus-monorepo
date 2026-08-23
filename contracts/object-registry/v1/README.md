@@ -2,8 +2,8 @@
 
 > **Current implementation contract:** the canonical target state is
 > [Canonical Projected Objects](../../../docs/specs/canonical-projected-objects.md).
-> Version 1 remains the current catalog and migration input until the v2
-> registry and projected-object substrate replace it. Its planned,
+> Version 1 remains the current catalog and migration input until the canonical
+> registry and Canonical Object Kernel replace it. Its planned,
 > compatibility, read-model, per-owner adapter, and physical-storage structure
 > must not be treated as the target architecture.
 
