@@ -1,10 +1,139 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "89e3a901676cf33be739e3b262194ec3fd1f5276f6d0ca3f2eda6a7d39e3f3e1",
+  "registry_digest": "779025aee49314634f99bf6cf6a04c97492f2ade35dbd671726669414fcbae23",
   "registry": {
     "registry_id": "nex.canonical_objects",
     "schema_version": "2.0.0",
     "entries": [
+      {
+        "object_type_id": "moonsleep.product_revision",
+        "names": {
+          "singular": "Product Revision",
+          "plural": "Product Revisions"
+        },
+        "owner_domain": "moonsleep.product-and-supply",
+        "identity_contract_id": "moonsleep.product_revision.identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product_revision_id"],
+          "properties": {
+            "product_revision_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product_family_id", "revision_label", "revision_state"],
+          "properties": {
+            "product_family_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision_label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision_state": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effective_from": {
+              "type": ["string", "null"]
+            },
+            "effective_through": {
+              "type": ["string", "null"]
+            },
+            "specification": {
+              "type": "object"
+            }
+          }
+        },
+        "relationship_slots": [
+          {
+            "relationship_id": "supersedes",
+            "cardinality": "optional_one",
+            "target_object_type_ids": ["moonsleep.product_revision"]
+          }
+        ],
+        "accepted_input_terms": ["product_revision", "product version"],
+        "search_terms": ["product revision"],
+        "resolution_binding": "nex.canonical-object-kernel.v1"
+      },
+      {
+        "object_type_id": "moonsleep.purchase_order",
+        "names": {
+          "singular": "Purchase Order",
+          "plural": "Purchase Orders"
+        },
+        "owner_domain": "moonsleep.supply",
+        "identity_contract_id": "moonsleep.purchase_order.identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["purchase_order_id"],
+          "properties": {
+            "purchase_order_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supplier_name", "status", "currency", "units_ordered"],
+          "properties": {
+            "supplier_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "supplier_reference": {
+              "type": ["string", "null"]
+            },
+            "sku_key": {
+              "type": ["string", "null"]
+            },
+            "ordered_at": {
+              "type": ["string", "null"]
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 1
+            },
+            "units_ordered": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unit_cost": {
+              "type": ["number", "null"]
+            },
+            "notes": {
+              "type": ["string", "null"]
+            },
+            "terms": {
+              "type": "object"
+            }
+          }
+        },
+        "relationship_slots": [
+          {
+            "relationship_id": "orders_revision",
+            "cardinality": "optional_many",
+            "target_object_type_ids": ["moonsleep.product_revision"]
+          }
+        ],
+        "accepted_input_terms": ["inventory_purchase_order", "supply_order"],
+        "search_terms": ["PO", "purchase order"],
+        "resolution_binding": "nex.canonical-object-kernel.v1"
+      },
       {
         "object_type_id": "nex.channel",
         "names": {
@@ -74,6 +203,14 @@
     ]
   },
   "declarations": [
+    {
+      "object_type_id": "moonsleep.product_revision",
+      "declaration_sha256": "fc8961c90999ebc21b11d04c235ae0580e0cfc4713130454619c846e97baadcc"
+    },
+    {
+      "object_type_id": "moonsleep.purchase_order",
+      "declaration_sha256": "f3c42f2b6eee34fb934de5e87ceafbaf74b3f33fab86b0638d23a2b638cf57dc"
+    },
     {
       "object_type_id": "nex.channel",
       "declaration_sha256": "9dfdbaf6a6a46045c3e12b40de9ca616a10c070c4b4b857d7526990616de455f"

@@ -1,7 +1,12 @@
 # CPO-004 — Agent Projection Proof
 
-**State:** not started
+**State:** completed
 **Depends on:** CPO-003
+**Owner:** Canonical Object Registry Consolidation
+**Nex implementation:** `51dff4f8a6`
+**MoonSleep source:** `d8abfec5459a842952edce15878947674275508b`
+**MoonSleep validation:** `fdaca7a25`
+**Registry digest:** `779025aee49314634f99bf6cf6a04c97492f2ade35dbd671726669414fcbae23`
 **Repositories:** nexus umbrella, Nex core, and MoonSleep
 
 ## Goal
@@ -58,10 +63,21 @@ product version            -> moonsleep.product_revision
 
 ## Validation
 
-- Agent-generated proof packet and deterministic readback manifest.
-- SQLite and PostgreSQL end-to-end cleanrooms.
-- Independent identity, revision, target, graph, and provenance audit.
-- Alias and physical-name rejection tests.
-- Historical replay no-op and changed-revision tests.
-- If approved, bounded production projection and separately governed cursor
-  resume receipt.
+- Agent-generated proof packet grounded in SGD-0008 Record/Fact references:
+  passed.
+- Identical SQLite and isolated PostgreSQL 17 projection/readback packet:
+  passed.
+- CPO-003/CPO-004 focused kernel, target, native Channel, graph, store, public
+  operation, and backend suite: 52 tests passed.
+- Exact replay no-op, controlled revision advancement, current/historical
+  relationship separation, accepted-Observation custody, ordered misses, and
+  generic target-consumer readback: passed.
+- Alias convergence and rejection of `inventory_purchase_orders` and `PO` as
+  packet semantics: passed.
+- Nex production build under Node 22: passed.
+- No object-specific runtime path, standing projector, decoder, or duplicate
+  resolver was added. Existing historical Supply evidence remains under the
+  projecting-agent track and was not rewritten or activated.
+- Production projection and historical cursor resume were not performed; each
+  remains a separately admitted transaction after source landing and runtime
+  deployment.
