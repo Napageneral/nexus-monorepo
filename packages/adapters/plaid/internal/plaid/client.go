@@ -824,7 +824,6 @@ type HealthProbe struct {
 	Connected            bool               `json:"connected"`
 	ProviderItemID       string             `json:"provider_item_id,omitempty"`
 	InstitutionID        string             `json:"institution_id,omitempty"`
-	AccountCount         int                `json:"account_count"`
 	LastSuccessfulUpdate string             `json:"last_successful_update,omitempty"`
 	LastFailedUpdate     string             `json:"last_failed_update,omitempty"`
 	LastEventAtMS        int64              `json:"last_event_at_ms,omitempty"`
@@ -838,15 +837,10 @@ func (c *Client) ProbeHealth(ctx context.Context) (HealthProbe, error) {
 	if err != nil {
 		return HealthProbe{}, err
 	}
-	accounts, err := c.GetAccounts(ctx)
-	if err != nil {
-		return HealthProbe{}, err
-	}
 	probe := HealthProbe{
 		Connected:            len(item.Item.ProviderError) == 0,
 		ProviderItemID:       item.Item.ProviderItemID,
 		InstitutionID:        item.Item.InstitutionID,
-		AccountCount:         len(accounts.Accounts),
 		LastSuccessfulUpdate: item.Item.LastSuccessfulUpdate,
 		LastFailedUpdate:     item.Item.LastFailedUpdate,
 		FreshnessState:       "unknown",

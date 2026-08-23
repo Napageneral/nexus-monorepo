@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -79,6 +80,46 @@ func TestShopifyGovernorPersists429Backoff(t *testing.T) {
 	defer cancel()
 	if err := reserveShopifyRequest(ctx, dir, time.Now); err == nil {
 		t.Fatal("429 backoff was not shared with the next request")
+	}
+}
+
+func TestShopifyGovernorInvalidatesRejectedAccessToken(t *testing.T) {
+	t.Setenv(nexadapter.AdapterStateDirEnvVar, t.TempDir())
+	originalClient := shopifyHTTPClient
+	defer func() { shopifyHTTPClient = originalClient }()
+	state := &shopifyState{
+		ConnectionID: "shopify-production",
+		ShopDomain:   "moon.example.myshopify.com",
+		ClientID:     "client-a",
+		ClientSecret: "secret-a",
+	}
+	if _, err := sharedShopifyAccessToken(context.Background(), state, func(context.Context, *shopifyState) (shopifyAccessToken, error) {
+		return shopifyAccessToken{Value: "rejected-token", ExpiresAt: time.Now().UTC().Add(24 * time.Hour)}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cachePath, _, err := sharedShopifyTokenCachePaths(state.ConnectionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	shopifyHTTPClient = server.Client()
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("X-Shopify-Access-Token", "rejected-token")
+	response, err := doShopifyRequest(context.Background(), state, request)
+	if err != nil {
+		t.Fatalf("governed request: %v", err)
+	}
+	_ = response.Body.Close()
+	if _, err := os.Stat(cachePath); !os.IsNotExist(err) {
+		t.Fatalf("rejected token cache still exists: %v", err)
 	}
 }
 

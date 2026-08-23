@@ -2,7 +2,7 @@
 
 Status: live-monitor candidate
 
-Version: 0.3.1
+Version: 0.3.2
 
 ## Objective
 

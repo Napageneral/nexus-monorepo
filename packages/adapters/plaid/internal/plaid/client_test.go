@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -558,13 +559,13 @@ func TestMalformedTransactionFailsClosed(t *testing.T) {
 
 func TestHealthUsesProviderFreshnessNotFetchTime(t *testing.T) {
 	t.Parallel()
+	var requested []string
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requested = append(requested, request.URL.Path)
 		var fixture string
 		switch request.URL.Path {
 		case "/item/get":
 			fixture = "item_get.json"
-		case "/accounts/get":
-			fixture = "accounts_get.json"
 		default:
 			http.Error(writer, "unexpected endpoint", http.StatusNotFound)
 			return
@@ -580,6 +581,9 @@ func TestHealthUsesProviderFreshnessNotFetchTime(t *testing.T) {
 	}
 	if probe.FreshnessState != "fresh" || probe.LastEventAtMS != time.Date(2026, 7, 17, 16, 30, 0, 0, time.UTC).UnixMilli() {
 		t.Fatalf("unexpected health freshness: %+v", probe)
+	}
+	if !slices.Equal(requested, []string{"/item/get"}) {
+		t.Fatalf("health requested unexpected endpoints: %v", requested)
 	}
 }
 
@@ -599,8 +603,6 @@ func TestHealthFailsClosedOnNewerFailureAndItemError(t *testing.T) {
 			transactions := status["transactions"].(map[string]any)
 			transactions["last_failed_update"] = "2026-07-17T16:45:00Z"
 			_ = json.NewEncoder(writer).Encode(payload)
-		case "/accounts/get":
-			_, _ = writer.Write(loadFixture(t, "accounts_get.json"))
 		default:
 			http.Error(writer, "unexpected endpoint", http.StatusNotFound)
 		}

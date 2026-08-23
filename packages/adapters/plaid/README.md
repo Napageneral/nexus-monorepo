@@ -17,7 +17,7 @@ bank account, scrape a bank login, or post an accounting journal.
 
 ## Current Boundary
 
-Version `0.3.1` provides a Nex live monitor for already-authorized Plaid Items
+Version `0.3.2` provides a Nex live monitor for already-authorized Plaid Items
 and publishes the authoritative institution/Item account-contact identity that
 Nex requires when creating durable connections. It also uses the provider Item
 ID as the canonical connection account so retries collapse semantically

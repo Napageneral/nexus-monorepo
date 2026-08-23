@@ -69,10 +69,11 @@ func writeSharedShopifyTokenCache(path string, cache shopifySharedTokenCache) er
 func sharedShopifyAccessToken(
 	ctx context.Context,
 	state *shopifyState,
-	fetch func(context.Context, *shopifyState) (string, error),
+	fetch func(context.Context, *shopifyState) (shopifyAccessToken, error),
 ) (string, error) {
 	if strings.TrimSpace(os.Getenv(nexadapterStateDirEnvName)) == "" {
-		return fetch(ctx, state)
+		fresh, err := fetch(ctx, state)
+		return fresh.Value, err
 	}
 	cachePath, lockPath, err := sharedShopifyTokenCachePaths(state.ConnectionID)
 	if err != nil {
@@ -100,18 +101,57 @@ func sharedShopifyAccessToken(
 		return cache.AccessToken, nil
 	}
 
-	token, err := fetch(ctx, state)
+	fresh, err := fetch(ctx, state)
 	if err != nil {
 		return "", err
+	}
+	if strings.TrimSpace(fresh.Value) == "" {
+		return "", errors.New("Shopify token exchange returned an empty token")
+	}
+	expiresAt = fresh.ExpiresAt.UTC()
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().UTC().Add(defaultTokenTTL)
 	}
 	cache = shopifySharedTokenCache{
 		Version:               shopifySharedTokenCacheVersion,
 		CredentialFingerprint: fingerprint,
-		AccessToken:           token,
-		ExpiresAt:             time.Now().UTC().Add(defaultTokenTTL).Format(time.RFC3339Nano),
+		AccessToken:           fresh.Value,
+		ExpiresAt:             expiresAt.Format(time.RFC3339Nano),
 	}
 	if err := writeSharedShopifyTokenCache(cachePath, cache); err != nil {
 		return "", fmt.Errorf("persist Shopify token cache: %w", err)
 	}
-	return token, nil
+	return fresh.Value, nil
+}
+
+func invalidateSharedShopifyAccessToken(state *shopifyState) error {
+	if strings.TrimSpace(os.Getenv(nexadapterStateDirEnvName)) == "" || state == nil {
+		return nil
+	}
+	cachePath, lockPath, err := sharedShopifyTokenCachePaths(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+	lock, err := openShopifyPrivateFile(lockPath, syscall.O_RDWR, true)
+	if err != nil {
+		return fmt.Errorf("open Shopify token cache lock: %w", err)
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("lock Shopify token cache: %w", err)
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck
+	if err := os.Remove(cachePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove Shopify token cache: %w", err)
+	}
+	return nil
+}
+
+func invalidateShopifyAccessToken(state *shopifyState) error {
+	if state != nil && tokenCache != nil &&
+		tokenCache.ShopDomain == state.ShopDomain &&
+		tokenCache.ClientID == state.ClientID {
+		tokenCache = nil
+	}
+	return invalidateSharedShopifyAccessToken(state)
 }

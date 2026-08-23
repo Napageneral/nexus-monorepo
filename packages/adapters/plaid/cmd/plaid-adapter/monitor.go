@@ -16,7 +16,7 @@ import (
 
 const defaultMonitorInterval = 15 * time.Minute
 const defaultEmitInterval = 50 * time.Millisecond
-const transactionPageSize = 100
+const transactionPageSize = 500
 
 func monitor(ctx nexadapter.AdapterContext[*provider.Client], emit nexadapter.EmitFunc) error {
 	connectionID, err := nexadapter.RequireConnection(ctx.ConnectionID)

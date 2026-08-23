@@ -261,6 +261,13 @@ func doShopifyRequest(ctx context.Context, state *shopifyState, request *http.Re
 		return nil, err
 	}
 	now := time.Now().UTC()
+	if response.StatusCode == http.StatusUnauthorized && strings.TrimSpace(request.Header.Get("X-Shopify-Access-Token")) != "" {
+		if err := invalidateShopifyAccessToken(state); err != nil {
+			_ = response.Body.Close()
+			lease.release()
+			return nil, fmt.Errorf("invalidate rejected Shopify token: %w", err)
+		}
+	}
 	if response.StatusCode == http.StatusTooManyRequests {
 		if err := updateShopifyGovernorBackoff(dir, shopifyRetryAfter(response, now)); err != nil {
 			_ = response.Body.Close()

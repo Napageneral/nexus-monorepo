@@ -195,21 +195,30 @@ func TestParseLinkHeader(t *testing.T) {
 	}
 }
 
-func TestHealthUsesShopifyShopEndpoint(t *testing.T) {
+func TestHealthUsesMinimalShopifyGraphQLIdentity(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
 
+	var capturedQuery string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/admin/oauth/access_token":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"access_token":"shopify-token"}`))
-		case "/admin/api/2026-01/shop.json":
+			_, _ = w.Write([]byte(`{"access_token":"shopify-token","expires_in":86399}`))
+		case "/admin/api/2026-01/graphql.json":
 			if got := r.Header.Get("X-Shopify-Access-Token"); got != "shopify-token" {
 				http.Error(w, "missing token", http.StatusUnauthorized)
 				return
 			}
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			capturedQuery = payload.Query
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"shop":{"id":123,"name":"MoonSleep","email":"ops@moonsleep.co","domain":"moonsleep.co","myshopify_domain":"moonsleepco.myshopify.com","primary_domain":{"host":"moonsleep.co"}}}`))
+			_, _ = w.Write([]byte(`{"data":{"shop":{"id":"gid://shopify/Shop/123"}}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -228,12 +237,15 @@ func TestHealthUsesShopifyShopEndpoint(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	shop, err := fetchShopInfo(ctx, state)
+	shopID, err := fetchShopHealthIdentity(ctx, state)
 	if err != nil {
-		t.Fatalf("fetchShopInfo: %v", err)
+		t.Fatalf("fetchShopHealthIdentity: %v", err)
 	}
-	if shop.ID != 123 || shop.Name != "MoonSleep" {
-		t.Fatalf("unexpected shop: %#v", shop)
+	if shopID != "gid://shopify/Shop/123" {
+		t.Fatalf("unexpected shop id: %q", shopID)
+	}
+	if strings.TrimSpace(capturedQuery) != "query NexAdapterHealth { shop { id } }" {
+		t.Fatalf("unexpected health query: %q", capturedQuery)
 	}
 }
 
