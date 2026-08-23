@@ -4,6 +4,7 @@
 **Last Updated:** 2026-08-23
 **Canonical spec:** [Canonical Projected Objects](../../specs/canonical-projected-objects.md)
 **Related spec:** [Nex Core Real-World Graph and Domain Facets](../../specs/core-real-world-graph-and-domain-facets.md)
+**Vocabulary ledger:** [Canonical Object Vocabulary Consolidation Ledger](consolidation-ledger.md)
 
 ---
 
@@ -138,9 +139,10 @@ Invoice, Claim, or another business-needed object. Their order is determined by
 the active evidence chronology and business need, not by a predeclared family
 sequence.
 
-The vocabulary census remains a reviewable ledger of candidates and aliases.
-It does not force all candidates to become objects and does not block an
-already-decided object from using the kernel.
+The locked vocabulary census and ordered first convergence queue are recorded
+in the [consolidation ledger](consolidation-ledger.md). The ledger does not
+force all candidates to become objects and does not block an already-decided
+object from using the kernel.
 
 ## Repository ownership
 

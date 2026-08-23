@@ -11,8 +11,9 @@ additional business-needed candidate at a time.
 
 ## Scope
 
-- Select exactly one next candidate from the active evidence chronology and
-  business need.
+- Execute the first queued candidate from the locked
+  [consolidation ledger](../consolidation-ledger.md): CPO-005A Commitment native
+  reuse. Later candidates remain independent follow-on tickets.
 - Classify it as `reuse`, `alias`, or `create` using the canonical eligibility
   test.
 - If reused, attach only the required Facet or relationship semantics.
