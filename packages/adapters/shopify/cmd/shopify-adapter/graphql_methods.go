@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
@@ -1062,7 +1063,10 @@ func executeShopifyGraphQL(
 	variables map[string]any,
 	operationName string,
 ) (*shopifyGraphQLResponse, error) {
+	totalStartedAt := time.Now()
+	tokenStartedAt := time.Now()
 	accessToken, err := fetchShopifyAccessToken(ctx, state)
+	recordShopifyHealthLatency(ctx, "token", tokenStartedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1090,6 +1094,7 @@ func executeShopifyGraphQL(
 	}
 	defer res.Body.Close()
 
+	bodyStartedAt := time.Now()
 	bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
 	if readErr != nil {
 		return nil, fmt.Errorf("read Shopify graphql response: %w", readErr)
@@ -1103,8 +1108,10 @@ func executeShopifyGraphQL(
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 		return nil, fmt.Errorf("parse Shopify graphql response: %w", err)
 	}
+	recordShopifyHealthLatency(ctx, "body_read_decode", bodyStartedAt)
 	if len(payload.Errors) > 0 {
 		return nil, fmt.Errorf("Shopify graphql query failed: %s", strings.TrimSpace(payload.Errors[0].Message))
 	}
+	recordShopifyHealthLatency(ctx, "provider_verification_total", totalStartedAt)
 	return &payload, nil
 }

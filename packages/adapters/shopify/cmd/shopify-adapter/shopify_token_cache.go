@@ -71,8 +71,11 @@ func sharedShopifyAccessToken(
 	state *shopifyState,
 	fetch func(context.Context, *shopifyState) (shopifyAccessToken, error),
 ) (string, error) {
+	startedAt := time.Now()
 	if strings.TrimSpace(os.Getenv(nexadapterStateDirEnvName)) == "" {
 		fresh, err := fetch(ctx, state)
+		recordShopifyHealthTokenSource(ctx, "oauth_exchange")
+		recordShopifyHealthLatency(ctx, "token", startedAt)
 		return fresh.Value, err
 	}
 	cachePath, lockPath, err := sharedShopifyTokenCachePaths(state.ConnectionID)
@@ -98,6 +101,8 @@ func sharedShopifyAccessToken(
 	if cache.CredentialFingerprint == fingerprint &&
 		strings.TrimSpace(cache.AccessToken) != "" &&
 		time.Now().UTC().Add(time.Minute).Before(expiresAt) {
+		recordShopifyHealthTokenSource(ctx, "persistent_cache")
+		recordShopifyHealthLatency(ctx, "token", startedAt)
 		return cache.AccessToken, nil
 	}
 
@@ -121,6 +126,8 @@ func sharedShopifyAccessToken(
 	if err := writeSharedShopifyTokenCache(cachePath, cache); err != nil {
 		return "", fmt.Errorf("persist Shopify token cache: %w", err)
 	}
+	recordShopifyHealthTokenSource(ctx, "oauth_exchange")
+	recordShopifyHealthLatency(ctx, "token", startedAt)
 	return fresh.Value, nil
 }
 
