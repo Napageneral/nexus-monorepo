@@ -98,6 +98,6 @@ boundary; executable code and method declarations may not expose them.
 
 Package installation, target-runtime connection creation, credential migration,
 webhook configuration, owned-accounting ingestion, and browser-source
-retirement remain separate production actions. Version `0.3.1` cleanroom
+retirement remain separate production actions. Version `0.3.2` cleanroom
 validation proves the adapter-side monitor and evidence contract without
 calling Plaid or writing MoonSleep finance data.

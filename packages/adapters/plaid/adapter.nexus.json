@@ -1,6 +1,6 @@
 {
   "id": "plaid",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "displayName": "Plaid Read-Only Financial Data",
   "description": "Cleanroom-first Plaid adapter for institution coverage, Items, accounts, real-time balances, credit liabilities, and cursor-based transaction changes.",
   "platform": "plaid",

@@ -24,7 +24,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.2.10"
+	adapterVersion             = "0.2.11"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
@@ -60,6 +60,11 @@ type shopifyTokenCache struct {
 	ClientSecret string
 	AccessToken  string
 	ExpiresAt    time.Time
+}
+
+type shopifyAccessToken struct {
+	Value     string
+	ExpiresAt time.Time
 }
 
 type shopifyShopResponse struct {
@@ -425,7 +430,7 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 		}, nil
 	}
 
-	shop, err := fetchShopInfo(ctx.Context, state)
+	shopID, err := fetchShopHealthIdentity(ctx.Context, state)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
 			Connected:    false,
@@ -436,21 +441,7 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 		}, nil
 	}
 
-	shopID := strconv.FormatInt(shop.ID, 10)
 	details["shop_id"] = shopID
-	details["shop_name"] = shop.Name
-	if strings.TrimSpace(shop.Email) != "" {
-		details["shop_email"] = shop.Email
-	}
-	if strings.TrimSpace(shop.Domain) != "" {
-		details["shop_domain_reported"] = shop.Domain
-	}
-	if strings.TrimSpace(shop.MyshopifyDomain) != "" {
-		details["myshopify_domain"] = shop.MyshopifyDomain
-	}
-	if strings.TrimSpace(shop.PrimaryDomain.Host) != "" {
-		details["primary_domain"] = shop.PrimaryDomain.Host
-	}
 
 	return &nexadapter.AdapterHealth{
 		Connected:    true,
@@ -1071,6 +1062,29 @@ func fetchShopInfo(ctx context.Context, state *shopifyState) (*shopifyShop, erro
 	return &payload.Shop, nil
 }
 
+func fetchShopHealthIdentity(ctx context.Context, state *shopifyState) (string, error) {
+	response, err := executeShopifyGraphQL(
+		ctx,
+		state,
+		"query NexAdapterHealth { shop { id } }",
+		map[string]any{},
+		"NexAdapterHealth",
+	)
+	if err != nil {
+		return "", err
+	}
+	shop, ok := response.Data["shop"].(map[string]any)
+	if !ok {
+		return "", errors.New("Shopify health response missing shop")
+	}
+	shopID, _ := shop["id"].(string)
+	shopID = strings.TrimSpace(shopID)
+	if shopID == "" {
+		return "", errors.New("Shopify health response missing shop id")
+	}
+	return shopID, nil
+}
+
 func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, error) {
 	if tokenCache != nil &&
 		tokenCache.ShopDomain == state.ShopDomain &&
@@ -1082,7 +1096,7 @@ func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, 
 	return sharedShopifyAccessToken(ctx, state, fetchFreshShopifyAccessToken)
 }
 
-func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (string, error) {
+func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (shopifyAccessToken, error) {
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
@@ -1092,40 +1106,46 @@ func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (str
 	tokenURL := fmt.Sprintf("https://%s/admin/oauth/access_token", state.ShopDomain)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("build Shopify token request: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("build Shopify token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
-		return "", fmt.Errorf("Shopify token exchange failed: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("Shopify token exchange failed: %w", err)
 	}
 	defer res.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(res.Body, maxOAuthResponseBytes))
 	bodyText := strings.TrimSpace(string(bodyBytes))
 	if res.StatusCode >= 400 {
-		return "", fmt.Errorf("Shopify token exchange failed (%d): %s", res.StatusCode, bodyText)
+		return shopifyAccessToken{}, fmt.Errorf("Shopify token exchange failed (%d): %s", res.StatusCode, bodyText)
 	}
 
 	var payload struct {
 		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
 	}
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		return "", fmt.Errorf("parse Shopify token response: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("parse Shopify token response: %w", err)
 	}
 	if strings.TrimSpace(payload.AccessToken) == "" {
-		return "", errors.New("Shopify token exchange returned empty access_token")
+		return shopifyAccessToken{}, errors.New("Shopify token exchange returned empty access_token")
 	}
+	ttl := defaultTokenTTL
+	if payload.ExpiresIn > 0 {
+		ttl = time.Duration(payload.ExpiresIn) * time.Second
+	}
+	expiresAt := time.Now().UTC().Add(ttl)
 
 	tokenCache = &shopifyTokenCache{
 		ShopDomain:   state.ShopDomain,
 		ClientID:     state.ClientID,
 		ClientSecret: state.ClientSecret,
 		AccessToken:  strings.TrimSpace(payload.AccessToken),
-		ExpiresAt:    time.Now().Add(defaultTokenTTL),
+		ExpiresAt:    expiresAt,
 	}
-	return tokenCache.AccessToken, nil
+	return shopifyAccessToken{Value: tokenCache.AccessToken, ExpiresAt: expiresAt}, nil
 }
 
 func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {

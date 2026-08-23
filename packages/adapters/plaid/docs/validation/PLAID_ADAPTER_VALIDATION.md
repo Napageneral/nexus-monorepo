@@ -11,7 +11,7 @@ go vet ./...
 ./scripts/package-release.sh
 ./scripts/plaid-adapter-launcher.sh adapter.info > /tmp/plaid-adapter-info.json
 nexus package validate .
-cat dist/plaid-0.3.1.tar.gz.sha256
+cat dist/plaid-0.3.2.tar.gz.sha256
 ```
 
 ## Required Readback

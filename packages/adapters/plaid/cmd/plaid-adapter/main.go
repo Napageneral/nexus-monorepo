@@ -14,7 +14,7 @@ import (
 
 const (
 	adapterName    = "plaid-adapter"
-	adapterVersion = "0.3.1"
+	adapterVersion = "0.3.2"
 	platformID     = "plaid"
 )
 
@@ -339,7 +339,6 @@ func health(ctx nexadapter.AdapterContext[*provider.Client]) (*nexadapter.Adapte
 		Details: map[string]any{
 			"provider_item_id":       probe.ProviderItemID,
 			"institution_id":         probe.InstitutionID,
-			"account_count":          probe.AccountCount,
 			"last_successful_update": probe.LastSuccessfulUpdate,
 			"last_failed_update":     probe.LastFailedUpdate,
 			"freshness_state":        probe.FreshnessState,

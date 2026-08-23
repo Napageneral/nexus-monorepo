@@ -293,6 +293,7 @@ func TestApplicationCredentialFileRejectsBroadPermissions(t *testing.T) {
 func TestPollPlaidSourceEmitsImmutablePacketsAndChanges(t *testing.T) {
 	t.Parallel()
 	fixedNow := time.Date(2026, 7, 29, 15, 30, 0, 0, time.UTC)
+	transactionSyncCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
@@ -325,6 +326,14 @@ func TestPollPlaidSourceEmitsImmutablePacketsAndChanges(t *testing.T) {
 				"request_id": "request-accounts"
 			}`))
 		case "/transactions/sync":
+			var requestBody struct {
+				Count int `json:"count"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&requestBody); err != nil {
+				http.Error(response, err.Error(), http.StatusBadRequest)
+				return
+			}
+			transactionSyncCount = requestBody.Count
 			_, _ = response.Write([]byte(`{
 				"added": [{
 					"transaction_id": "transaction-synthetic",
@@ -363,7 +372,6 @@ func TestPollPlaidSourceEmitsImmutablePacketsAndChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	var emitted []nexadapter.AdapterInboundRecord
 	nextCursor, err := pollPlaidSource(
 		context.Background(),
@@ -380,6 +388,9 @@ func TestPollPlaidSourceEmitsImmutablePacketsAndChanges(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if transactionSyncCount != 500 {
+		t.Fatalf("transactions sync count = %d, want 500", transactionSyncCount)
 	}
 	if nextCursor != "cursor-synthetic" {
 		t.Fatalf("next cursor = %q", nextCursor)
