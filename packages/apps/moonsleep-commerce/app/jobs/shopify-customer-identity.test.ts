@@ -321,10 +321,77 @@ describe("Shopify customer identity projection", () => {
         },
         nex: fixture.nex,
       }),
-    ).resolves.toMatchObject({ projected: true, records: 1, customers: 1, ignored: 0 });
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 1,
+      customers: 1,
+      ignored: 0,
+      projection_receipts: [
+        {
+          projector: "moonsleep-commerce.shopify-customer-identity",
+          family: "customer",
+          record_id: "record-row-1",
+          status: "completed",
+          canonical_entity_id: "entity-shopify-customer-1",
+          customer_facet_attachment_id: expect.stringContaining(
+            "facet-attachment:moonsleep.customer.v1:",
+          ),
+          projection_receipt_id: expect.stringMatching(
+            /^shopify_customer_projection_[0-9a-f]{32}$/,
+          ),
+          result_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+      ],
+    });
     expect(fixture.calls.getMany).toHaveBeenCalledWith({ ids: ["record-row-1"] });
     expect(fixture.calls.get).not.toHaveBeenCalled();
     expect(fixture.calls.semanticsApply).not.toHaveBeenCalled();
+  });
+
+  it("quarantines one invalid customer Record without poisoning valid projections", async () => {
+    const fixture = nexFixture({ replayed: true });
+    const invalid = customerRecord({ id: "record-row-invalid" });
+    (invalid.metadata as Record<string, unknown>).provider_ids = {
+      customer_gid: "gid://shopify/Customer/999",
+      customer_id: "999",
+    };
+    fixture.nex.records.get_many = vi.fn(async () => ({
+      ok: true,
+      payload: { records: [fixture.record, invalid] },
+    }));
+
+    await expect(
+      shopifyCustomerIdentityJob({
+        input: {
+          events: [
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: fixture.record.id },
+            },
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: invalid.id },
+            },
+          ],
+        },
+        nex: fixture.nex,
+      }),
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 2,
+      customers: 2,
+      completed: 1,
+      quarantined: 1,
+      projection_receipts: [
+        { record_id: "record-row-1", status: "completed" },
+        {
+          record_id: "record-row-invalid",
+          status: "quarantined",
+          error_code: "invalid_customer_record",
+          error: "Shopify customer identity anchors disagree",
+        },
+      ],
+    });
   });
 
   it("skips non-customer Shopify records without touching identity", async () => {
@@ -376,6 +443,34 @@ describe("Shopify customer identity projection", () => {
       ((record.payload as Record<string, unknown>).source_metadata as Record<string, unknown>)
         .provider_payload,
     ).not.toHaveProperty("provider_object");
+  });
+
+  it("accepts the exact Shopify REST customer identity shape from a failed production Record", () => {
+    const customerId = "11278589558946";
+    const customerGid = `gid://shopify/Customer/${customerId}`;
+    const record = customerRecord({
+      id: "record_07ca74bab35fcde06e5a2d2754baac20398d265c6ca05be721f9d80f1d102599",
+    });
+    const source = {
+      id: Number(customerId),
+      admin_graphql_api_id: customerGid,
+      first_name: "",
+      last_name: "",
+    };
+    record.payload = sourceEnvelope(source);
+    (record.metadata as Record<string, unknown>).provider_ids = {
+      customer_gid: customerGid,
+      customer_id: customerId,
+    };
+    ((record.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_gid =
+      customerGid;
+    ((record.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_id =
+      customerId;
+
+    expect(buildShopifyCustomerObservation(record)).toMatchObject({
+      contact_id: customerGid,
+      source_observation_id: `record_07ca74bab35fcde06e5a2d2754baac20398d265c6ca05be721f9d80f1d102599:${"b".repeat(64)}`,
+    });
   });
 
   it("fails closed when source, normalized and provider identity anchors disagree", () => {

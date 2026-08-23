@@ -38,9 +38,8 @@ function fixture(
       version: 1,
       family: "orders.delta",
       capture_id: "0123456789abcdef0123456789abcdef",
-      records: Array.from(
-        { length: params.recordCount ?? 2 },
-        (_value, index) => record(`record-${index + 1}`),
+      records: Array.from({ length: params.recordCount ?? 2 }, (_value, index) =>
+        record(`record-${index + 1}`),
       ),
       complete: true,
     },
@@ -56,6 +55,9 @@ function fixture(
         records: records.length,
         inserted: records.length - replayed,
         replayed,
+        record_ids: records.map(
+          (_record, index) => `record_${String(index + 1).padStart(64, "0")}`,
+        ),
       },
     };
   });
@@ -174,6 +176,7 @@ describe("Shopify source observation job", () => {
       ok: true,
       status: "completed",
       records: 2,
+      record_ids: [`record_${"0".repeat(63)}1`, `record_${"0".repeat(63)}2`],
       inserted: 2,
       replayed: 0,
       family_counts: { line_item: 1, order: 1 },
@@ -186,7 +189,12 @@ describe("Shopify source observation job", () => {
   it("reports an exact all-Record replay as replay with a stable terminal digest", async () => {
     const test = fixture({ recordCount: 2 });
     test.ingestMany.mockResolvedValue({
-      payload: { records: 2, inserted: 0, replayed: 2 },
+      payload: {
+        records: 2,
+        inserted: 0,
+        replayed: 2,
+        record_ids: [`record_${"0".repeat(63)}1`, `record_${"0".repeat(63)}2`],
+      },
     });
 
     const first = await shopifySourceObservationJob(test.ctx);
@@ -222,9 +230,7 @@ describe("Shopify source observation job", () => {
 
   it("releases the exact capture and leaves the cursor uncommitted after ingest failure", async () => {
     const test = fixture({ failAt: 2 });
-    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
-      "synthetic ingest failure",
-    );
+    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow("synthetic ingest failure");
     expect(test.commit).not.toHaveBeenCalled();
     expect(test.abort).toHaveBeenCalledWith({
       connection_id: "shopify-production",
@@ -236,9 +242,7 @@ describe("Shopify source observation job", () => {
   it("rejects a family not owned by the installed source catalog before any provider call", async () => {
     const test = fixture();
     test.ctx.input = { connection_id: "shopify-production", family: "themes.delta" };
-    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
-      "unsupported family",
-    );
+    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow("unsupported family");
     expect(test.capture).not.toHaveBeenCalled();
   });
 

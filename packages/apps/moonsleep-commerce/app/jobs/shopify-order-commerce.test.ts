@@ -476,20 +476,99 @@ describe("Shopify order and line-item commerce projection", () => {
         },
         nex: client,
       }),
-    ).resolves.toMatchObject({ projected: true, records: 2, orders: 1, line_items: 1 });
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 2,
+      orders: 1,
+      line_items: 1,
+      projection_receipts: [
+        {
+          projector: "moonsleep-commerce.shopify-order-commerce",
+          family: "order",
+          record_id: "record-order-revision-1",
+          status: "completed",
+          projection_receipt_id: expect.stringMatching(
+            /^shopify_commerce_projection_[0-9a-f]{32}$/,
+          ),
+          result_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        {
+          projector: "moonsleep-commerce.shopify-order-commerce",
+          family: "line_item",
+          record_id: "record-line-revision-1",
+          status: "completed",
+          projection_receipt_id: expect.stringMatching(
+            /^shopify_commerce_projection_[0-9a-f]{32}$/,
+          ),
+          result_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+      ],
+    });
     expect(client.commerce.orders.observe_many).toHaveBeenCalledTimes(1);
     expect(client.commerce.orders.get).not.toHaveBeenCalled();
     expect(client.commerce["line-items"].observe_many).toHaveBeenCalledTimes(1);
   });
 
+  it("quarantines one invalid commerce Record without poisoning valid projections", async () => {
+    const order = orderRecord();
+    ((order.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_id = null;
+    (
+      (order.metadata as Record<string, unknown>).provider_ids as Record<string, unknown>
+    ).customer_id = null;
+    const invalidLine = lineItemRecord({ id: "record-line-invalid" });
+    ((invalidLine.metadata as Record<string, unknown>).row as Record<string, unknown>).quantity =
+      Number.MAX_SAFE_INTEGER + 1;
+    const client = {
+      records: {
+        get_many: vi.fn(async () => ({ records: [order, invalidLine] })),
+      },
+      contacts: { resolve: vi.fn(), observe: vi.fn() },
+      entities: { resolve: vi.fn() },
+      commerce: {
+        orders: {
+          observe_many: vi.fn(async () => ({ results: [receipt(String(order.id))] })),
+          get: vi.fn(),
+        },
+        "line-items": { observe_many: vi.fn() },
+      },
+    } as unknown as ShopifyCommerceClient;
+
+    await expect(
+      shopifyOrderCommerceJob({
+        input: {
+          events: [
+            { type: "record.ingested", properties: { record_id: order.id } },
+            { type: "record.ingested", properties: { record_id: invalidLine.id } },
+          ],
+        },
+        nex: client,
+      }),
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 2,
+      orders: 1,
+      line_items: 0,
+      completed: 1,
+      quarantined: 1,
+      projection_receipts: [
+        { record_id: "record-order-revision-1", status: "completed" },
+        {
+          record_id: "record-line-invalid",
+          status: "quarantined",
+          error_code: "invalid_commerce_record",
+        },
+      ],
+    });
+    expect(client.commerce.orders.observe_many).toHaveBeenCalledTimes(1);
+    expect(client.commerce["line-items"].observe_many).not.toHaveBeenCalled();
+  });
+
   it("skips an empty Order batch when a chunk contains only line items", async () => {
     const line = lineItemRecord();
     const ordersObserveMany = vi.fn();
-    const lineItemsObserveMany = vi.fn(
-      async ({ observations }: { observations: unknown[] }) => ({
-        results: observations.map(() => receipt(String(line.id))),
-      }),
-    );
+    const lineItemsObserveMany = vi.fn(async ({ observations }: { observations: unknown[] }) => ({
+      results: observations.map(() => receipt(String(line.id))),
+    }));
     const client = {
       records: {
         get_many: vi.fn(async () => ({ records: [line] })),

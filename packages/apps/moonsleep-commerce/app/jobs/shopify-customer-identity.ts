@@ -281,9 +281,7 @@ async function existingCustomerRole(
   const attachmentId = customerFacetAttachmentId(canonicalEntityId);
   try {
     const exactPayload = unwrapPayload(await nex.facets.attachments.get({ id: attachmentId }));
-    const existing = asRecord(
-      exactPayload.attachment ?? exactPayload.item ?? exactPayload.value,
-    );
+    const existing = asRecord(exactPayload.attachment ?? exactPayload.item ?? exactPayload.value);
     assertCanonicalCustomerFacet(existing, canonicalEntityId);
     return {
       customer_observation_outcome: "adopted_existing",
@@ -301,7 +299,9 @@ async function existingCustomerRole(
 
 function semanticCustomerRoleInput(customers: PreparedCustomerIdentity[]): RuntimeRow {
   const ordered = [...customers].sort((left, right) =>
-    immutableSourceRef(left.record).recordId.localeCompare(immutableSourceRef(right.record).recordId),
+    immutableSourceRef(left.record).recordId.localeCompare(
+      immutableSourceRef(right.record).recordId,
+    ),
   );
   const cohortKey = sha256CanonicalJson(
     ordered.map((customer) => immutableSourceRef(customer.record)),
@@ -416,6 +416,28 @@ function observationName(sourceObject: RuntimeRow, customerGid: string): string 
   return `Shopify customer ${customerGid.replace(/^gid:\/\/shopify\/Customer\//, "")}`;
 }
 
+function exactSourceCustomerGid(sourceObject: RuntimeRow, providerIds: RuntimeRow): string {
+  const graphGid = asString(sourceObject.admin_graphql_api_id);
+  if (!graphGid) {
+    return asString(sourceObject.id);
+  }
+  const providerCustomerId = asString(providerIds.customer_id);
+  const sourceCustomerId =
+    typeof sourceObject.id === "number" &&
+    Number.isSafeInteger(sourceObject.id) &&
+    sourceObject.id >= 0
+      ? String(sourceObject.id)
+      : asString(sourceObject.id);
+  if (
+    !providerCustomerId ||
+    sourceCustomerId !== providerCustomerId ||
+    graphGid !== `gid://shopify/Customer/${providerCustomerId}`
+  ) {
+    throw new Error("Shopify customer identity anchors disagree");
+  }
+  return graphGid;
+}
+
 export function buildShopifyCustomerObservation(
   recordValue: unknown,
   options: { allowLegacyText?: boolean } = {},
@@ -444,7 +466,7 @@ export function buildShopifyCustomerObservation(
         };
   if (
     asString(providerIds.customer_gid) !== customerGid ||
-    asString(sourceObject.id) !== customerGid
+    exactSourceCustomerGid(sourceObject, providerIds) !== customerGid
   ) {
     throw new Error("Shopify customer identity anchors disagree");
   }
@@ -535,7 +557,9 @@ async function applyCustomerRoles(
 
   await ensureCustomerEvidenceProfiles(nex);
   const ordered = [...missing].sort((left, right) =>
-    immutableSourceRef(left.record).recordId.localeCompare(immutableSourceRef(right.record).recordId),
+    immutableSourceRef(left.record).recordId.localeCompare(
+      immutableSourceRef(right.record).recordId,
+    ),
   );
   const applied = unwrapPayload(await nex.semantics.apply(semanticCustomerRoleInput(ordered)));
   if (asString(applied.status) !== "committed" || applied.actionAuthority !== false) {
@@ -549,7 +573,10 @@ async function applyCustomerRoles(
     const customerObservationId = requireString(observation, "observationId");
     const attachmentId = requireString(object, "objectId");
     const expectedAttachmentId = customerFacetAttachmentId(customer.canonicalEntityId);
-    if (attachmentId !== expectedAttachmentId || asString(object.objectType) !== "facet_attachment") {
+    if (
+      attachmentId !== expectedAttachmentId ||
+      asString(object.objectType) !== "facet_attachment"
+    ) {
       throw new Error("Nex semantic customer receipt returned a different canonical Facet");
     }
     roles.set(immutableSourceRef(customer.record).recordId, {
@@ -572,11 +599,13 @@ export async function projectShopifyCustomerIdentities(
   );
   const roles = await applyCustomerRoles(nex, customers);
   return customers.map(({ record, observation, observed, entity, contact, canonicalEntityId }) => {
-    const customerRole = roles.get(immutableSourceRef(record).recordId);
+    const recordId = immutableSourceRef(record).recordId;
+    const customerRole = roles.get(recordId);
     if (!customerRole) throw new Error("Nex omitted a Shopify customer semantic receipt");
     const observedEntityId = requireString(entity, "id");
     return {
       projected: true,
+      record_id: recordId,
       replayed: observed.replayed === true,
       created_entity: observed.created_entity === true,
       created_contact: observed.created_contact === true,
@@ -591,6 +620,40 @@ export async function projectShopifyCustomerIdentities(
       ...customerRole,
     };
   });
+}
+
+function customerProjectionReceipt(projected: RuntimeRow): RuntimeRow {
+  const recordId = requireString(projected, "record_id");
+  const terminal = {
+    projection_receipt_id: customerProjectionReceiptId(recordId),
+    projector: "moonsleep-commerce.shopify-customer-identity",
+    family: "customer",
+    record_id: recordId,
+    status: "completed",
+    canonical_entity_id: requireString(projected, "canonical_entity_id"),
+    customer_facet_attachment_id: requireString(projected, "customer_facet_attachment_id"),
+  };
+  return { ...terminal, result_sha256: sha256CanonicalJson(terminal) };
+}
+
+function customerProjectionReceiptId(recordId: string): string {
+  return `shopify_customer_projection_${sha256CanonicalJson({
+    projector: "moonsleep-commerce.shopify-customer-identity",
+    record_id: recordId,
+  }).slice(0, 32)}`;
+}
+
+function customerProjectionQuarantine(recordId: string, error: unknown): RuntimeRow {
+  const terminal = {
+    projection_receipt_id: customerProjectionReceiptId(recordId),
+    projector: "moonsleep-commerce.shopify-customer-identity",
+    family: "customer",
+    record_id: recordId,
+    status: "quarantined",
+    error_code: "invalid_customer_record",
+    error: error instanceof Error ? error.message : "invalid Shopify customer Record",
+  };
+  return { ...terminal, result_sha256: sha256CanonicalJson(terminal) };
 }
 
 async function mapWithConcurrency<T, R>(
@@ -635,16 +698,46 @@ export default async function shopifyCustomerIdentityJob(
           asString(shopifyRecordSourceMetadata(record).family) === "customer",
       );
     const loadedAt = performance.now();
-    await projectShopifyCustomerIdentities(
-      ctx.nex,
-      customers.map(({ record }) => record),
+    const validCustomers: typeof customers = [];
+    const quarantineByRecordId = new Map<string, RuntimeRow>();
+    for (const customer of customers) {
+      try {
+        buildShopifyCustomerObservation(customer.record);
+        validCustomers.push(customer);
+      } catch (error) {
+        quarantineByRecordId.set(
+          customer.recordId,
+          customerProjectionQuarantine(customer.recordId, error),
+        );
+      }
+    }
+    const projected =
+      validCustomers.length > 0
+        ? await projectShopifyCustomerIdentities(
+            ctx.nex,
+            validCustomers.map(({ record }) => record),
+          )
+        : [];
+    const completedByRecordId = new Map(
+      projected.map((result) => [
+        requireString(result, "record_id"),
+        customerProjectionReceipt(result),
+      ]),
     );
+    const projectionReceipts = customers.map(({ recordId }) => {
+      const receipt = completedByRecordId.get(recordId) ?? quarantineByRecordId.get(recordId);
+      if (!receipt) throw new Error("Shopify customer projector omitted a terminal Record receipt");
+      return receipt;
+    });
     const finishedAt = performance.now();
     return {
       projected: true,
       records: events.length,
       customers: customers.length,
       ignored: events.length - customers.length,
+      completed: projected.length,
+      quarantined: quarantineByRecordId.size,
+      projection_receipts: projectionReceipts,
       timing_ms: {
         load: Math.round(loadedAt - startedAt),
         customers: Math.round(finishedAt - loadedAt),
@@ -673,6 +766,21 @@ export default async function shopifyCustomerIdentityJob(
   if (asString(shopifyRecordSourceMetadata(record).family) !== "customer") {
     return { projected: false, reason: "not_customer", record_id: recordId };
   }
+  try {
+    buildShopifyCustomerObservation(record);
+  } catch (error) {
+    return {
+      projected: false,
+      record_id: recordId,
+      completed: 0,
+      quarantined: 1,
+      projection_receipts: [customerProjectionQuarantine(recordId, error)],
+    };
+  }
   const projected = await projectShopifyCustomerIdentity(ctx.nex, record);
-  return { ...projected, record_id: recordId };
+  return {
+    ...projected,
+    record_id: recordId,
+    projection_receipts: [customerProjectionReceipt(projected)],
+  };
 }
