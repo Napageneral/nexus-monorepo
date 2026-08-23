@@ -113,14 +113,14 @@ projected-object kernel in CPO-002.
 
 ## Ticket index
 
-| Ticket                                                                | State       | Outcome                                                                                   | Depends on              |
-| --------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------- | ----------------------- |
-| [CPO-001](completed/CPO-001-simplified-kernel-contract.md)            | completed   | Canonical two-operation, agent-projection contract                                        | —                       |
-| [CPO-002](completed/CPO-002-generic-canonical-object-kernel.md)       | completed   | Registry, identities, revisions, heads, provenance, and two generic operations            | CPO-001                 |
-| [CPO-003](not-started/CPO-003-observation-graph-native-resolution.md) | not started | Uniform targeting, revision-linked graph, and native Channel adapter binding              | CPO-002, Channel branch |
-| [CPO-004](not-started/CPO-004-agent-projection-proof.md)              | not started | Agent projects Purchase Order and Product Revision end to end, including historical terms | CPO-003                 |
-| [CPO-005](not-started/CPO-005-incremental-object-convergence.md)      | not started | Prove the repeatable one-object convergence loop and seed independent follow-on tickets   | CPO-004                 |
-| [CPO-006](not-started/CPO-006-legacy-deletion-foundation-closure.md)  | not started | Delete superseded foundation-era machinery and close the foundation proof                 | CPO-005                 |
+| Ticket                                                               | State       | Outcome                                                                                   | Depends on              |
+| -------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------- | ----------------------- |
+| [CPO-001](completed/CPO-001-simplified-kernel-contract.md)           | completed   | Canonical two-operation, agent-projection contract                                        | —                       |
+| [CPO-002](completed/CPO-002-generic-canonical-object-kernel.md)      | completed   | Registry, identities, revisions, heads, provenance, and two generic operations            | CPO-001                 |
+| [CPO-003](completed/CPO-003-observation-graph-native-resolution.md)  | completed   | Uniform targeting, revision-linked graph, and native Channel adapter binding              | CPO-002, Channel branch |
+| [CPO-004](not-started/CPO-004-agent-projection-proof.md)             | not started | Agent projects Purchase Order and Product Revision end to end, including historical terms | CPO-003                 |
+| [CPO-005](not-started/CPO-005-incremental-object-convergence.md)     | not started | Prove the repeatable one-object convergence loop and seed independent follow-on tickets   | CPO-004                 |
+| [CPO-006](not-started/CPO-006-legacy-deletion-foundation-closure.md) | not started | Delete superseded foundation-era machinery and close the foundation proof                 | CPO-005                 |
 
 ## What happens after CPO-006
 

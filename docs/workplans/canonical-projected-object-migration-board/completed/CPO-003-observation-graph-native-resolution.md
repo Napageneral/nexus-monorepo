@@ -1,7 +1,12 @@
 # CPO-003 — Observation, Graph, and Native Resolution
 
-**State:** not started
+**State:** completed
 **Depends on:** CPO-002 and the completed native Channel branch
+**Owner:** Canonical Object Registry Consolidation
+**Nex source:** `915ddc6f3b4da89d95f29ff866cefe55fed0d2ae`
+**Native Channel integration merge:** `5d0ede7887`
+**Nex implementation:** `5c919b9942`
+**Registry digest:** `89e3a901676cf33be739e3b262194ec3fd1f5276f6d0ca3f2eda6a7d39e3f3e1`
 **Repository:** Nex core
 
 ## Goal
@@ -45,8 +50,13 @@ is one adapter because it has genuinely different owner storage.
 
 ## Validation
 
-- Observation target conformance tests.
-- Current and historical graph tests across revision advancement.
-- Native Channel focused tests from the completed branch.
-- Mixed-adapter ordered-batch cleanroom.
-- Zero-crosswalk-read and zero-read-write assertions.
+- Observation target, current/historical graph, native Channel, public operation,
+  SQLite bundle, and mixed-adapter tests: 46 passed.
+- Generated runtime registry digest matched the canonical umbrella registry.
+- Mixed native/projected resolution preserved order, explicit misses, exact
+  revision selection, custody, and no read writes.
+- Retired native Channel row resolved by exact supplied ID with `deleted_at`
+  receipt-bound; no route-successor inference was present.
+- Active runtime/source scan found zero Communication Stream Channel-crosswalk
+  reads or declarations.
+- No production state or historical cursor was mutated.

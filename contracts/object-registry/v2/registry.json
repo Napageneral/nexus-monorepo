@@ -2,5 +2,45 @@
   "$schema": "./registry.schema.json",
   "registry_id": "nex.canonical_objects",
   "schema_version": "2.0.0",
-  "entries": []
+  "entries": [
+    {
+      "object_type_id": "nex.channel",
+      "names": {
+        "singular": "Channel",
+        "plural": "Channels"
+      },
+      "owner_domain": "nex.identity",
+      "identity_contract_id": "nex.channel.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "platform": { "type": "string" },
+          "connection_id": { "type": "string" },
+          "space_id": { "type": ["string", "null"] },
+          "space_name": { "type": ["string", "null"] },
+          "container_id": { "type": ["string", "null"] },
+          "container_kind": { "type": ["string", "null"] },
+          "container_name": { "type": ["string", "null"] },
+          "thread_id": { "type": ["string", "null"] },
+          "thread_name": { "type": ["string", "null"] },
+          "created_at": { "type": "integer" },
+          "deleted_at": { "type": ["integer", "null"] },
+          "metadata_json": { "type": ["string", "null"] }
+        }
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["channel"],
+      "search_terms": ["communication channel"],
+      "resolution_binding": "nex.channel.native-row-resolver.v1"
+    }
+  ]
 }
