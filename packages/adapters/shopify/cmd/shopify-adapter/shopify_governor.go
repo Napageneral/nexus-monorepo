@@ -243,19 +243,27 @@ func doShopifyRequest(ctx context.Context, state *shopifyState, request *http.Re
 	if state == nil || strings.TrimSpace(state.ConnectionID) == "" || os.Getenv(nexadapterStateDirEnvName) == "" {
 		return shopifyHTTPClient.Do(request)
 	}
+	dirStartedAt := time.Now()
 	dir, err := shopifyGovernorDir(state.ConnectionID)
+	recordShopifyHealthLatency(ctx, "governor_state", dirStartedAt)
 	if err != nil {
 		return nil, err
 	}
+	slotStartedAt := time.Now()
 	lease, err := acquireShopifyGovernorSlot(ctx, dir)
+	recordShopifyHealthLatency(ctx, "governor_slot_wait", slotStartedAt)
 	if err != nil {
 		return nil, fmt.Errorf("acquire Shopify request governor: %w", err)
 	}
+	reservationStartedAt := time.Now()
 	if err := reserveShopifyRequest(ctx, dir, time.Now); err != nil {
 		lease.release()
 		return nil, err
 	}
+	recordShopifyHealthLatency(ctx, "governor_reservation_wait", reservationStartedAt)
+	httpStartedAt := time.Now()
 	response, err := shopifyHTTPClient.Do(request)
+	recordShopifyHealthLatency(ctx, "http_headers", httpStartedAt)
 	if err != nil {
 		lease.release()
 		return nil, err

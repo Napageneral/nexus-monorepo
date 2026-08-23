@@ -197,6 +197,7 @@ func TestParseLinkHeader(t *testing.T) {
 
 func TestHealthUsesMinimalShopifyGraphQLIdentity(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
+	t.Setenv(nexadapterStateDirEnvName, t.TempDir())
 
 	var capturedQuery string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +238,8 @@ func TestHealthUsesMinimalShopifyGraphQLIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	shopID, err := fetchShopHealthIdentity(ctx, state)
+	trace := newShopifyHealthTrace()
+	shopID, err := fetchShopHealthIdentity(withShopifyHealthTrace(ctx, trace), state)
 	if err != nil {
 		t.Fatalf("fetchShopHealthIdentity: %v", err)
 	}
@@ -246,6 +248,23 @@ func TestHealthUsesMinimalShopifyGraphQLIdentity(t *testing.T) {
 	}
 	if strings.TrimSpace(capturedQuery) != "query NexAdapterHealth { shop { id } }" {
 		t.Fatalf("unexpected health query: %q", capturedQuery)
+	}
+	latency, tokenSource := trace.snapshot()
+	for _, phase := range []string{
+		"token",
+		"governor_state",
+		"governor_slot_wait",
+		"governor_reservation_wait",
+		"http_headers",
+		"body_read_decode",
+		"provider_verification_total",
+	} {
+		if _, ok := latency[phase]; !ok {
+			t.Fatalf("missing health latency phase %q: %#v", phase, latency)
+		}
+	}
+	if tokenSource != "oauth_exchange" {
+		t.Fatalf("unexpected token source: %q", tokenSource)
 	}
 }
 

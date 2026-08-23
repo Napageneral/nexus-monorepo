@@ -24,7 +24,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.2.11"
+	adapterVersion             = "0.2.12"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
@@ -395,6 +395,7 @@ func connections(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterC
 }
 
 func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+	startedAt := time.Now()
 	state, err := loadShopifyState(ctx)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
@@ -403,6 +404,9 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 			Error:        err.Error(),
 		}, nil
 	}
+	trace := newShopifyHealthTrace()
+	healthContext := withShopifyHealthTrace(ctx.Context, trace)
+	recordShopifyHealthLatency(healthContext, "state_load", startedAt)
 
 	details := map[string]any{
 		"credential_ref":     state.CredentialRef,
@@ -430,7 +434,10 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 		}, nil
 	}
 
-	shopID, err := fetchShopHealthIdentity(ctx.Context, state)
+	shopID, err := fetchShopHealthIdentity(healthContext, state)
+	latencyMS, tokenSource := trace.snapshot()
+	details["latency_ms"] = latencyMS
+	details["token_source"] = tokenSource
 	if err != nil {
 		return &nexadapter.AdapterHealth{
 			Connected:    false,
@@ -1091,6 +1098,7 @@ func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, 
 		tokenCache.ClientID == state.ClientID &&
 		tokenCache.ClientSecret == state.ClientSecret &&
 		time.Now().Before(tokenCache.ExpiresAt) {
+		recordShopifyHealthTokenSource(ctx, "memory_cache")
 		return tokenCache.AccessToken, nil
 	}
 	return sharedShopifyAccessToken(ctx, state, fetchFreshShopifyAccessToken)
