@@ -8,10 +8,7 @@ import {
   parseAdapterManifest,
   validateAdapterManifest,
 } from "../../../nex/src/runtime/domains/apps/adapter-manifest.js";
-import {
-  parseManifest,
-  validateManifest,
-} from "../../../nex/src/runtime/domains/apps/manifest.js";
+import { parseManifest, validateManifest } from "../../../nex/src/runtime/domains/apps/manifest.js";
 
 export type PackageKind = "app" | "adapter";
 export type PackageLanguage = "ts" | "go";
@@ -23,6 +20,10 @@ export type DetectedPackage = {
   manifest: Record<string, unknown>;
   id: string;
   version: string;
+};
+
+export type PackageArchiveOptions = {
+  prepareStage?: (input: { detected: DetectedPackage; stageDir: string }) => Promise<void>;
 };
 
 export function packageDisplayName(id: string): string {
@@ -87,7 +88,10 @@ export function detectPackage(targetPath: string): DetectedPackage {
   }
 
   if (fs.existsSync(adapterManifestPath)) {
-    const manifest = JSON.parse(fs.readFileSync(adapterManifestPath, "utf8")) as Record<string, unknown>;
+    const manifest = JSON.parse(fs.readFileSync(adapterManifestPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
     return {
       kind: "adapter",
       rootDir,
@@ -289,7 +293,10 @@ function createTarArchive(stageDir: string, archivePath: string): void {
   }
 }
 
-export async function createPackageArchive(targetPath: string): Promise<{
+export async function createPackageArchive(
+  targetPath: string,
+  options: PackageArchiveOptions = {},
+): Promise<{
   archivePath: string;
   sha256Path: string;
   sha256: string;
@@ -309,6 +316,7 @@ export async function createPackageArchive(targetPath: string): Promise<{
   await ensureDir(distDir);
   try {
     await copyPackageTree(detected.rootDir, stageDir);
+    await options.prepareStage?.({ detected, stageDir });
     createTarArchive(stageDir, archivePath);
     const sha256 = await sha256File(archivePath);
     await fsp.writeFile(sha256Path, `${sha256}  ${path.basename(archivePath)}\n`, "utf8");
