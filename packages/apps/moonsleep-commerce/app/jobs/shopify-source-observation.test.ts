@@ -267,7 +267,7 @@ describe("Shopify source observation job", () => {
     expect(test.abort).toHaveBeenCalledTimes(1);
   });
 
-  it("uses exact single-Record ingest for inventory types outside the bounded Shopify batch contract", async () => {
+  it("uses channel-neutral single-Record ingest for inventory outside the bounded Shopify batch contract", async () => {
     const test = fixture({ recordCount: 0 });
     test.capture.mockResolvedValueOnce({
       payload: {
@@ -292,6 +292,15 @@ describe("Shopify source observation job", () => {
     });
     expect(test.ingestMany).not.toHaveBeenCalled();
     expect(test.ingest).toHaveBeenCalledTimes(2);
+    for (const [params] of test.ingest.mock.calls) {
+      expect(params.routing).not.toHaveProperty("container_id");
+      expect(params.routing).toMatchObject({
+        platform: "shopify",
+        connection_id: "shopify-production",
+        container_kind: "group",
+        metadata: { provider_account_ref: "moonsleepco.myshopify.com" },
+      });
+    }
     expect(test.commit).toHaveBeenCalledTimes(1);
   });
 });
