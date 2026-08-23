@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import shopifySourceObservationJob from "./shopify-source-observation.js";
 
-function record(id: string, containerId = "order") {
+function record(id: string, containerId = "order", sourceRecordType = "shopify.order") {
   return {
     operation: "record.ingest",
     routing: {
@@ -18,7 +18,7 @@ function record(id: string, containerId = "order") {
       timestamp: 1,
       content: id,
       content_type: "text",
-      source_record_type: "shopify.order",
+      source_record_type: sourceRecordType,
       provider_version_ref: null,
     },
   };
@@ -59,6 +59,9 @@ function fixture(
       },
     };
   });
+  const ingest = vi.fn(async () => ({
+    payload: { status: "completed", inserted: true, replayed: false },
+  }));
   const commit = vi.fn(async () => ({
     payload: {
       version: 1,
@@ -74,11 +77,11 @@ function fixture(
     input: { connection_id: "shopify-production" } as Record<string, unknown>,
     nex: {
       shopify: { source: { capture, commit, abort } },
-      record: { ingest_many: ingestMany },
+      record: { ingest, ingest_many: ingestMany },
     },
     log: { info: vi.fn(), warn: vi.fn() },
   };
-  return { ctx, capture, ingest: ingestMany, commit, abort };
+  return { ctx, capture, ingest, ingestMany, commit, abort };
 }
 
 describe("Shopify source observation job", () => {
@@ -97,8 +100,8 @@ describe("Shopify source observation job", () => {
       connection_id: "shopify-production",
       family: "orders.delta",
     });
-    expect(test.ingest).toHaveBeenCalledTimes(1);
-    expect(test.ingest).toHaveBeenCalledWith({
+    expect(test.ingestMany).toHaveBeenCalledTimes(1);
+    expect(test.ingestMany).toHaveBeenCalledWith({
       records: [
         {
           routing: {
@@ -126,7 +129,7 @@ describe("Shopify source observation job", () => {
     });
     expect(test.commit).toHaveBeenCalledTimes(1);
     expect(test.abort).not.toHaveBeenCalled();
-    expect(test.ingest.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(test.ingestMany.mock.invocationCallOrder[0]).toBeLessThan(
       test.commit.mock.invocationCallOrder[0]!,
     );
   });
@@ -182,7 +185,7 @@ describe("Shopify source observation job", () => {
 
   it("reports an exact all-Record replay as replay with a stable terminal digest", async () => {
     const test = fixture({ recordCount: 2 });
-    test.ingest.mockResolvedValue({
+    test.ingestMany.mockResolvedValue({
       payload: { records: 2, inserted: 0, replayed: 2 },
     });
 
@@ -200,7 +203,7 @@ describe("Shopify source observation job", () => {
       inserted: 324,
       replayed: 0,
     });
-    expect(test.ingest).toHaveBeenCalledTimes(1);
+    expect(test.ingestMany).toHaveBeenCalledTimes(1);
     expect(test.commit).toHaveBeenCalledTimes(1);
   });
 
@@ -259,7 +262,36 @@ describe("Shopify source observation job", () => {
       "source_record_type custody disagrees",
     );
     expect(test.ingest).not.toHaveBeenCalled();
+    expect(test.ingestMany).not.toHaveBeenCalled();
     expect(test.commit).not.toHaveBeenCalled();
     expect(test.abort).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses exact single-Record ingest for inventory types outside the bounded Shopify batch contract", async () => {
+    const test = fixture({ recordCount: 0 });
+    test.capture.mockResolvedValueOnce({
+      payload: {
+        version: 1,
+        family: "inventory.reconcile",
+        capture_id: "0123456789abcdef0123456789abcdef",
+        records: [
+          record("inventory-level:1", "inventory_level", "shopify.inventory_level"),
+          record("inventory-item:1", "inventory_item", "shopify.inventory_item"),
+        ],
+        complete: true,
+      },
+    });
+    test.ctx.job.config.family = "inventory.reconcile";
+
+    await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
+      ok: true,
+      family: "inventory.reconcile",
+      records: 2,
+      inserted: 2,
+      replayed: 0,
+    });
+    expect(test.ingestMany).not.toHaveBeenCalled();
+    expect(test.ingest).toHaveBeenCalledTimes(2);
+    expect(test.commit).toHaveBeenCalledTimes(1);
   });
 });
