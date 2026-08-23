@@ -191,10 +191,7 @@
           }
         },
         "required": ["family", "connection_id"],
-        "anyOf": [
-          { "required": ["request_id"] },
-          { "required": ["observation"] }
-        ],
+        "anyOf": [{ "required": ["request_id"] }, { "required": ["observation"] }],
         "additionalProperties": false
       },
       "response": {

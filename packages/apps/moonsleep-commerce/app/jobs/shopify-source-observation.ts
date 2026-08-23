@@ -29,6 +29,7 @@ const SOURCE_FAMILIES = new Set([
   "payouts.delta",
 ]);
 const CAPTURE_ID_RE = /^[0-9a-f]{32}$/;
+const RECORD_ID_RE = /^record_[0-9a-f]{64}$/;
 const BATCH_SOURCE_RECORD_TYPES = new Set([
   "shopify.customer",
   "shopify.inventory",
@@ -37,9 +38,7 @@ const BATCH_SOURCE_RECORD_TYPES = new Set([
 ]);
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
@@ -70,6 +69,17 @@ function requireString(row: RuntimeRow, field: string): string {
     throw new Error(`Shopify source job requires ${field}`);
   }
   return value;
+}
+
+function requireBatchRecordIds(value: unknown, expected: number): string[] {
+  if (!Array.isArray(value) || value.length !== expected) {
+    throw new Error("Shopify Record batch ingest returned incomplete Record ids");
+  }
+  const ids = value.map((entry) => asString(entry));
+  if (ids.some((id) => !RECORD_ID_RE.test(id)) || new Set(ids).size !== ids.length) {
+    throw new Error("Shopify Record batch ingest returned invalid Record ids");
+  }
+  return ids;
 }
 
 function exactMetadataField(params: {
@@ -144,8 +154,7 @@ function sourceJobConfig(ctx: ShopifySourceJobContext): {
   connectionId: string;
 } {
   const family = asString(ctx.input.family) || asString(ctx.job.config.family);
-  const connectionId =
-    asString(ctx.input.connection_id) || asString(ctx.job.config.connection_id);
+  const connectionId = asString(ctx.input.connection_id) || asString(ctx.job.config.connection_id);
   if (!SOURCE_FAMILIES.has(family)) {
     throw new Error("Shopify source job received an unsupported family");
   }
@@ -193,6 +202,7 @@ export default async function shopifySourceObservationJob(
   const records = asArray(capture.records);
   let inserted = 0;
   let replayed = 0;
+  let recordIds: string[] = [];
   try {
     const ingestRecords: Array<{ routing: RuntimeRow; payload: RuntimeRow }> = [];
     const familyCounts: RuntimeRow = {};
@@ -226,6 +236,7 @@ export default async function shopifySourceObservationJob(
       ) {
         throw new Error("Shopify Record batch ingest returned invalid counts");
       }
+      recordIds = requireBatchRecordIds(result.record_ids, ingestRecords.length);
     } else {
       for (const record of ingestRecords) {
         const result = unwrap(await ctx.nex.record.ingest(record));
@@ -264,6 +275,7 @@ export default async function shopifySourceObservationJob(
       capture_id: captureId,
       records: records.length,
       family_counts: sortedFamilyCounts,
+      ...(recordIds.length > 0 ? { record_ids: recordIds } : {}),
       inserted,
       replayed,
       complete: commit.complete === true,
@@ -279,9 +291,7 @@ export default async function shopifySourceObservationJob(
     };
     return {
       ...terminal,
-      result_sha256: createHash("sha256")
-        .update(JSON.stringify(terminal), "utf8")
-        .digest("hex"),
+      result_sha256: createHash("sha256").update(JSON.stringify(terminal), "utf8").digest("hex"),
     };
   } catch (error) {
     await abortCapture({ ctx, family, connectionId, captureId });

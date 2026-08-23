@@ -484,6 +484,51 @@ function validateOrderObservationResult(
   };
 }
 
+function commerceProjectionReceipt(
+  family: "order" | "line_item",
+  recordId: string,
+  result: RuntimeRow,
+): RuntimeRow {
+  const terminal = {
+    projection_receipt_id: commerceProjectionReceiptId(family, recordId),
+    projector: "moonsleep-commerce.shopify-order-commerce",
+    family,
+    record_id: recordId,
+    status: "completed",
+    target_id: requireString(result, "row_id"),
+    source_record_payload_sha256: requireSha256(result, "source_record_payload_sha256"),
+    projection_payload_sha256: requireSha256(result, "projection_payload_sha256"),
+  };
+  return { ...terminal, result_sha256: sha256(stableJson(terminal)) };
+}
+
+function commerceProjectionReceiptId(family: "order" | "line_item", recordId: string): string {
+  return `shopify_commerce_projection_${sha256(
+    stableJson({
+      projector: "moonsleep-commerce.shopify-order-commerce",
+      family,
+      record_id: recordId,
+    }),
+  ).slice(0, 32)}`;
+}
+
+function commerceProjectionQuarantine(
+  family: "order" | "line_item",
+  recordId: string,
+  error: unknown,
+): RuntimeRow {
+  const terminal = {
+    projection_receipt_id: commerceProjectionReceiptId(family, recordId),
+    projector: "moonsleep-commerce.shopify-order-commerce",
+    family,
+    record_id: recordId,
+    status: "quarantined",
+    error_code: "invalid_commerce_record",
+    error: error instanceof Error ? error.message : "invalid Shopify commerce Record",
+  };
+  return { ...terminal, result_sha256: sha256(stableJson(terminal)) };
+}
+
 export async function projectParsedShopifyOrder(
   nex: ShopifyCommerceClient,
   parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>,
@@ -568,21 +613,51 @@ async function projectShopifyCommerceEvent(ctx: ShopifyCommerceJobContext): Prom
   }
   const family = asString(shopifyRecordSourceMetadata(record).family);
   if (family === "order") {
-    const parsed = parseShopifyOrderRecord(record);
+    let parsed: Extract<ParsedShopifyCommerceRecord, { family: "order" }>;
+    try {
+      parsed = parseShopifyOrderRecord(record);
+    } catch (error) {
+      return {
+        projected: false,
+        record_id: recordId,
+        completed: 0,
+        quarantined: 1,
+        projection_receipts: [commerceProjectionQuarantine("order", recordId, error)],
+      };
+    }
+    const result = await projectParsedShopifyOrder(ctx.nex, parsed);
     return {
       projected: true,
       family,
       record_id: recordId,
-      ...(await projectParsedShopifyOrder(ctx.nex, parsed)),
+      ...result,
+      completed: 1,
+      quarantined: 0,
+      projection_receipts: [commerceProjectionReceipt("order", recordId, result)],
     };
   }
   if (family === "line_item") {
-    const parsed = parseShopifyLineItemRecord(record);
+    let parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>;
+    try {
+      parsed = parseShopifyLineItemRecord(record);
+    } catch (error) {
+      return {
+        projected: false,
+        record_id: recordId,
+        completed: 0,
+        quarantined: 1,
+        projection_receipts: [commerceProjectionQuarantine("line_item", recordId, error)],
+      };
+    }
+    const result = await projectParsedShopifyLineItem(ctx.nex, parsed);
     return {
       projected: true,
       family,
       record_id: recordId,
-      ...(await projectParsedShopifyLineItem(ctx.nex, parsed)),
+      ...result,
+      completed: 1,
+      quarantined: 0,
+      projection_receipts: [commerceProjectionReceipt("line_item", recordId, result)],
     };
   }
   return { projected: false, reason: "not_order_or_line_item", record_id: recordId };
@@ -630,10 +705,28 @@ export default async function shopifyOrderCommerceJob(
     }
     const family = asString(shopifyRecordSourceMetadata(record).family);
     if (family === "order") {
-      return { family, recordId, parsed: parseShopifyOrderRecord(record) };
+      try {
+        return { family, recordId, parsed: parseShopifyOrderRecord(record), quarantine: null };
+      } catch (error) {
+        return {
+          family: "quarantined" as const,
+          recordId,
+          parsed: null,
+          quarantine: commerceProjectionQuarantine("order", recordId, error),
+        };
+      }
     }
     if (family === "line_item") {
-      return { family, recordId, parsed: parseShopifyLineItemRecord(record) };
+      try {
+        return { family, recordId, parsed: parseShopifyLineItemRecord(record), quarantine: null };
+      } catch (error) {
+        return {
+          family: "quarantined" as const,
+          recordId,
+          parsed: null,
+          quarantine: commerceProjectionQuarantine("line_item", recordId, error),
+        };
+      }
     }
     return { family: "ignored" as const, recordId, parsed: null };
   });
@@ -653,11 +746,16 @@ export default async function shopifyOrderCommerceJob(
       parsed: Extract<ParsedShopifyCommerceRecord, { family: "line_item" }>;
     } => entry.family === "line_item" && entry.parsed?.family === "line_item",
   );
+  const quarantined = loaded.filter(
+    (entry): entry is typeof entry & { family: "quarantined"; quarantine: RuntimeRow } =>
+      entry.family === "quarantined" && Boolean(entry.quarantine),
+  );
   const loadedAt = performance.now();
   const preparedOrders = await mapWithConcurrency(orders, 32, async (entry) => ({
     entry,
     input: await prepareShopifyOrderInput(ctx.nex, entry.parsed),
   }));
+  let orderResults: RuntimeRow[] = [];
   if (preparedOrders.length > 0 && ctx.nex.commerce.orders.observe_many) {
     const payload = unwrapPayload(
       await ctx.nex.commerce.orders.observe_many({
@@ -668,11 +766,11 @@ export default async function shopifyOrderCommerceJob(
     if (results.length !== preparedOrders.length) {
       throw new Error("Nex returned an incomplete Shopify order observation batch");
     }
-    results.forEach((result, index) =>
+    orderResults = results.map((result, index) =>
       validateOrderObservationResult(result, preparedOrders[index]!.entry.parsed),
     );
   } else {
-    await mapWithConcurrency(preparedOrders, 32, async ({ entry, input }) =>
+    orderResults = await mapWithConcurrency(preparedOrders, 32, async ({ entry, input }) =>
       validateOrderObservationResult(await ctx.nex.commerce.orders.observe(input), entry.parsed),
     );
   }
@@ -699,6 +797,7 @@ export default async function shopifyOrderCommerceJob(
     entry,
     input: lineItemObservationInput(entry.parsed, orderCurrencyById.get(entry.parsed.orderId)),
   }));
+  let lineItemResults: RuntimeRow[] = [];
   if (preparedLineItems.length > 0 && ctx.nex.commerce["line-items"].observe_many) {
     const payload = unwrapPayload(
       await ctx.nex.commerce["line-items"].observe_many({
@@ -709,21 +808,33 @@ export default async function shopifyOrderCommerceJob(
     if (results.length !== preparedLineItems.length) {
       throw new Error("Nex returned an incomplete Shopify line-item observation batch");
     }
-    results.forEach((result, index) =>
+    lineItemResults = results.map((result, index) =>
       validateObservationResult(result, preparedLineItems[index]!.entry.parsed),
     );
   } else {
-    await mapWithConcurrency(preparedLineItems, 32, async ({ entry, input }) =>
+    lineItemResults = await mapWithConcurrency(preparedLineItems, 32, async ({ entry, input }) =>
       validateObservationResult(await ctx.nex.commerce["line-items"].observe(input), entry.parsed),
     );
   }
   const finishedAt = performance.now();
+  const projectionReceipts = [
+    ...orderResults.map((result, index) =>
+      commerceProjectionReceipt("order", orders[index]!.recordId, result),
+    ),
+    ...lineItemResults.map((result, index) =>
+      commerceProjectionReceipt("line_item", lineItems[index]!.recordId, result),
+    ),
+    ...quarantined.map((entry) => entry.quarantine),
+  ];
   return {
     projected: true,
     records: events.length,
     orders: orders.length,
     line_items: lineItems.length,
-    ignored: loaded.length - orders.length - lineItems.length,
+    ignored: loaded.length - orders.length - lineItems.length - quarantined.length,
+    completed: orderResults.length + lineItemResults.length,
+    quarantined: quarantined.length,
+    projection_receipts: projectionReceipts,
     timing_ms: {
       load: Math.round(loadedAt - startedAt),
       orders: Math.round(ordersAt - loadedAt),
