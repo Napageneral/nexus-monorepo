@@ -267,7 +267,7 @@ describe("Shopify source observation job", () => {
     expect(test.abort).toHaveBeenCalledTimes(1);
   });
 
-  it("uses channel-neutral single-Record ingest for inventory outside the bounded Shopify batch contract", async () => {
+  it("uses channel-neutral batch ingest for changing inventory records", async () => {
     const test = fixture({ recordCount: 0 });
     test.capture.mockResolvedValueOnce({
       payload: {
@@ -275,8 +275,8 @@ describe("Shopify source observation job", () => {
         family: "inventory.reconcile",
         capture_id: "0123456789abcdef0123456789abcdef",
         records: [
-          record("inventory-level:1", "inventory_level", "shopify.inventory_level"),
-          record("inventory-item:1", "inventory_item", "shopify.inventory_item"),
+          record("inventory-level:1", "inventory_level", "shopify.inventory"),
+          record("inventory-level:2", "inventory_level", "shopify.inventory"),
         ],
         complete: true,
       },
@@ -290,17 +290,22 @@ describe("Shopify source observation job", () => {
       inserted: 2,
       replayed: 0,
     });
-    expect(test.ingestMany).not.toHaveBeenCalled();
-    expect(test.ingest).toHaveBeenCalledTimes(2);
-    for (const [params] of test.ingest.mock.calls) {
-      expect(params.routing).not.toHaveProperty("container_id");
-      expect(params.routing).toMatchObject({
-        platform: "shopify",
-        connection_id: "shopify-production",
-        container_kind: "group",
-        metadata: { provider_account_ref: "moonsleepco.myshopify.com" },
-      });
-    }
+    expect(test.ingest).not.toHaveBeenCalled();
+    expect(test.ingestMany).toHaveBeenCalledTimes(1);
+    expect(test.ingestMany).toHaveBeenCalledWith({
+      records: expect.arrayContaining([
+        expect.objectContaining({
+          routing: expect.objectContaining({
+            platform: "shopify",
+            connection_id: "shopify-production",
+            container_id: "inventory_level",
+          }),
+          payload: expect.objectContaining({
+            metadata: expect.objectContaining({ source_record_type: "shopify.inventory" }),
+          }),
+        }),
+      ]),
+    });
     expect(test.commit).toHaveBeenCalledTimes(1);
   });
 });
