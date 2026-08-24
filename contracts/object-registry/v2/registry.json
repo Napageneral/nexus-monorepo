@@ -88,6 +88,188 @@
       "resolution_binding": "nex.canonical-object-kernel.v1"
     },
     {
+      "object_type_id": "nex.entity",
+      "names": {
+        "singular": "Entity",
+        "plural": "Entities"
+      },
+      "owner_domain": "nex.identity",
+      "identity_contract_id": "nex.entity.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["entity"],
+      "search_terms": ["person", "organization"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.contact",
+      "names": {
+        "singular": "Contact",
+        "plural": "Contacts"
+      },
+      "owner_domain": "nex.identity",
+      "identity_contract_id": "nex.contact.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["contact"],
+      "search_terms": ["contact point", "provider contact"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.loop",
+      "names": {
+        "singular": "Loop",
+        "plural": "Loops"
+      },
+      "owner_domain": "nex.loops",
+      "identity_contract_id": "nex.loop.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["loop", "communication_loop", "moonsleep.communication_loop"],
+      "search_terms": ["communication loop", "open loop"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.commitment",
+      "names": {
+        "singular": "Commitment",
+        "plural": "Commitments"
+      },
+      "owner_domain": "nex.commitments",
+      "identity_contract_id": "nex.commitment.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["commitment", "moonsleep.commitment"],
+      "search_terms": ["promise", "obligation"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.place",
+      "names": {
+        "singular": "Place",
+        "plural": "Places"
+      },
+      "owner_domain": "nex.places",
+      "identity_contract_id": "nex.place.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["place"],
+      "search_terms": ["location"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.facet_definition",
+      "names": {
+        "singular": "Facet Definition",
+        "plural": "Facet Definitions"
+      },
+      "owner_domain": "nex.facets",
+      "identity_contract_id": "nex.facet_definition.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["facet_definition"],
+      "search_terms": ["facet contract"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.facet_attachment",
+      "names": {
+        "singular": "Facet Attachment",
+        "plural": "Facet Attachments"
+      },
+      "owner_domain": "nex.facets",
+      "identity_contract_id": "nex.facet_attachment.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["facet_attachment"],
+      "search_terms": ["business role", "domain facet"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
       "object_type_id": "nex.channel",
       "names": {
         "singular": "Channel",

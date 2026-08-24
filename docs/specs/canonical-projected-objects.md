@@ -159,6 +159,13 @@ The declaration does not name a permanent projector. Any authorized producer
 may publish a conforming revision. Publication authority belongs to normal Nex
 authorization policy, not to a second projector registry.
 
+Native Nex declarations are imports, not copies. A native declaration names the
+stable native subject class, identity-address contract, and owner resolution
+binding required by the shared resolver. The native domain remains the sole
+owner of its attributes, revisions, relationships, and storage. The Canonical
+Object Kernel never republishes a native Entity, Place, Contact, Channel, Loop,
+Commitment, Facet Definition, or Facet Attachment into projected-object tables.
+
 Conceptually:
 
 ```ts
@@ -218,6 +225,27 @@ PO                            -> search term for moonsleep.purchase_order
 product_revision              -> alias moonsleep.product_revision
 product version               -> alias moonsleep.product_revision
 ```
+
+The following MoonSleep boundaries are canonical:
+
+- a Manufacturing Run is an independently addressable production execution and
+  is `moonsleep.manufacturing_run`;
+- a Manufacturing Run Component is an independently addressable component
+  workstream within a Manufacturing Run and is
+  `moonsleep.manufacturing_run_component`;
+- `inventory_purchase_order_component` and
+  `purchase_order_component_line` are input terms for the single canonical
+  `moonsleep.purchase_order_component_line` type;
+- a Product Component Variant Rule remains embedded Product Revision or BOM
+  state until evidence proves an independent identity and lifecycle; and
+- accepted inspection work is a native `nex.commitment`; a separate service
+  procurement type is created only if it later proves an independent lifecycle.
+
+`supersedes` always points from a newer accepted Product Revision to the older
+accepted Product Revision it replaces. A proposed revision may exist with a
+proposed state, but proposal evidence does not emit a supersession edge. The
+historical term `proposed_successor` is interpreted as proposal state and is not
+a second canonical relationship.
 
 Statuses normally become attributes or events. Source identifiers remain
 evidence metadata. Revision-like nouns use Object Revisions. Link-like nouns

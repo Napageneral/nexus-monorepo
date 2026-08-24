@@ -5,6 +5,11 @@ complete declaration gives a projected type the shared Canonical Object Kernel
 behavior; a native declaration routes through its owner at the same resolution
 seam.
 
+A native declaration is an import of addressability, not a copy of native
+state. Its attributes, revisions, relationships, and storage remain owned by
+the native Nex domain; the registry carries the stable identity contract,
+accepted input language, and shared resolver binding.
+
 The registry contains identity-bearing object types only. It does not contain
 candidate nouns, read views, storage tables, receipts, projectors, historical
 decoders, compatibility objects, or activation states.
