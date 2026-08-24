@@ -24,10 +24,11 @@ Observation targeting, Core Graph relationships, exact resolution, and
 evidence lineage. Native Nex objects remain native and resolve through owner
 adapters at the same seam.
 
-The foundation is proven with Purchase Order and Product Revision. After that,
-objects converge one at a time according to business need. The board does not
-create a domain-family migration framework, permanent projector registry, or
-historical decoder subsystem.
+The foundation is proven with Purchase Order and Product Revision. The first
+real convergence wave now follows the next global historical interval. Within
+that wave, declarations and owner bindings still land as small independent
+slices; the chronological slate is the readiness and production-proof boundary,
+not a reason to build a domain-family framework.
 
 ## Deliberate simplification
 
@@ -53,14 +54,15 @@ not prerequisites for the new foundation.
 
 ## Current baselines
 
-- Umbrella exact `origin/main`: `2540d28ca32e3642bb5e922a7b6934765a83733d`
-- Nex exact `origin/main`: `7a7cea8966260c8ff998b1a418ad8c73ff9958de`
-- MoonSleep exact `origin/main`: `95a2ec2f6d8b8f2d16e3475490764fb739b9bc85`
-- Native Channel completed branch: `codex/native-channel-cleanup-20260823`
-  - native owner resolver: `2c12f89d78`
-  - crosswalk lifecycle/fallback deletion: `cc4f53a095`
-  - migration/materialization deletion: `2ec08313fd`
-  - generalized historical-ledger verification: `2acbd3e73d`
+- Umbrella exact `origin/main`: `98174577d9cc20650c03e119d78c6471785c5902`
+- Nex exact `origin/main`: `ff3c1cea9ddf3a1c1244f7535c174e1a0ed5ca40`
+- MoonSleep exact `origin/main`: `baeda9025a71bc409cdc68fd6780f5c8a0f325ef`
+- Native Channel cleanup is merged through Nex PR #432. Communication-storage
+  safety and parity work is merged through PR #453; current main is a
+  descendant of both.
+- The bounded communication-successor migration reached exact production parity
+  and released its resources at `2026-08-24T02:23:42.575Z`. That custody result
+  removes a runtime scheduling conflict; it does not authorize CPO publication.
 - Projecting and historical-interpretation agent:
   `codex://threads/019fec90-be1c-7cc3-8961-5c05caadd78d`
 
@@ -80,15 +82,16 @@ source commit.
 5. Every candidate receives one `reuse | alias | create` decision before
    registration. The exhaustive vocabulary census remains research input, not
    a global gate.
-6. Migrate one object at a time unless two identities are demonstrably
-   inseparable.
+6. Land declarations and owner bindings one small dependency-closed slice at a
+   time. Validate the full chronological slate before historical publication.
 7. Delete replaced vocabulary and code as each concept converges. Do not carry
    disabled projectors or decoders toward a final big-bang cleanup.
 8. Historical packets and cursors are never rewritten.
 9. Source merge is not production authorization. Every production change has
    separate admission, readback, rollback or resume semantics, and receipts.
-10. The active historical cursor remains paused until the exact CPO-004 proof
-    and a separately approved resume transaction complete.
+10. The active historical cursor remains paused until CPO-005 proves the full
+    next-slate vocabulary, resolver, relationship, and replay contract and a
+    separately approved historical publication transaction completes.
 
 ## Dependency DAG
 
@@ -98,14 +101,25 @@ flowchart TD
     CPO002 --> CPO003[CPO-003 Observation, graph, and native resolution]
     Channel[Completed native Channel resolver] --> CPO003
     CPO003 --> CPO004[CPO-004 Agent projection proof]
-    CPO004 --> CPO005[CPO-005 Incremental object convergence]
+    CPO004 --> AUDIT[Historical frontier vocabulary audit]
+    AUDIT --> DECISIONS[Approved semantic decisions]
+    DECISIONS --> CPO005A[CPO-005A Native imports and owner bindings]
+    CPO005A --> CPO005B[CPO-005B Next-slate projected declarations]
+    CPO005B --> CPO005C[CPO-005C Registry-derived vocabulary and relationship coverage]
+    CPO005C --> CPO005D[CPO-005D Full next-slate dry run]
+    CPO005D --> CPO005E[CPO-005E Merge and deploy exact artifacts]
+    CPO005E --> CPO005F[CPO-005F Separately authorized historical publication]
+    CPO005F --> CPO005G[CPO-005G Readback replay no-op and cursor advance]
+    CPO005G --> CPO005[CPO-005 First convergence wave complete]
     CPO005 --> CPO006[CPO-006 Legacy deletion and foundation closure]
 ```
 
-The critical path is intentionally linear:
+The foundation, declarations, owner bindings, vocabulary coverage, and corrected
+zero-stop full-slate dry run are source-complete. The active path is:
 
 ```text
-CPO-001 -> CPO-002 -> CPO-003 -> CPO-004 -> CPO-005 -> CPO-006
+CPO-005E review/merge/deploy -> CPO-005F authorized publication
+-> CPO-005G readback/cursor -> CPO-006
 ```
 
 The only external implementation input is the already-completed native Channel
@@ -114,30 +128,28 @@ projected-object kernel in CPO-002.
 
 ## Ticket index
 
-| Ticket                                                               | State       | Outcome                                                                                   | Depends on              |
-| -------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------- | ----------------------- |
-| [CPO-001](completed/CPO-001-simplified-kernel-contract.md)           | completed   | Canonical two-operation, agent-projection contract                                        | —                       |
-| [CPO-002](completed/CPO-002-generic-canonical-object-kernel.md)      | completed   | Registry, identities, revisions, heads, provenance, and two generic operations            | CPO-001                 |
-| [CPO-003](completed/CPO-003-observation-graph-native-resolution.md)  | completed   | Uniform targeting, revision-linked graph, and native Channel adapter binding              | CPO-002, Channel branch |
-| [CPO-004](completed/CPO-004-agent-projection-proof.md)               | completed   | Agent projects Purchase Order and Product Revision end to end, including historical terms | CPO-003                 |
-| [CPO-005](not-started/CPO-005-incremental-object-convergence.md)     | not started | Prove the repeatable one-object convergence loop and seed independent follow-on tickets   | CPO-004                 |
-| [CPO-006](not-started/CPO-006-legacy-deletion-foundation-closure.md) | not started | Delete superseded foundation-era machinery and close the foundation proof                 | CPO-005                 |
+| Ticket                                                                | State       | Outcome                                                                                   | Depends on              |
+| --------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------- | ----------------------- |
+| [CPO-001](completed/CPO-001-simplified-kernel-contract.md)            | completed   | Canonical two-operation, agent-projection contract                                        | —                       |
+| [CPO-002](completed/CPO-002-generic-canonical-object-kernel.md)       | completed   | Registry, identities, revisions, heads, provenance, and two generic operations            | CPO-001                 |
+| [CPO-003](completed/CPO-003-observation-graph-native-resolution.md)   | completed   | Uniform targeting, revision-linked graph, and native Channel adapter binding              | CPO-002, Channel branch |
+| [CPO-004](completed/CPO-004-agent-projection-proof.md)                | completed   | Agent projects Purchase Order and Product Revision end to end, including historical terms | CPO-003                 |
+| [CPO-005](in-progress/CPO-005-historical-first-object-convergence.md) | in progress | Converge the first full chronological slate through small dependency-closed slices        | CPO-004, frontier audit |
+| [CPO-006](not-started/CPO-006-legacy-deletion-foundation-closure.md)  | not started | Delete superseded foundation-era machinery and close the foundation proof                 | CPO-005                 |
 
 ## What happens after CPO-006
 
 CPO-006 closes the foundation, not every future domain migration.
 
 Each additional candidate becomes a small independent ticket using the template
-established by CPO-005:
+proven inside CPO-005:
 
 ```text
 classify -> declare if needed -> agent projects -> verify -> move consumers -> delete replacement
 ```
 
-Examples may include Manufacturing Run, Supply Shipment, Joint Cargo Plan,
-Invoice, Claim, or another business-needed object. Their order is determined by
-the active evidence chronology and business need, not by a predeclared family
-sequence.
+Later intervals reuse the same loop. Their order is determined by active
+evidence chronology and business need, not by a predeclared family sequence.
 
 The locked vocabulary census and ordered first convergence queue are recorded
 in the [consolidation ledger](consolidation-ledger.md). The ledger does not

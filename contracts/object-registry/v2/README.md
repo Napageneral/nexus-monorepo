@@ -1,9 +1,18 @@
 # Canonical object registry v2
 
 This is the generative declaration contract for canonical object types. A
-complete declaration gives a projected type the shared Canonical Object Kernel
-behavior; a native declaration routes through its owner at the same resolution
-seam.
+complete declaration gives a new projected type the shared Canonical Object
+Kernel behavior; an existing owner-backed declaration routes through its owner
+at the same resolution seam.
+
+An owner-backed declaration is an import of addressability, not a copy of owner
+state. Its attributes, revisions, relationships, and storage remain owned by
+the existing domain; the registry carries the stable identity contract,
+accepted input language, and shared resolver binding. This applies to native
+Nex objects and to already-deployed MoonSleep projections whose canonical IDs
+and revision custody must remain stable during incremental convergence.
+Runtime owner routing is derived from each declaration's `resolution_binding`;
+implementations do not maintain another object-type registry.
 
 The registry contains identity-bearing object types only. It does not contain
 candidate nouns, read views, storage tables, receipts, projectors, historical
@@ -26,6 +35,17 @@ Regenerate the deterministic compiled artifact:
 
 ```bash
 node contracts/object-registry/v2/registry-tools.mjs --write
+```
+
+Regenerate Nex's runtime mirror from this source; never hand-author a runtime
+declaration:
+
+```bash
+node scripts/generate-canonical-object-registry.mjs \
+  /path/to/umbrella/contracts/object-registry/v2/registry.json \
+  src/runtime/domains/objects/canonical-object-registry.generated.ts
+pnpm exec oxfmt --write \
+  src/runtime/domains/objects/canonical-object-registry.generated.ts
 ```
 
 Run the two-type compiler conformance proof:

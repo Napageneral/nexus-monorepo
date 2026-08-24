@@ -22,9 +22,8 @@
       "attributes_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["product_family_id", "revision_label", "revision_state"],
+        "required": ["revision_label", "revision_state"],
         "properties": {
-          "product_family_id": { "type": "string", "minLength": 1 },
           "revision_label": { "type": "string", "minLength": 1 },
           "revision_state": { "type": "string", "minLength": 1 },
           "effective_from": { "type": ["string", "null"] },
@@ -33,6 +32,11 @@
         }
       },
       "relationship_slots": [
+        {
+          "relationship_id": "product_family",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.product_family"]
+        },
         {
           "relationship_id": "supersedes",
           "cardinality": "optional_one",
@@ -62,9 +66,8 @@
       "attributes_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["supplier_name", "status", "currency", "units_ordered"],
+        "required": ["status", "currency", "units_ordered"],
         "properties": {
-          "supplier_name": { "type": "string", "minLength": 1 },
           "supplier_reference": { "type": ["string", "null"] },
           "sku_key": { "type": ["string", "null"] },
           "ordered_at": { "type": ["string", "null"] },
@@ -78,6 +81,11 @@
       },
       "relationship_slots": [
         {
+          "relationship_id": "supplier",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["nex.entity"]
+        },
+        {
           "relationship_id": "orders_revision",
           "cardinality": "optional_many",
           "target_object_type_ids": ["moonsleep.product_revision"]
@@ -86,6 +94,705 @@
       "accepted_input_terms": ["inventory_purchase_order", "supply_order"],
       "search_terms": ["PO", "purchase order"],
       "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.product_family",
+      "names": {
+        "singular": "Product Family",
+        "plural": "Product Families"
+      },
+      "owner_domain": "moonsleep.product-and-supply",
+      "identity_contract_id": "moonsleep.product_family.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["product_family_id"],
+        "properties": {
+          "product_family_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["canonical_name", "lifecycle_state"],
+        "properties": {
+          "canonical_name": { "type": "string", "minLength": 1 },
+          "lifecycle_state": { "type": "string", "minLength": 1 }
+        }
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["product_family"],
+      "search_terms": ["product family"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.product_bom_version",
+      "names": {
+        "singular": "Product BOM Version",
+        "plural": "Product BOM Versions"
+      },
+      "owner_domain": "moonsleep.product-and-supply",
+      "identity_contract_id": "moonsleep.product_bom_version.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bom_version_id"],
+        "properties": {
+          "bom_version_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version_ordinal", "version_state"],
+        "properties": {
+          "version_ordinal": { "type": "integer", "minimum": 1 },
+          "version_state": { "type": "string", "minLength": 1 }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "specifies_product_revision",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.product_revision"]
+        },
+        {
+          "relationship_id": "supersedes",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.product_bom_version"]
+        }
+      ],
+      "accepted_input_terms": ["product_bom_version"],
+      "search_terms": ["BOM version", "bill of materials version"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.product_bom_line",
+      "names": {
+        "singular": "Product BOM Line",
+        "plural": "Product BOM Lines"
+      },
+      "owner_domain": "moonsleep.product-and-supply",
+      "identity_contract_id": "moonsleep.product_bom_line.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bom_line_id"],
+        "properties": {
+          "bom_line_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_code", "quantity", "unit_of_measure", "specification"],
+        "properties": {
+          "component_code": { "type": "string", "minLength": 1 },
+          "component_role": { "type": ["string", "null"] },
+          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "unit_of_measure": { "type": "string", "minLength": 1 },
+          "specification": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "part_of_bom_version",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.product_bom_version"]
+        }
+      ],
+      "accepted_input_terms": ["product_bom_line"],
+      "search_terms": ["BOM line", "bill of materials line"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.sample_article",
+      "names": {
+        "singular": "Sample Article",
+        "plural": "Sample Articles"
+      },
+      "owner_domain": "moonsleep.product-and-supply",
+      "identity_contract_id": "moonsleep.sample_article.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sample_article_id"],
+        "properties": {
+          "sample_article_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["article_label", "article_state", "is_commercial_inventory"],
+        "properties": {
+          "article_label": { "type": "string", "minLength": 1 },
+          "article_state": { "type": "string", "minLength": 1 },
+          "is_commercial_inventory": { "type": "boolean" },
+          "article_context": { "type": ["string", "null"] },
+          "state_effective_at": { "type": ["string", "null"] }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "realizes_product_revision",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.product_revision"]
+        },
+        {
+          "relationship_id": "specified_by_bom_version",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.product_bom_version"]
+        }
+      ],
+      "accepted_input_terms": ["sample_article"],
+      "search_terms": ["approval article", "pre-production sample"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.supplier_freight_quote",
+      "names": {
+        "singular": "Supplier Freight Quote",
+        "plural": "Supplier Freight Quotes"
+      },
+      "owner_domain": "moonsleep.supply",
+      "identity_contract_id": "moonsleep.supplier_freight_quote.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["freight_quote_id"],
+        "properties": {
+          "freight_quote_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["issued_at", "currency", "transport_mode", "service_scope", "quotation_state"],
+        "properties": {
+          "supplier_reference": { "type": ["string", "null"] },
+          "issued_at": { "type": "string", "minLength": 1 },
+          "valid_through": { "type": ["string", "null"] },
+          "currency": { "type": "string", "minLength": 1 },
+          "transport_mode": { "type": "string", "minLength": 1 },
+          "service_scope": { "type": "string", "minLength": 1 },
+          "incoterm_code": { "type": ["string", "null"] },
+          "quotation_state": { "type": "string", "minLength": 1 },
+          "terms": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "issued_by_supplier",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["nex.entity"]
+        },
+        {
+          "relationship_id": "for_purchase_order",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.purchase_order"]
+        },
+        {
+          "relationship_id": "supersedes",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.supplier_freight_quote"]
+        }
+      ],
+      "accepted_input_terms": ["supplier_freight_quote", "supplier_freight_quotation"],
+      "search_terms": ["freight quote", "supplier freight quotation"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.supplier_freight_quote_line",
+      "names": {
+        "singular": "Supplier Freight Quote Line",
+        "plural": "Supplier Freight Quote Lines"
+      },
+      "owner_domain": "moonsleep.supply",
+      "identity_contract_id": "moonsleep.supplier_freight_quote_line.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["freight_quote_line_id"],
+        "properties": {
+          "freight_quote_line_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["quantity_basis_units", "quoted_amount_minor_units"],
+        "properties": {
+          "quantity_basis_units": { "type": "integer", "minimum": 1 },
+          "carton_count": { "type": ["integer", "null"], "minimum": 1 },
+          "quoted_amount_minor_units": { "type": "integer", "minimum": 0 },
+          "transit_min_days": { "type": ["integer", "null"], "minimum": 1 },
+          "transit_max_days": { "type": ["integer", "null"], "minimum": 1 },
+          "service_inclusions": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "part_of_freight_quote",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.supplier_freight_quote"]
+        },
+        {
+          "relationship_id": "quotes_component_line",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.purchase_order_component_line"]
+        }
+      ],
+      "accepted_input_terms": ["supplier_freight_quote_line", "supplier_freight_quotation_line"],
+      "search_terms": ["freight quote line"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.purchase_order_component_line",
+      "names": {
+        "singular": "Purchase Order Component Line",
+        "plural": "Purchase Order Component Lines"
+      },
+      "owner_domain": "moonsleep.supply",
+      "identity_contract_id": "moonsleep.purchase_order_component_line.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["purchase_order_component_line_id"],
+        "properties": {
+          "purchase_order_component_line_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_code", "quantity", "unit_of_measure"],
+        "properties": {
+          "component_code": { "type": "string", "minLength": 1 },
+          "quantity": { "type": "number", "exclusiveMinimum": 0 },
+          "unit_of_measure": { "type": "string", "minLength": 1 },
+          "unit_price_minor_units": { "type": ["integer", "null"], "minimum": 0 },
+          "currency": { "type": ["string", "null"] },
+          "specification": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "part_of_purchase_order",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.purchase_order"]
+        },
+        {
+          "relationship_id": "specified_by_bom_line",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.product_bom_line"]
+        }
+      ],
+      "accepted_input_terms": [
+        "inventory_purchase_order_component",
+        "purchase_order_component_line"
+      ],
+      "search_terms": ["PO component line", "purchase order component"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.manufacturing_run",
+      "names": {
+        "singular": "Manufacturing Run",
+        "plural": "Manufacturing Runs"
+      },
+      "owner_domain": "moonsleep.supply",
+      "identity_contract_id": "moonsleep.manufacturing_run.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["manufacturing_run_id"],
+        "properties": {
+          "manufacturing_run_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_state"],
+        "properties": {
+          "run_state": { "type": "string", "minLength": 1 },
+          "planned_quantity": { "type": ["integer", "null"], "minimum": 1 },
+          "finished_quantity": { "type": ["integer", "null"], "minimum": 0 },
+          "unit_of_measure": { "type": ["string", "null"] },
+          "production_started_at": { "type": ["string", "null"] },
+          "completed_at": { "type": ["string", "null"] },
+          "state_effective_at": { "type": ["string", "null"] },
+          "execution_details": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "executes_purchase_order",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.purchase_order"]
+        },
+        {
+          "relationship_id": "performed_by",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["nex.entity"]
+        },
+        {
+          "relationship_id": "authorized_by",
+          "cardinality": "optional_many",
+          "target_object_type_ids": ["nex.entity"]
+        },
+        {
+          "relationship_id": "governed_by_revision",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.product_revision"]
+        },
+        {
+          "relationship_id": "uses_approval_article",
+          "cardinality": "optional_many",
+          "target_object_type_ids": ["moonsleep.sample_article"]
+        },
+        {
+          "relationship_id": "compared_against_retained_article",
+          "cardinality": "optional_many",
+          "target_object_type_ids": ["moonsleep.sample_article"]
+        }
+      ],
+      "accepted_input_terms": ["manufacturing_run"],
+      "search_terms": ["production run", "manufacturing batch"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.manufacturing_run_component",
+      "names": {
+        "singular": "Manufacturing Run Component",
+        "plural": "Manufacturing Run Components"
+      },
+      "owner_domain": "moonsleep.supply",
+      "identity_contract_id": "moonsleep.manufacturing_run_component.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["manufacturing_run_component_id"],
+        "properties": {
+          "manufacturing_run_component_id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_code", "execution_state"],
+        "properties": {
+          "component_code": { "type": "string", "minLength": 1 },
+          "execution_state": { "type": "string", "minLength": 1 },
+          "planned_quantity": { "type": ["integer", "null"], "minimum": 1 },
+          "finished_quantity": { "type": ["integer", "null"], "minimum": 0 },
+          "unit_of_measure": { "type": ["string", "null"] },
+          "state_effective_at": { "type": ["string", "null"] },
+          "execution_details": { "type": "object" }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "part_of_manufacturing_run",
+          "cardinality": "required_one",
+          "target_object_type_ids": ["moonsleep.manufacturing_run"]
+        },
+        {
+          "relationship_id": "executes_component_line",
+          "cardinality": "optional_one",
+          "target_object_type_ids": ["moonsleep.purchase_order_component_line"]
+        }
+      ],
+      "accepted_input_terms": ["manufacturing_run_component"],
+      "search_terms": ["component workstream", "manufacturing component"],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
+    },
+    {
+      "object_type_id": "moonsleep.commerce_order",
+      "names": {
+        "singular": "Commerce Order",
+        "plural": "Commerce Orders"
+      },
+      "owner_domain": "moonsleep.commerce",
+      "identity_contract_id": "moonsleep.commerce_order.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^commerce_order_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["commerce_order", "shopify_order"],
+      "search_terms": ["Commerce Order", "Shopify Order", "Order"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.cash_card_account",
+      "names": {
+        "singular": "Cash or Card Source Account",
+        "plural": "Cash or Card Source Accounts"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.cash_card_account.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cca_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["cash_card_account"],
+      "search_terms": ["cash account", "card account", "bank account", "credit card account"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.financial_transaction",
+      "names": {
+        "singular": "Financial Transaction",
+        "plural": "Financial Transactions"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.financial_transaction.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cct_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["financial_transaction"],
+      "search_terms": ["bank transaction", "card transaction", "posted charge"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.invoice",
+      "names": {
+        "singular": "Invoice",
+        "plural": "Invoices"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.invoice.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^api_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["invoice", "ap_invoice", "provider_invoice", "provider_credit_memo"],
+      "search_terms": ["invoice", "AP invoice", "provider invoice", "credit memo"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.entity",
+      "names": {
+        "singular": "Entity",
+        "plural": "Entities"
+      },
+      "owner_domain": "nex.identity",
+      "identity_contract_id": "nex.entity.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["entity"],
+      "search_terms": ["person", "organization"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.contact",
+      "names": {
+        "singular": "Contact",
+        "plural": "Contacts"
+      },
+      "owner_domain": "nex.identity",
+      "identity_contract_id": "nex.contact.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["contact"],
+      "search_terms": ["contact point", "provider contact"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.loop",
+      "names": {
+        "singular": "Loop",
+        "plural": "Loops"
+      },
+      "owner_domain": "nex.loops",
+      "identity_contract_id": "nex.loop.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["loop", "communication_loop", "moonsleep.communication_loop"],
+      "search_terms": ["communication loop", "open loop"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.commitment",
+      "names": {
+        "singular": "Commitment",
+        "plural": "Commitments"
+      },
+      "owner_domain": "nex.commitments",
+      "identity_contract_id": "nex.commitment.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["commitment", "moonsleep.commitment"],
+      "search_terms": ["promise", "obligation"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.place",
+      "names": {
+        "singular": "Place",
+        "plural": "Places"
+      },
+      "owner_domain": "nex.places",
+      "identity_contract_id": "nex.place.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["place"],
+      "search_terms": ["location"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.facet_definition",
+      "names": {
+        "singular": "Facet Definition",
+        "plural": "Facet Definitions"
+      },
+      "owner_domain": "nex.facets",
+      "identity_contract_id": "nex.facet_definition.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["facet_definition"],
+      "search_terms": ["facet contract"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
+    },
+    {
+      "object_type_id": "nex.facet_attachment",
+      "names": {
+        "singular": "Facet Attachment",
+        "plural": "Facet Attachments"
+      },
+      "owner_domain": "nex.facets",
+      "identity_contract_id": "nex.facet_attachment.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["facet_attachment"],
+      "search_terms": ["business role", "domain facet"],
+      "resolution_binding": "nex.core-graph.native-object-resolver.v1"
     },
     {
       "object_type_id": "nex.channel",

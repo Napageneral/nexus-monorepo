@@ -17,48 +17,118 @@ owner view catalogs outside the object registry.
 
 ## Vocabulary categories
 
-| Category | Meaning | Packet input | Creates identity |
-| --- | --- | --- | --- |
-| Canonical object ID | Stable semantic address | Preferred | No second identity |
-| Accepted packet term | Closed machine normalization | Transitional | No |
-| Search term | Human discovery language | Never | No |
-| Retired term | Recognized only to emit a correction | Never | No |
-| Physical storage | Owner resolver metadata | Never | No |
-| Read view | Query/workspace over canonical objects | Never | No |
+| Category             | Meaning                                | Packet input | Creates identity   |
+| -------------------- | -------------------------------------- | ------------ | ------------------ |
+| Canonical object ID  | Stable semantic address                | Preferred    | No second identity |
+| Accepted packet term | Closed machine normalization           | Transitional | No                 |
+| Search term          | Human discovery language               | Never        | No                 |
+| Retired term         | Recognized only to emit a correction   | Never        | No                 |
+| Physical storage     | Owner resolver metadata                | Never        | No                 |
+| Read view            | Query/workspace over canonical objects | Never        | No                 |
 
 ## Locked high-consequence destinations
 
-| Current language | Decision | Canonical destination | Required convergence |
-| --- | --- | --- | --- |
-| `moonsleep.commitment`, `commitment` | reuse / alias | `nex.commitment` | Retire the MoonSleep compatibility identity; preserve exact historical reference resolution in the native owner. |
-| `moonsleep.communication_loop`, `communication_loop` | reuse / alias | `nex.loop` | Retire the MoonSleep compatibility identity; preserve historical input normalization. |
-| Supply Organization, supplier organization, `supply_organization`, `supply_organizations` | reuse + facet | `nex.entity` with Supply Organization facet | Entity owns identity; Supply owns facet fields; Partners is a view. |
-| Facility, warehouse, factory location, `supply_facilities`, `supply_facility_locations` | reuse + facet | `nex.place` with Facility facet | Place owns physical identity; Fulfillment Node remains a distinct operating identity linked to Place. |
-| `inventory_purchase_order`, `supply_order`, PO, `inventory_purchase_orders` | alias | `moonsleep.purchase_order` | `inventory_purchase_order` is accepted packet input; PO is search shorthand; table names are physical storage metadata. |
-| `product_revision`, product version, design/specification revision, `supply_product_revisions` | alias | `moonsleep.product_revision` | `product_revision` is accepted packet input; human phrases are search or retired language; table name is storage metadata. |
-| `inventory_shipment`, `sample_shipment` | create once | `moonsleep.supply_shipment` | One Supply shipment identity qualified by purpose and relationships; never collapse into Fulfillment Package. |
-| `joint_cargo_plan`, `supply_joint_cargo_plan`, `supply_joint_cargo_plans` | create once | `moonsleep.joint_cargo_plan` | Both packet spellings normalize to the existing stored business concept. |
-| `inventory_purchase_order_component`, `purchase_order_component_line` | create once | `moonsleep.purchase_order_component_line` | One supporting identity; preserve old observed ID forms during migration. |
-| `transport_document`, `interfacility_transfer_document`, BOL, customs document | create once | `moonsleep.supply_transport_document` | One evidence-custody identity; document role describes its use. |
-| provider case, support ticket, intervention, investigation, retrieval case, provider claim, carrier trace | alias | `moonsleep.carrier_case` | Owner process type carries the operational subtype. |
-| financial recovery instrument, claim recovery | alias when exact receipt exists | `moonsleep.carrier_recovery_receipt` | Unresolved phrases remain evidence references. |
-| provider invoice, AP invoice, provider credit memo | alias / profile | `moonsleep.invoice` | Credit memo is an Invoice profile. |
-| provider credit line, AP line | alias | `moonsleep.invoice_line` | Preserve signed line meaning under Invoice. |
-| Job, Job definition, `job_definitions` | reuse | `nex.job` | Job means reusable definition only. |
-| Job revision, `job_revisions` | create native identity | `nex.job_revision` | Immutable revision of a Job definition. |
-| Run, Job Run, work item, `job_runs` | create native identity | `nex.run` | One accepted logical execution; bare `run` is not a global alias. |
-| Attempt, retry attempt, `job_attempts` | create native identity | `nex.attempt` | One fenced execution try within a Run. |
-| Customer Shipment, Tracking, package, `fulfillment_packages` | reuse / view language | `moonsleep.fulfillment_package` | Tracking is a view; Package is one physical container identity. |
-| package revision, `fulfillment_package_revisions` | create | `moonsleep.fulfillment_package_revision` | Immutable child revision under stable Package. |
-| Dispatch Wave, `dispatch_wave`, `dispatch_waves` | rename / alias | `moonsleep.fulfillment_wave` | Wave is a temporary execution cohort, not a package, label, shipment, or Batch. |
-| label, shipping label, provider label | create | `moonsleep.fulfillment_label` | Provider artifact for one immutable Package revision; a file is custody, not the Label. |
-| `dispatch_packet_edition`, packet edition, Fulfillment Packet | create / alias | `moonsleep.fulfillment_packet` | One immutable instruction/artifact edition for a released Fulfillment Wave. |
-| Channel, provider thread, provider conversation | reuse | `nex.channel` | Communication container only. |
-| Sales Channel, marketplace/inventory/commerce channel | create | `moonsleep.sales_channel` | Commerce exposure identity; never normalize to communication Channel. |
-| Batch 1/2/3/4/5, `batch_key`, inventory batch | contextual only | Purchase Order, Lot, Manufacturing Run, or Fulfillment Pool | No canonical Batch object. Resolve the intended lifecycle identity. |
-| PO lot, `inventory_purchase_order_lot` | alias | `moonsleep.lot` | Traceable quantity/material cohort under a Purchase Order. |
-| manufacturing batch, production run | create | `moonsleep.manufacturing_run` | Production execution, distinct from Purchase Order and Lot. |
-| batch pool, inventory pool, `fulfillment_pools.batch_key` | create | `moonsleep.fulfillment_pool` | Allocatable capacity linked to Product, Lot, Purchase Order, and Node as applicable. |
+| Current language                                                                                          | Decision                        | Canonical destination                                       | Required convergence                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `moonsleep.commitment`, `commitment`                                                                      | reuse / alias                   | `nex.commitment`                                            | Retire the MoonSleep compatibility identity; preserve exact historical reference resolution in the native owner.                                                        |
+| `moonsleep.communication_loop`, `communication_loop`                                                      | reuse / alias                   | `nex.loop`                                                  | Retire the MoonSleep compatibility identity; preserve historical input normalization.                                                                                   |
+| Supply Organization, supplier organization, `supply_organization`, `supply_organizations`                 | reuse + facet                   | `nex.entity` with Supply Organization facet                 | Entity owns identity; Supply owns facet fields; Partners is a view.                                                                                                     |
+| Facility, warehouse, factory location, `supply_facilities`, `supply_facility_locations`                   | reuse + facet                   | `nex.place` with Facility facet                             | Place owns physical identity; Fulfillment Node remains a distinct operating identity linked to Place.                                                                   |
+| `inventory_purchase_order`, `supply_order`, PO, `inventory_purchase_orders`                               | alias                           | `moonsleep.purchase_order`                                  | `inventory_purchase_order` is accepted packet input; PO is search shorthand; table names are physical storage metadata.                                                 |
+| `product_revision`, product version, design/specification revision, `supply_product_revisions`            | alias                           | `moonsleep.product_revision`                                | `product_revision` is accepted packet input; human phrases are search or retired language; table name is storage metadata.                                              |
+| `commerce_order`, `shopify_order`, Shopify Order, `commerce_orders`                                       | reuse / alias                   | `moonsleep.commerce_order`                                  | Preserve the deployed `commerce_order_<sha256>` identity and immutable Commerce revisions through the shared owner resolver; never copy the Order into generic storage. |
+| refund statement, `refund_amount`, refund event                                                           | conditional reuse               | `moonsleep.refund`                                          | Register and resolve only an exact provider refund identity; reviewed claims or email language alone do not create one.                                                 |
+| `inventory_shipment`, `sample_shipment`                                                                   | create once                     | `moonsleep.supply_shipment`                                 | One Supply shipment identity qualified by purpose and relationships; never collapse into Fulfillment Package.                                                           |
+| `joint_cargo_plan`, `supply_joint_cargo_plan`, `supply_joint_cargo_plans`                                 | create once                     | `moonsleep.joint_cargo_plan`                                | Both packet spellings normalize to the existing stored business concept.                                                                                                |
+| `inventory_purchase_order_component`, `purchase_order_component_line`                                     | create once                     | `moonsleep.purchase_order_component_line`                   | One supporting identity; preserve old observed ID forms during migration.                                                                                               |
+| `sample_article_status`, `supply_sample_article_status_history`                                           | reuse mechanism                 | Sample Article revision history                             | Status rows are evidence for a Sample Article revision, not independently targetable objects.                                                                           |
+| `has_component_workstream`, `has_quote_line`                                                              | alias relationship              | child-to-parent composition edge                            | Compile inverse packet language to the single child-to-parent edge; never publish both directions as separate semantics.                                                |
+| `transport_document`, `interfacility_transfer_document`, BOL, customs document                            | create once                     | `moonsleep.supply_transport_document`                       | One evidence-custody identity; document role describes its use.                                                                                                         |
+| provider case, support ticket, intervention, investigation, retrieval case, provider claim, carrier trace | alias                           | `moonsleep.carrier_case`                                    | Owner process type carries the operational subtype.                                                                                                                     |
+| financial recovery instrument, claim recovery                                                             | alias when exact receipt exists | `moonsleep.carrier_recovery_receipt`                        | Unresolved phrases remain evidence references.                                                                                                                          |
+| provider invoice, AP invoice, provider credit memo                                                        | alias / profile                 | `moonsleep.invoice`                                         | Credit memo is an Invoice profile.                                                                                                                                      |
+| invoice revision, `invoice_revision`, `ap_invoice_revision`                                               | reuse mechanism                 | Invoice owner revision history                              | The selected immutable Invoice revision is receipt-bound owner state, not a second object identity.                                                                     |
+| provider credit line, AP line, `invoice_line`                                                             | embed                           | exact Invoice revision state                                | Preserve signed line meaning and line custody inside the selected Invoice revision; do not create an independently revisioned object.                                   |
+| Finance AP Party, `finance_ap_party`, vendor party                                                        | reuse + facet/binding           | `nex.entity` with Finance/AP facet and reviewed binding     | Finance may retain its subledger handle, but it is not a second vendor or organization identity.                                                                        |
+| Mercury Credit/Savings/Checking, Amex account, `cash_card_account`                                        | reuse                           | `moonsleep.cash_card_account`                               | Provider cash/card source identity with owner revisions; never normalize these identities to a general-ledger account.                                                  |
+| chart-of-accounts entry, ledger account, `financial_account`                                              | reuse later                     | `moonsleep.financial_account`                               | General-ledger classification identity only; not required to locate W0031 provider transactions.                                                                        |
+| card charge, bank transaction, posted charge, `financial_transaction`                                     | reuse                           | `moonsleep.financial_transaction`                           | Resolve the exact provider transaction and its current immutable Finance revision.                                                                                      |
+| provider payment order, `payment`                                                                         | reuse only when exact           | `moonsleep.payment`                                         | A provider-native disbursement order; never a generic label for a charge, PO, invoice, or accepted service.                                                             |
+| payment application, `payment_application`                                                                | create/reuse only when exact    | `moonsleep.payment_application`                             | Requires exact Payment and Invoice revision custody; W0031 supplies neither pair.                                                                                       |
+| Job, Job definition, `job_definitions`                                                                    | reuse                           | `nex.job`                                                   | Job means reusable definition only.                                                                                                                                     |
+| Job revision, `job_revisions`                                                                             | create native identity          | `nex.job_revision`                                          | Immutable revision of a Job definition.                                                                                                                                 |
+| Run, Job Run, work item, `job_runs`                                                                       | create native identity          | `nex.run`                                                   | One accepted logical execution; bare `run` is not a global alias.                                                                                                       |
+| Attempt, retry attempt, `job_attempts`                                                                    | create native identity          | `nex.attempt`                                               | One fenced execution try within a Run.                                                                                                                                  |
+| Customer Shipment, Tracking, package, `fulfillment_packages`                                              | reuse / view language           | `moonsleep.fulfillment_package`                             | Tracking is a view; Package is one physical container identity.                                                                                                         |
+| package revision, `fulfillment_package_revisions`                                                         | create                          | `moonsleep.fulfillment_package_revision`                    | Immutable child revision under stable Package.                                                                                                                          |
+| Dispatch Wave, `dispatch_wave`, `dispatch_waves`                                                          | rename / alias                  | `moonsleep.fulfillment_wave`                                | Wave is a temporary execution cohort, not a package, label, shipment, or Batch.                                                                                         |
+| label, shipping label, provider label                                                                     | create                          | `moonsleep.fulfillment_label`                               | Provider artifact for one immutable Package revision; a file is custody, not the Label.                                                                                 |
+| `dispatch_packet_edition`, packet edition, Fulfillment Packet                                             | create / alias                  | `moonsleep.fulfillment_packet`                              | One immutable instruction/artifact edition for a released Fulfillment Wave.                                                                                             |
+| Channel, provider thread, provider conversation                                                           | reuse                           | `nex.channel`                                               | Communication container only.                                                                                                                                           |
+| Sales Channel, marketplace/inventory/commerce channel                                                     | create                          | `moonsleep.sales_channel`                                   | Commerce exposure identity; never normalize to communication Channel.                                                                                                   |
+| Batch 1/2/3/4/5, `batch_key`, inventory batch                                                             | contextual only                 | Purchase Order, Lot, Manufacturing Run, or Fulfillment Pool | No canonical Batch object. Resolve the intended lifecycle identity.                                                                                                     |
+| PO lot, `inventory_purchase_order_lot`                                                                    | alias                           | `moonsleep.lot`                                             | Traceable quantity/material cohort under a Purchase Order.                                                                                                              |
+| manufacturing batch, production run                                                                       | create                          | `moonsleep.manufacturing_run`                               | Production execution, distinct from Purchase Order and Lot.                                                                                                             |
+| manufacturing run component, component workstream                                                         | create                          | `moonsleep.manufacturing_run_component`                     | Independently targetable component execution under a Manufacturing Run.                                                                                                 |
+| product component variant rule                                                                            | embed initially                 | Product Revision or BOM attributes                          | Register only if later evidence proves independent identity and lifecycle.                                                                                              |
+| accepted inspection work, accepted inspection service                                                     | reuse                           | `nex.commitment`                                            | Accepted work is an obligation; create service procurement only after an independent lifecycle is proven.                                                               |
+| batch pool, inventory pool, `fulfillment_pools.batch_key`                                                 | create                          | `moonsleep.fulfillment_pool`                                | Allocatable capacity linked to Product, Lot, Purchase Order, and Node as applicable.                                                                                    |
+
+## Next-slate relationship convergence
+
+Object-revision relationships use the canonical registry slots below. Native
+Loop, Commitment, Entity, Channel, Contact, Facet, and owner-backed Finance
+relationships remain Core Graph edges after both endpoints point-resolve. This
+table is migration guidance, not another runtime relationship registry.
+
+| Packet relationship                                                         | Canonical output                                                                    | Rule                                                                                                                                      |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `executes_purchase_order`                                                   | Manufacturing Run `executes_purchase_order` Purchase Order                          | Preserve direction.                                                                                                                       |
+| `performed_by`                                                              | Manufacturing Run `performed_by` `nex.entity`                                       | Preserve direction.                                                                                                                       |
+| `authorized_by`                                                             | Manufacturing Run `authorized_by` `nex.entity`                                      | Preserve as a many-valued authorization set; it grants no action authority.                                                               |
+| `governed_by_revision`, `governing_revision`                                | Manufacturing Run `governed_by_revision` Product Revision                           | One canonical phrase and direction.                                                                                                       |
+| `has_component_workstream`                                                  | Manufacturing Run Component `part_of_manufacturing_run` Manufacturing Run           | Reverse the packet edge; never publish both directions.                                                                                   |
+| `executes_component_line`                                                   | Manufacturing Run Component `executes_component_line` Purchase Order Component Line | Preserve direction.                                                                                                                       |
+| `uses_approval_article`                                                     | Manufacturing Run `uses_approval_article` Sample Article                            | Preserve direction.                                                                                                                       |
+| `compared_against_retained_article`                                         | Manufacturing Run `compared_against_retained_article` Sample Article                | Preserve direction.                                                                                                                       |
+| Product Revision `specified_by` BOM Version                                 | BOM Version `specifies_product_revision` Product Revision                           | Reverse the packet edge to the canonical BOM-owned composition edge.                                                                      |
+| Component Line or Sample Article `specified_by`                             | `specified_by_bom_line` or `specified_by_bom_version`                               | Source type selects the exact registered relationship; bare `specified_by` is not global vocabulary.                                      |
+| `quotation_for_purchase_order`                                              | Freight Quote `for_purchase_order` Purchase Order                                   | Rename without changing direction.                                                                                                        |
+| `has_quote_line`                                                            | Freight Quote Line `part_of_freight_quote` Freight Quote                            | Reverse the packet edge; never publish both directions.                                                                                   |
+| `proposed_successor`                                                        | no edge while proposal-only                                                         | Proposal state belongs to the proposed Product Revision. Emit newer `supersedes` older only after acceptance evidence crosses the cursor. |
+| `produced_proposed_revision`, `proposes_revision`                           | Loop `concerns_resource` proposed Product Revision                                  | Reuse the Core Graph concern edge after the proposed revision resolves; do not create a production/result relation.                       |
+| `committed_by`, `committed_to`, `evidenced_in_channel`, `concerns_resource` | native Commitment Core Graph edges                                                  | Preserve the canonical native vocabulary after every endpoint resolves.                                                                   |
+| `initiated_by`, `addressed_to`, `evidenced_in_channel`, `concerns_resource` | native Loop Core Graph edges                                                        | Preserve the canonical native vocabulary after every endpoint resolves.                                                                   |
+| `in_account`                                                                | Financial Transaction `in_account` Cash/Card Source Account                         | Derive only from exact owner rows; never use a general-ledger Financial Account as the provider account identity.                         |
+| Invoice vendor relationship                                                 | Invoice `issued_by` `nex.entity`                                                    | Use the reviewed AP-party Entity binding; the AP-party handle is not a graph identity.                                                    |
+
+SGD-0007 relationships supported jointly by F01/F02 and the later F03 do not
+cross the active cutoff. The `[2026-03-26T05:00:00Z,
+2026-04-02T05:00:00Z)` dry run must therefore exclude those non-candidates as
+unsupported future state, not manufacture partial support or count them as
+withheld links.
+
+## First-slate instance reconciliation
+
+Registry aliases normalize object language. They do not bless every packet-era
+instance ID as a canonical address. The first complete dry run therefore locks
+these instance-level rules:
+
+| Packet or provider address                                             | Canonical treatment                              | Required compiler behavior                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| bare numeric Shopify Order ID                                          | instance-format alias for the Commerce owner key | Normalize to `gid://shopify/Order/<numeric>` and resolve through the owner; all 27/27 current-slate references resolve.                                                                                                                                                                   |
+| `entity_observed_*`, `contact_observed_*`, packet Facet Attachment IDs | rejected packet candidate IDs                    | Replace from the selected Commerce revision or exact immutable Gmail Record party truth; never publish a copied native identity.                                                                                                                                                          |
+| `email_stream_*`                                                       | derived evidence collection, not a Channel alias | Resolve membership inside each packet supplying an in-window Observation, union only genuinely shared occurrences, and emit the resolved native Channel set. The first slate has 28 packet-local occurrences, 27 collections, 89 Records, 38 routes, and 41 `evidenced_in_channel` edges. |
+| VistaPrint amount/account wording in W0031                             | unresolved owner-instance stop                   | Reuse the Amex Cash/Card Source Account, but create no Financial Transaction or Invoice until the Finance owner contains exact identity custody.                                                                                                                                          |
+| SGD-0007 frozen cross-cutoff Resource                                  | non-candidate projection                         | Compile only cutoff-local F01/F02/F04 Observations. Exclude F03 and every jointly F03-dependent object revision or edge.                                                                                                                                                                  |
+
+These are compiler/reconciliation rules, not new registry declarations,
+crosswalk tables, or permanent historical decoder infrastructure.
+
+The first zero-stop attempt's global last-packet-wins map is explicitly
+superseded. It produced 86 members by dropping five valid C006 rows and retaining
+two unused later C007 rows. Packet-provenance-preserving union restores the exact
+cutoff-local count: `86 - 2 + 5 = 89`.
 
 ## Supplier packet census
 
@@ -98,17 +168,17 @@ accounted for as follows:
 
 ### Stable additions: decide and declare one at a time
 
-| Candidate group | Canonical destinations |
-| --- | --- |
-| Product | `moonsleep.external_product_reference`, `moonsleep.product_colorway`, `moonsleep.product_component_variant_rule` |
-| Receiving and facilities | `moonsleep.facility_receipt`, `moonsleep.facility_receipt_line`, `moonsleep.facility_receipt_event`, `moonsleep.facility_receipt_event_line`, `moonsleep.facility_inventory_snapshot`, `moonsleep.facility_inventory_snapshot_line`, `moonsleep.facility_fulfillment_snapshot`, `moonsleep.facility_fulfillment_snapshot_line`, `moonsleep.facility_throughput_snapshot` |
-| Transfers and cargo | `moonsleep.interfacility_transfer`, `moonsleep.interfacility_transfer_event`, `moonsleep.joint_cargo_plan_membership` |
-| Manufacturing and planning | `moonsleep.manufacturing_run`, `moonsleep.manufacturing_run_component`, `moonsleep.manufacturing_run_component_cohort`, `moonsleep.planned_component_cohort`, `moonsleep.production_planning_profile`, `moonsleep.production_planning_stage`, `moonsleep.production_schedule`, `moonsleep.production_schedule_line` |
-| Quality | `moonsleep.product_quality_case`, `moonsleep.quality_inspection`, `moonsleep.quality_inspection_finding`, `moonsleep.quality_inspection_scope_line`, `moonsleep.quality_inspection_test_result` |
-| Purchase Order support | `moonsleep.purchase_order_revision`, `moonsleep.purchase_order_adjustment`, `moonsleep.purchase_order_payment_link` |
-| Shipment planning | `moonsleep.shipment_destination_plan`, `moonsleep.shipment_destination_plan_line`, `moonsleep.shipment_manifest`, `moonsleep.shipment_manifest_line`, `moonsleep.shipment_routing_revision`, `moonsleep.shipment_routing_revision_line`, `moonsleep.supply_shipment_wave`, `moonsleep.transport_milestone` |
-| Supplier evidence | `moonsleep.supplier_material_specification`, `moonsleep.supplier_shipment_schedule`, `moonsleep.supplier_shipment_schedule_line` |
-| Supply reconciliation | `moonsleep.component_supply_link`, `moonsleep.supply_reconciliation_case`, `moonsleep.supply_reconciliation_case_line` |
+| Candidate group            | Canonical destinations                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Product                    | `moonsleep.external_product_reference`, `moonsleep.product_colorway`; Product Component Variant Rule remains embedded unless later evidence proves independent identity                                                                                                                                                                                                  |
+| Receiving and facilities   | `moonsleep.facility_receipt`, `moonsleep.facility_receipt_line`, `moonsleep.facility_receipt_event`, `moonsleep.facility_receipt_event_line`, `moonsleep.facility_inventory_snapshot`, `moonsleep.facility_inventory_snapshot_line`, `moonsleep.facility_fulfillment_snapshot`, `moonsleep.facility_fulfillment_snapshot_line`, `moonsleep.facility_throughput_snapshot` |
+| Transfers and cargo        | `moonsleep.interfacility_transfer`, `moonsleep.interfacility_transfer_event`, `moonsleep.joint_cargo_plan_membership`                                                                                                                                                                                                                                                    |
+| Manufacturing and planning | `moonsleep.manufacturing_run`, `moonsleep.manufacturing_run_component`, `moonsleep.manufacturing_run_component_cohort`, `moonsleep.planned_component_cohort`, `moonsleep.production_planning_profile`, `moonsleep.production_planning_stage`, `moonsleep.production_schedule`, `moonsleep.production_schedule_line`                                                      |
+| Quality                    | `moonsleep.product_quality_case`, `moonsleep.quality_inspection`, `moonsleep.quality_inspection_finding`, `moonsleep.quality_inspection_scope_line`, `moonsleep.quality_inspection_test_result`                                                                                                                                                                          |
+| Purchase Order support     | `moonsleep.purchase_order_revision`, `moonsleep.purchase_order_adjustment`, `moonsleep.purchase_order_payment_link`                                                                                                                                                                                                                                                      |
+| Shipment planning          | `moonsleep.shipment_destination_plan`, `moonsleep.shipment_destination_plan_line`, `moonsleep.shipment_manifest`, `moonsleep.shipment_manifest_line`, `moonsleep.shipment_routing_revision`, `moonsleep.shipment_routing_revision_line`, `moonsleep.supply_shipment_wave`, `moonsleep.transport_milestone`                                                               |
+| Supplier evidence          | `moonsleep.supplier_material_specification`, `moonsleep.supplier_shipment_schedule`, `moonsleep.supplier_shipment_schedule_line`                                                                                                                                                                                                                                         |
+| Supply reconciliation      | `moonsleep.component_supply_link`, `moonsleep.supply_reconciliation_case`, `moonsleep.supply_reconciliation_case_line`                                                                                                                                                                                                                                                   |
 
 ### Evidence rows: do not create business objects
 
@@ -123,14 +193,18 @@ Claims terms `provider_case`, `provider_support_ticket`,
 `provider_retrieval_case` converge on `moonsleep.carrier_case`.
 `financial_recovery_instrument` converges on an exact
 `moonsleep.carrier_recovery_receipt`; provider invoices and credit memos converge
-on `moonsleep.invoice`; provider credit lines converge on
-`moonsleep.invoice_line`. `logical_communication`, audit waves, evidence windows,
+on `moonsleep.invoice`; provider lines remain contained by the exact Invoice
+revision. Cash and card source accounts converge on
+`moonsleep.cash_card_account`; `moonsleep.financial_account` remains the separate
+general-ledger concept. `logical_communication`, audit waves, evidence windows,
 and value proofs remain Records, Sets, or Fact Sets. Remittance Configuration is
 undecided until Finance proves stable effective-dated ownership.
 
 Customer, Customer Thread, Customer Issue, Partner, Tracking, and workspace names
-are read views over canonical objects. Accounting already uses canonical Invoice,
-Payment, Payment Application, Channel, Contact, and Entity language.
+are read views over canonical objects. Finance AP Party is a subledger binding to
+a canonical Entity, not a second actor. Invoice Revision and Invoice Line remain
+owner revision state. Payment and Payment Application stay distinct from posted
+Financial Transactions and are admitted only with their exact owner identities.
 
 ## Collision rules
 
@@ -138,22 +212,28 @@ The following bare terms are never global machine aliases: `document`,
 `shipment`, `warehouse`, `customer case`, `inventory snapshot`, `run`, `claim`,
 and `receipt`. Owner and domain context must select the canonical identity.
 
-## Ordered convergence queue
+## Historical-first convergence queue
 
-| Order | Ticket | Decision | Why first |
-| ---: | --- | --- | --- |
-| 1 | CPO-005A Commitment native reuse | reuse / alias | Proves a compatibility identity can collapse onto a native owner without changing the kernel. |
-| 2 | CPO-005B Loop native reuse | reuse / alias | Completes the paired communication vocabulary collapse. |
-| 3 | CPO-005C Supply Organization | reuse + facet | Proves domain identity reuse through Entity plus a typed facet. |
-| 4 | CPO-005D Facility | reuse + facet | Proves Place/Facility versus Fulfillment Node boundary. |
-| 5 | CPO-005E Supply Shipment | create once | Collapses inventory and sample shipment language into the first new post-foundation Supply object. |
-| 6 | CPO-005F Joint Cargo Plan | create once | Converges an existing stored concept with two packet names. |
-| 7 | CPO-005G Purchase Order Component Line | create once | Removes duplicate supporting-object vocabulary and ID forms. |
-| 8 | CPO-005H Supply Transport Document | create once | Consolidates document evidence without promoting bare `document`. |
+The first convergence boundary is the complete global interval
+`[2026-03-26T05:00:00Z, 2026-04-02T05:00:00Z)`. Implementation remains sliced
+so each declaration or owner binding is independently reviewable.
 
-After these eight, select one stable addition from the Supplier table according
-to active evidence chronology. Claims, Fulfillment, Jobs, and Sales Channel then
-use the same ticket shape; they do not require another framework.
+| Order | Slice                                     | Outcome                                                                                                                                                                                                                                                              |
+| ----: | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|     1 | Native imports and owner bindings         | Reuse Entity, Contact, Channel, Loop, Commitment, and Facet identities through their native owners; create no projected copies.                                                                                                                                      |
+|     2 | Commerce declarations                     | Register only the Commerce Order and exact Refund identity contracts required by the bounded evidence. Receipts remain custody, not business identities.                                                                                                             |
+|     3 | Supply dependency closure                 | Register Product Family, BOM Version/Line, Sample Article, freight quote/line, Manufacturing Run, Manufacturing Run Component, and the single Purchase Order Component Line vocabulary needed by the slate.                                                          |
+|     4 | Finance dependency closure                | Import Cash/Card Source Account, Financial Transaction, and Invoice from their owners; collapse AP Party to Entity and invoice revision/line nouns into owner revision state; map accepted inspection work to Commitment and never to Payment.                       |
+|     5 | Generated normalization and relationships | Compile aliases and canonical relationship slots from registry v2; eliminate packet-local object translations.                                                                                                                                                       |
+|     6 | Complete slate dry run                    | Run the exact slate, correct only exact owner/Record endpoint substitutions and cutoff-local evidence compilation, then rerun until every required endpoint resolves with zero withheld links, duplicate identities, future-state inference, or synthetic revisions. |
+|     7 | Merge and deploy exact artifacts          | Merge reviewed source, build one exact artifact, deploy it under normal runtime custody, and prove registry plus ordered native/owner resolver readback.                                                                                                             |
+|     8 | Governed historical publication           | In one separately authorized transaction, write the bounded semantic layer and publish object revisions without moving the cursor.                                                                                                                                   |
+|     9 | Readback, replay no-op, cursor advance    | Prove exact semantic/object/graph readback and identical replay no-op, then advance the cursor in its own governed terminal step.                                                                                                                                    |
+
+Later waves select only the additional concepts actually encountered by the
+next chronological interval. Supply Shipment, Joint Cargo Plan, Supply
+Transport Document, Claims, Fulfillment, Jobs, and Sales Channel use the same
+per-concept contract when their evidence arrives.
 
 ## Per-ticket contract
 
