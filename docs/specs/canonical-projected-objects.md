@@ -43,6 +43,13 @@ reused through the owner-resolution seam while it is incrementally converged.
 Registration must never create a second canonical identity merely to move an
 existing object into the generic tables.
 
+Owner-backed reuse follows the same object contract without pretending the
+generic kernel owns the revision rows. The registry declares the stable
+identity and shared resolution binding; the owner reader returns the stable row
+and exact selected revision state, and the kernel receipt-binds that complete
+read. Revision-shaped rows and children wholly contained by one selected owner
+revision do not become extra canonical object types.
+
 There is no partially active registry entry. An incomplete candidate remains
 outside the canonical registry.
 
@@ -465,6 +472,17 @@ route fields. Communication Stream data is not a Channel resolver.
 Binding `nex.channel` is a contained part of the generic resolution operation,
 not a prerequisite for declaring projected MoonSleep objects.
 
+Already-deployed MoonSleep owner projections use the same registry-derived
+owner route. Commerce Order preserves its Commerce stable row and revisions.
+Finance preserves Cash/Card Source Account, Financial Transaction, and Invoice
+stable identities plus their selected immutable owner revisions. Invoice lines
+are complete state inside the selected Invoice revision; an Invoice Revision or
+Invoice Line does not receive a parallel canonical head. Finance AP Party is a
+subledger binding to canonical `nex.entity`, not a duplicate vendor identity.
+General-ledger Financial Account remains distinct from provider Cash/Card Source
+Account, and provider Payment remains distinct from a posted Financial
+Transaction.
+
 ## Aliases and Read Views
 
 Vocabulary aliases live on the canonical type and own no identity, resolver,
@@ -484,8 +502,8 @@ for one candidate is:
 
 ```text
 classify reuse | alias | create
-        -> register only if create
-        -> agent publishes canonical revision
+        -> declare owner import if reuse, or projected type if create
+        -> owner resolves, or agent publishes canonical revision
         -> verify target, resolution, graph, and provenance
         -> move exact consumers
         -> delete superseded vocabulary and code

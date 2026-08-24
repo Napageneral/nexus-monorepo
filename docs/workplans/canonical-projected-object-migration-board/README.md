@@ -55,8 +55,8 @@ not prerequisites for the new foundation.
 ## Current baselines
 
 - Umbrella exact `origin/main`: `98174577d9cc20650c03e119d78c6471785c5902`
-- Nex exact `origin/main`: `cedd7a350bad789fc5ed316af89a1911a377d96b`
-- MoonSleep exact `origin/main`: `a9c61e9ad2d2c6eeab011a97109d3244531e40ec`
+- Nex exact `origin/main`: `c55bf28f92fc3df64516e6487833bdbee8f15e83`
+- MoonSleep exact `origin/main`: `baeda9025a71bc409cdc68fd6780f5c8a0f325ef`
 - Native Channel cleanup is merged through Nex PR #432. Communication-storage
   safety and parity work is merged through PR #453; current main is a
   descendant of both.

@@ -1,6 +1,6 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "b260059cc3b555f9ba62b0320fa7668d46b5f6667a9f302d80b231c3f6fb60a2",
+  "registry_digest": "e7185d7857313be4c5a66c8af2d1c1b5d524fedb09e3effa45c69f2127238ce4",
   "registry": {
     "registry_id": "nex.canonical_objects",
     "schema_version": "2.0.0",
@@ -993,6 +993,122 @@
         "resolution_binding": "nex.core-graph.subject-resolver.v1"
       },
       {
+        "object_type_id": "moonsleep.cash_card_account",
+        "names": {
+          "singular": "Cash or Card Source Account",
+          "plural": "Cash or Card Source Accounts"
+        },
+        "owner_domain": "moonsleep.finance",
+        "identity_contract_id": "moonsleep.cash_card_account.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^cca_[0-9a-f]{64}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "cash_card_account"
+        ],
+        "search_terms": [
+          "cash account",
+          "card account",
+          "bank account",
+          "credit card account"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
+      },
+      {
+        "object_type_id": "moonsleep.financial_transaction",
+        "names": {
+          "singular": "Financial Transaction",
+          "plural": "Financial Transactions"
+        },
+        "owner_domain": "moonsleep.finance",
+        "identity_contract_id": "moonsleep.financial_transaction.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^cct_[0-9a-f]{64}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "financial_transaction"
+        ],
+        "search_terms": [
+          "bank transaction",
+          "card transaction",
+          "posted charge"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
+      },
+      {
+        "object_type_id": "moonsleep.invoice",
+        "names": {
+          "singular": "Invoice",
+          "plural": "Invoices"
+        },
+        "owner_domain": "moonsleep.finance",
+        "identity_contract_id": "moonsleep.invoice.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^api_[0-9a-f]{64}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "invoice",
+          "ap_invoice",
+          "provider_invoice",
+          "provider_credit_memo"
+        ],
+        "search_terms": [
+          "invoice",
+          "AP invoice",
+          "provider invoice",
+          "credit memo"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
+      },
+      {
         "object_type_id": "nex.entity",
         "names": {
           "singular": "Entity",
@@ -1348,8 +1464,20 @@
   },
   "declarations": [
     {
+      "object_type_id": "moonsleep.cash_card_account",
+      "declaration_sha256": "8caa2a3e09807aca0c8c76e07f180f5935673131b32fe05237863092a059c0ea"
+    },
+    {
       "object_type_id": "moonsleep.commerce_order",
       "declaration_sha256": "f2c640d2f3461d92dfd4c9eb863ec3c88cd379de08fe5da0edc202c27ac3c98a"
+    },
+    {
+      "object_type_id": "moonsleep.financial_transaction",
+      "declaration_sha256": "d1a77655e2bfbed09ffcb002c7335c353e000f5475b09688c7ee53a8e7cac643"
+    },
+    {
+      "object_type_id": "moonsleep.invoice",
+      "declaration_sha256": "cdaa3bbf81d0ae0645b4be89c0ed7c340fb3c1ff770619315c1e36887b19330f"
     },
     {
       "object_type_id": "moonsleep.manufacturing_run",

@@ -11,6 +11,8 @@ the existing domain; the registry carries the stable identity contract,
 accepted input language, and shared resolver binding. This applies to native
 Nex objects and to already-deployed MoonSleep projections whose canonical IDs
 and revision custody must remain stable during incremental convergence.
+Runtime owner routing is derived from each declaration's `resolution_binding`;
+implementations do not maintain another object-type registry.
 
 The registry contains identity-bearing object types only. It does not contain
 candidate nouns, read views, storage tables, receipts, projectors, historical

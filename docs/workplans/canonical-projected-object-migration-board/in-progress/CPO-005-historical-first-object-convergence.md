@@ -4,8 +4,8 @@
 **Depends on:** CPO-004 and the historical-frontier object-language audit
 **Owner:** canonical object-registry and vocabulary consolidation track
 **Umbrella source:** `98174577d9cc20650c03e119d78c6471785c5902`
-**Nex source:** `cedd7a350bad789fc5ed316af89a1911a377d96b`
-**MoonSleep source:** `a9c61e9ad2d2c6eeab011a97109d3244531e40ec`
+**Nex source:** `c55bf28f92fc3df64516e6487833bdbee8f15e83`
+**MoonSleep source:** `baeda9025a71bc409cdc68fd6780f5c8a0f325ef`
 
 ## Goal
 
@@ -57,10 +57,11 @@ flowchart TD
 ```
 
 Only one slice is active at a time unless Tyler explicitly changes that rule.
-The completed slice is **005A Native imports and owner resolvers**. The active
-slice is **005B Next-slate projected declarations**, beginning with the bounded
-Commerce identity cluster. Commerce, Supply, and Finance are declaration
-batches inside 005B, not separate framework phases.
+**005A Native imports and owner resolvers** and the Commerce, Supply, and Finance
+declaration batches inside **005B Next-slate projected declarations** are
+source-complete. The active source slice is **005C Registry-derived vocabulary
+and relationship coverage**. These are convergence slices, not separate domain
+frameworks.
 
 ## Slice acceptance
 
@@ -176,3 +177,45 @@ Every source slice must prove:
   not yet claimed as Linux-cleanroom-proven.
 - No production, historical packet, semantic publication, or cursor mutation
   occurred.
+
+## 005B Finance decision
+
+- Reuse `moonsleep.cash_card_account`,
+  `moonsleep.financial_transaction`, and `moonsleep.invoice` through their
+  deployed Finance owner. Preserve the existing `cca_<sha256>`, `cct_<sha256>`,
+  and `api_<sha256>` identities and current immutable Finance revisions.
+- Correct the historical-frontier shorthand: Mercury and Amex source-account
+  identities are Cash/Card Source Accounts. `moonsleep.financial_account` is a
+  distinct general-ledger account and is not required to resolve W0031 charges.
+- Collapse `moonsleep.invoice_revision` into Invoice owner revision history and
+  `moonsleep.invoice_line` into the complete selected Invoice revision state.
+  Neither gets a second canonical head.
+- Treat Finance AP Party as a reviewed subledger binding/facet on canonical
+  `nex.entity`, not as a second vendor identity.
+- Keep `moonsleep.payment` semantically distinct as a provider-native payment
+  order. W0031 posted charges, Great American Packaging Purchase Order, and
+  accepted HQTS Commitment must never normalize to Payment. A Payment
+  Application remains unavailable without exact Payment and Invoice revision
+  custody.
+
+### Finance batch evidence
+
+- Registry v2 compiles and validates 23 declarations with digest
+  `e7185d7857313be4c5a66c8af2d1c1b5d524fedb09e3effa45c69f2127238ce4`.
+- Rebased Nex commit
+  `9f8b0a2528b394a25d207bfd4e1ae5cbd45818f8` derives owner routing from the
+  registry's shared `nex.core-graph.subject-resolver.v1` binding. It adds no
+  second declaration registry and no Finance projector or activation gate.
+- The Finance owner reader resolves complete Cash/Card Account and Financial
+  Transaction stable/current revision rows. Invoice resolution includes the
+  stable row, selected immutable revision, ordered lines, AP-party row, and
+  current reviewed Entity binding. Exact supplied IDs remain canonical; missing
+  rows fail closed; every complete read state is receipt-bound.
+- The exact-current-main focused suite passes 48 tests against a fresh,
+  disposable PostgreSQL 17 cluster. Type-aware lint, formatting, and the full
+  Nex build are green. The build used the installed Node 26 runtime and emitted
+  the repository's expected Node-engine warning; runtime-targeted compilation
+  remained Node 22.12.
+- Docker remained unresponsive, so this post-Supply source is not yet claimed
+  as Linux/container-cleanroom-proven. No production, historical packet,
+  semantic publication, or cursor mutation occurred.

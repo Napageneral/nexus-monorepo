@@ -343,10 +343,7 @@
           "target_object_type_ids": ["moonsleep.purchase_order_component_line"]
         }
       ],
-      "accepted_input_terms": [
-        "supplier_freight_quote_line",
-        "supplier_freight_quotation_line"
-      ],
+      "accepted_input_terms": ["supplier_freight_quote_line", "supplier_freight_quotation_line"],
       "search_terms": ["freight quote line"],
       "resolution_binding": "nex.canonical-object-kernel.v1"
     },
@@ -535,6 +532,84 @@
       "relationship_slots": [],
       "accepted_input_terms": ["commerce_order", "shopify_order"],
       "search_terms": ["Commerce Order", "Shopify Order", "Order"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.cash_card_account",
+      "names": {
+        "singular": "Cash or Card Source Account",
+        "plural": "Cash or Card Source Accounts"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.cash_card_account.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cca_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["cash_card_account"],
+      "search_terms": ["cash account", "card account", "bank account", "credit card account"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.financial_transaction",
+      "names": {
+        "singular": "Financial Transaction",
+        "plural": "Financial Transactions"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.financial_transaction.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cct_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["financial_transaction"],
+      "search_terms": ["bank transaction", "card transaction", "posted charge"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.invoice",
+      "names": {
+        "singular": "Invoice",
+        "plural": "Invoices"
+      },
+      "owner_domain": "moonsleep.finance",
+      "identity_contract_id": "moonsleep.invoice.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^api_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["invoice", "ap_invoice", "provider_invoice", "provider_credit_memo"],
+      "search_terms": ["invoice", "AP invoice", "provider invoice", "credit memo"],
       "resolution_binding": "nex.core-graph.subject-resolver.v1"
     },
     {
