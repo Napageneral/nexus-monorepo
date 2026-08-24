@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -212,6 +213,92 @@ func TestExpiredImmutableObservationLeaseCannotRewritePollingCheckpoint(t *testi
 	}
 	if lease.ProviderCursor != initial.ProviderCursor || lease.PageCursor != initial.PageCursor || lease.RequestSince != initial.WindowSince || lease.WindowThrough != initial.WindowThrough {
 		t.Fatalf("expired observation lease rewrote polling state: %#v", lease)
+	}
+}
+
+func TestImmutableObservationWaitsForPollingCaptureWithoutAdvancingItsCheckpoint(t *testing.T) {
+	sourceStateFixture(t)
+	const connectionID = "shopify-primary"
+	const family = "orders.delta"
+	started := time.Date(2026, 8, 24, 19, 40, 0, 0, time.UTC)
+	polling, err := beginSourceCapture(connectionID, shopifySourceFamilies[family], started)
+	if err != nil {
+		t.Fatalf("begin polling capture: %v", err)
+	}
+	observation, err := parseShopifyImmutableObservation(
+		immutableObservationFixture("orders/cancelled", map[string]any{"id": 8330198155426}),
+		family,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := started.Add(time.Second)
+	sleepCalls := 0
+	lease, err := beginObservationSourceCaptureWhenAvailable(
+		connectionID,
+		shopifySourceFamilies[family],
+		observation,
+		func() time.Time { return now },
+		func(delay time.Duration) {
+			sleepCalls++
+			now = now.Add(delay)
+			if sleepCalls == 1 {
+				abandonSourceCapture(connectionID, family, polling.CaptureID)
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("begin observation after polling capture: %v", err)
+	}
+	if sleepCalls != 1 {
+		t.Fatalf("observation wait calls = %d, want 1", sleepCalls)
+	}
+	if lease.ObservationReceiptID != observation.ObservationReceiptID {
+		t.Fatalf("observation lease differs: %#v", lease)
+	}
+	if lease.RequestSince != now.Format(time.RFC3339Nano) || lease.WindowThrough != lease.RequestSince {
+		t.Fatalf("observation lease timing differs: %#v", lease)
+	}
+}
+
+func TestImmutableObservationWaitFailsClosedWhilePollingCaptureRemainsActive(t *testing.T) {
+	sourceStateFixture(t)
+	const connectionID = "shopify-primary"
+	const family = "orders.delta"
+	started := time.Date(2026, 8, 24, 19, 40, 0, 0, time.UTC)
+	polling, err := beginSourceCapture(connectionID, shopifySourceFamilies[family], started)
+	if err != nil {
+		t.Fatalf("begin polling capture: %v", err)
+	}
+	observation, err := parseShopifyImmutableObservation(
+		immutableObservationFixture("orders/cancelled", map[string]any{"id": 8330198155426}),
+		family,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := started.Add(time.Second)
+	_, err = beginObservationSourceCaptureWhenAvailable(
+		connectionID,
+		shopifySourceFamilies[family],
+		observation,
+		func() time.Time { return now },
+		func(delay time.Duration) { now = now.Add(delay) },
+	)
+	var active *shopifySourceFamilyCaptureActiveError
+	if !errors.As(err, &active) || active.Family != family {
+		t.Fatalf("observation wait error = %v, want active %s capture", err, family)
+	}
+	row, err := withLockedSourceState(connectionID, func(state *shopifySourceState) (shopifySourceFamilyState, error) {
+		return state.Families[family], nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Lease == nil || row.Lease.CaptureID != polling.CaptureID || row.Lease.ObservationReceiptID != "" {
+		t.Fatalf("polling lease changed during observation wait: %#v", row.Lease)
 	}
 }
 

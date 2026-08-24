@@ -22,6 +22,8 @@ const (
 	shopifySourceStateVersion = 1
 	shopifySourceLeaseTTL     = 10 * time.Minute
 	shopifySourceMaxRecords   = 500
+	shopifyObservationWait    = 60 * time.Second
+	shopifyObservationPoll    = 250 * time.Millisecond
 )
 
 var safeShopifyStateToken = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -181,6 +183,14 @@ type shopifySourceFamilyState struct {
 	WindowProviderCursor string              `json:"window_provider_cursor,omitempty"`
 	PageCursor           string              `json:"page_cursor,omitempty"`
 	Lease                *shopifySourceLease `json:"lease,omitempty"`
+}
+
+type shopifySourceFamilyCaptureActiveError struct {
+	Family string
+}
+
+func (err *shopifySourceFamilyCaptureActiveError) Error() string {
+	return fmt.Sprintf("Shopify source family %s already has an active capture", err.Family)
 }
 
 type shopifySourceState struct {
@@ -501,7 +511,7 @@ func beginObservationSourceCapture(connectionID string, spec shopifySourceFamily
 				if familyState.Lease.CaptureID == captureID && familyState.Lease.ObservationReceiptID == observation.ObservationReceiptID {
 					return *familyState.Lease, nil
 				}
-				return shopifySourceLease{}, fmt.Errorf("Shopify source family %s already has an active capture", spec.Name)
+				return shopifySourceLease{}, &shopifySourceFamilyCaptureActiveError{Family: spec.Name}
 			}
 			familyState = recoverExpiredSourceLease(familyState)
 		}
@@ -521,6 +531,32 @@ func beginObservationSourceCapture(connectionID string, spec shopifySourceFamily
 		state.Families[spec.Name] = familyState
 		return lease, nil
 	})
+}
+
+func beginObservationSourceCaptureWhenAvailable(
+	connectionID string,
+	spec shopifySourceFamilySpec,
+	observation shopifyImmutableObservation,
+	now func() time.Time,
+	sleep func(time.Duration),
+) (shopifySourceLease, error) {
+	deadline := now().Add(shopifyObservationWait)
+	for {
+		lease, err := beginObservationSourceCapture(connectionID, spec, observation, now().UTC())
+		if err == nil {
+			return lease, nil
+		}
+		var active *shopifySourceFamilyCaptureActiveError
+		if !errors.As(err, &active) {
+			return shopifySourceLease{}, err
+		}
+		current := now()
+		if !current.Before(deadline) {
+			return shopifySourceLease{}, err
+		}
+		delay := min(shopifyObservationPoll, deadline.Sub(current))
+		sleep(delay)
+	}
 }
 
 func beginSourceCapture(connectionID string, spec shopifySourceFamilySpec, now time.Time) (shopifySourceLease, error) {
@@ -984,7 +1020,13 @@ func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload
 		if err != nil {
 			return nil, err
 		}
-		lease, err := beginObservationSourceCapture(state.ConnectionID, spec, observation, time.Now().UTC())
+		lease, err := beginObservationSourceCaptureWhenAvailable(
+			state.ConnectionID,
+			spec,
+			observation,
+			time.Now,
+			time.Sleep,
+		)
 		if err != nil {
 			return nil, err
 		}
