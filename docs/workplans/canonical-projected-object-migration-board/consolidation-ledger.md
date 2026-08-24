@@ -108,6 +108,28 @@ cross the active cutoff. The `[2026-03-26T05:00:00Z,
 unsupported future state, not manufacture partial support or count them as
 withheld links.
 
+## First-slate instance reconciliation
+
+Registry aliases normalize object language. They do not bless every packet-era
+instance ID as a canonical address. The first complete dry run therefore locks
+these instance-level rules:
+
+| Packet or provider address                                             | Canonical treatment                              | Required compiler behavior                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| bare numeric Shopify Order ID                                          | instance-format alias for the Commerce owner key | Normalize to `gid://shopify/Order/<numeric>` and resolve through the owner; all 27/27 current-slate references resolve.                                                                                                                                                                   |
+| `entity_observed_*`, `contact_observed_*`, packet Facet Attachment IDs | rejected packet candidate IDs                    | Replace from the selected Commerce revision or exact immutable Gmail Record party truth; never publish a copied native identity.                                                                                                                                                          |
+| `email_stream_*`                                                       | derived evidence collection, not a Channel alias | Resolve membership inside each packet supplying an in-window Observation, union only genuinely shared occurrences, and emit the resolved native Channel set. The first slate has 28 packet-local occurrences, 27 collections, 89 Records, 38 routes, and 41 `evidenced_in_channel` edges. |
+| VistaPrint amount/account wording in W0031                             | unresolved owner-instance stop                   | Reuse the Amex Cash/Card Source Account, but create no Financial Transaction or Invoice until the Finance owner contains exact identity custody.                                                                                                                                          |
+| SGD-0007 frozen cross-cutoff Resource                                  | non-candidate projection                         | Compile only cutoff-local F01/F02/F04 Observations. Exclude F03 and every jointly F03-dependent object revision or edge.                                                                                                                                                                  |
+
+These are compiler/reconciliation rules, not new registry declarations,
+crosswalk tables, or permanent historical decoder infrastructure.
+
+The first zero-stop attempt's global last-packet-wins map is explicitly
+superseded. It produced 86 members by dropping five valid C006 rows and retaining
+two unused later C007 rows. Packet-provenance-preserving union restores the exact
+cutoff-local count: `86 - 2 + 5 = 89`.
+
 ## Supplier packet census
 
 The accepted Supplier corpus contains 93 distinct Resource labels. All are
@@ -196,15 +218,17 @@ The first convergence boundary is the complete global interval
 `[2026-03-26T05:00:00Z, 2026-04-02T05:00:00Z)`. Implementation remains sliced
 so each declaration or owner binding is independently reviewable.
 
-| Order | Slice                                     | Outcome                                                                                                                                                                                                                                        |
-| ----: | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|     1 | Native imports and owner bindings         | Reuse Entity, Contact, Channel, Loop, Commitment, and Facet identities through their native owners; create no projected copies.                                                                                                                |
-|     2 | Commerce declarations                     | Register only the Commerce Order and exact Refund identity contracts required by the bounded evidence. Receipts remain custody, not business identities.                                                                                       |
-|     3 | Supply dependency closure                 | Register Product Family, BOM Version/Line, Sample Article, freight quote/line, Manufacturing Run, Manufacturing Run Component, and the single Purchase Order Component Line vocabulary needed by the slate.                                    |
-|     4 | Finance dependency closure                | Import Cash/Card Source Account, Financial Transaction, and Invoice from their owners; collapse AP Party to Entity and invoice revision/line nouns into owner revision state; map accepted inspection work to Commitment and never to Payment. |
-|     5 | Generated normalization and relationships | Compile aliases and canonical relationship slots from registry v2; eliminate packet-local object translations.                                                                                                                                 |
-|     6 | Complete slate dry run                    | Prove every subject and endpoint resolves, with zero withheld links, duplicate identities, future-state inference, or synthetic revisions.                                                                                                     |
-|     7 | Governed historical publication           | In one separately authorized transaction, write the bounded semantic layer, publish object revisions, read back, replay no-op, and only then advance the cursor.                                                                               |
+| Order | Slice                                     | Outcome                                                                                                                                                                                                                                                              |
+| ----: | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|     1 | Native imports and owner bindings         | Reuse Entity, Contact, Channel, Loop, Commitment, and Facet identities through their native owners; create no projected copies.                                                                                                                                      |
+|     2 | Commerce declarations                     | Register only the Commerce Order and exact Refund identity contracts required by the bounded evidence. Receipts remain custody, not business identities.                                                                                                             |
+|     3 | Supply dependency closure                 | Register Product Family, BOM Version/Line, Sample Article, freight quote/line, Manufacturing Run, Manufacturing Run Component, and the single Purchase Order Component Line vocabulary needed by the slate.                                                          |
+|     4 | Finance dependency closure                | Import Cash/Card Source Account, Financial Transaction, and Invoice from their owners; collapse AP Party to Entity and invoice revision/line nouns into owner revision state; map accepted inspection work to Commitment and never to Payment.                       |
+|     5 | Generated normalization and relationships | Compile aliases and canonical relationship slots from registry v2; eliminate packet-local object translations.                                                                                                                                                       |
+|     6 | Complete slate dry run                    | Run the exact slate, correct only exact owner/Record endpoint substitutions and cutoff-local evidence compilation, then rerun until every required endpoint resolves with zero withheld links, duplicate identities, future-state inference, or synthetic revisions. |
+|     7 | Merge and deploy exact artifacts          | Merge reviewed source, build one exact artifact, deploy it under normal runtime custody, and prove registry plus ordered native/owner resolver readback.                                                                                                             |
+|     8 | Governed historical publication           | In one separately authorized transaction, write the bounded semantic layer and publish object revisions without moving the cursor.                                                                                                                                   |
+|     9 | Readback, replay no-op, cursor advance    | Prove exact semantic/object/graph readback and identical replay no-op, then advance the cursor in its own governed terminal step.                                                                                                                                    |
 
 Later waves select only the additional concepts actually encountered by the
 next chronological interval. Supply Shipment, Joint Cargo Plan, Supply

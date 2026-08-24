@@ -55,11 +55,14 @@ not prerequisites for the new foundation.
 ## Current baselines
 
 - Umbrella exact `origin/main`: `98174577d9cc20650c03e119d78c6471785c5902`
-- Nex exact `origin/main`: `c55bf28f92fc3df64516e6487833bdbee8f15e83`
+- Nex exact `origin/main`: `ff3c1cea9ddf3a1c1244f7535c174e1a0ed5ca40`
 - MoonSleep exact `origin/main`: `baeda9025a71bc409cdc68fd6780f5c8a0f325ef`
 - Native Channel cleanup is merged through Nex PR #432. Communication-storage
   safety and parity work is merged through PR #453; current main is a
   descendant of both.
+- The bounded communication-successor migration reached exact production parity
+  and released its resources at `2026-08-24T02:23:42.575Z`. That custody result
+  removes a runtime scheduling conflict; it does not authorize CPO publication.
 - Projecting and historical-interpretation agent:
   `codex://threads/019fec90-be1c-7cc3-8961-5c05caadd78d`
 
@@ -104,15 +107,19 @@ flowchart TD
     CPO005A --> CPO005B[CPO-005B Next-slate projected declarations]
     CPO005B --> CPO005C[CPO-005C Registry-derived vocabulary and relationship coverage]
     CPO005C --> CPO005D[CPO-005D Full next-slate dry run]
-    CPO005D --> CPO005E[CPO-005E Governed historical publication and readback]
-    CPO005E --> CPO005[CPO-005 First convergence wave complete]
+    CPO005D --> CPO005E[CPO-005E Merge and deploy exact artifacts]
+    CPO005E --> CPO005F[CPO-005F Separately authorized historical publication]
+    CPO005F --> CPO005G[CPO-005G Readback replay no-op and cursor advance]
+    CPO005G --> CPO005[CPO-005 First convergence wave complete]
     CPO005 --> CPO006[CPO-006 Legacy deletion and foundation closure]
 ```
 
-The foundation critical path and CPO-005A are complete. The active path is:
+The foundation, declarations, owner bindings, vocabulary coverage, and corrected
+zero-stop full-slate dry run are source-complete. The active path is:
 
 ```text
-CPO-005B -> CPO-005C -> CPO-005D -> CPO-005E -> CPO-006
+CPO-005E review/merge/deploy -> CPO-005F authorized publication
+-> CPO-005G readback/cursor -> CPO-006
 ```
 
 The only external implementation input is the already-completed native Channel
