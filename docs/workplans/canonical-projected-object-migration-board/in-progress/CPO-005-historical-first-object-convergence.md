@@ -219,3 +219,28 @@ Every source slice must prove:
 - Docker remained unresponsive, so this post-Supply source is not yet claimed
   as Linux/container-cleanroom-proven. No production, historical packet,
   semantic publication, or cursor mutation occurred.
+
+## 005C vocabulary and relationship coverage
+
+- Registry v2 is the only executable object-term normalizer. The conformance
+  proof locks every next-slate accepted historical term to one canonical type
+  and proves collapsed or evidence-dependent nouns remain unregistered.
+- The complete MoonSleep owner-import set is mechanically derived from the
+  shared owner binding and is exactly Commerce Order, Cash/Card Source Account,
+  Financial Transaction, and Invoice. There is no parallel routing list.
+- The consolidation ledger now gives an exact output for every next-slate
+  Supply relationship phrase. Inverse `has_component_workstream`,
+  `has_quote_line`, and Product Revision `specified_by` edges become their
+  single child/BOM-owned canonical direction. Proposal relationships become
+  proposal state or the existing Core Graph `concerns_resource` edge; they do
+  not create duplicate semantic predicates.
+- Nex commit `8c31356179b02b74a445a251bc701f33e4c3113b` locks object-term,
+  collapse, canonical relationship-slot, and registry-derived owner-import
+  coverage. The full exact-current-main suite passes 52 tests against a fresh
+  disposable PostgreSQL 17 cluster; type-aware lint and formatting are green.
+- SGD-0007 relationships jointly dependent on the later F03 are outside the
+  active cutoff. They are excluded from the candidate graph rather than counted
+  as withheld links or inferred from F01/F02 alone.
+- 005C is source-complete. The active slice is 005D: the historical/projecting
+  agent is performing the exact-next-slate read-only compile and ordered
+  resolution census. Production and historical writes remain closed.

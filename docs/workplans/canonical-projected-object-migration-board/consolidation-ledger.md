@@ -74,6 +74,40 @@ owner view catalogs outside the object registry.
 | accepted inspection work, accepted inspection service                                                     | reuse                           | `nex.commitment`                                            | Accepted work is an obligation; create service procurement only after an independent lifecycle is proven.                                                               |
 | batch pool, inventory pool, `fulfillment_pools.batch_key`                                                 | create                          | `moonsleep.fulfillment_pool`                                | Allocatable capacity linked to Product, Lot, Purchase Order, and Node as applicable.                                                                                    |
 
+## Next-slate relationship convergence
+
+Object-revision relationships use the canonical registry slots below. Native
+Loop, Commitment, Entity, Channel, Contact, Facet, and owner-backed Finance
+relationships remain Core Graph edges after both endpoints point-resolve. This
+table is migration guidance, not another runtime relationship registry.
+
+| Packet relationship                                                         | Canonical output                                                                    | Rule                                                                                                                                      |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `executes_purchase_order`                                                   | Manufacturing Run `executes_purchase_order` Purchase Order                          | Preserve direction.                                                                                                                       |
+| `performed_by`                                                              | Manufacturing Run `performed_by` `nex.entity`                                       | Preserve direction.                                                                                                                       |
+| `authorized_by`                                                             | Manufacturing Run `authorized_by` `nex.entity`                                      | Preserve as a many-valued authorization set; it grants no action authority.                                                               |
+| `governed_by_revision`, `governing_revision`                                | Manufacturing Run `governed_by_revision` Product Revision                           | One canonical phrase and direction.                                                                                                       |
+| `has_component_workstream`                                                  | Manufacturing Run Component `part_of_manufacturing_run` Manufacturing Run           | Reverse the packet edge; never publish both directions.                                                                                   |
+| `executes_component_line`                                                   | Manufacturing Run Component `executes_component_line` Purchase Order Component Line | Preserve direction.                                                                                                                       |
+| `uses_approval_article`                                                     | Manufacturing Run `uses_approval_article` Sample Article                            | Preserve direction.                                                                                                                       |
+| `compared_against_retained_article`                                         | Manufacturing Run `compared_against_retained_article` Sample Article                | Preserve direction.                                                                                                                       |
+| Product Revision `specified_by` BOM Version                                 | BOM Version `specifies_product_revision` Product Revision                           | Reverse the packet edge to the canonical BOM-owned composition edge.                                                                      |
+| Component Line or Sample Article `specified_by`                             | `specified_by_bom_line` or `specified_by_bom_version`                               | Source type selects the exact registered relationship; bare `specified_by` is not global vocabulary.                                      |
+| `quotation_for_purchase_order`                                              | Freight Quote `for_purchase_order` Purchase Order                                   | Rename without changing direction.                                                                                                        |
+| `has_quote_line`                                                            | Freight Quote Line `part_of_freight_quote` Freight Quote                            | Reverse the packet edge; never publish both directions.                                                                                   |
+| `proposed_successor`                                                        | no edge while proposal-only                                                         | Proposal state belongs to the proposed Product Revision. Emit newer `supersedes` older only after acceptance evidence crosses the cursor. |
+| `produced_proposed_revision`, `proposes_revision`                           | Loop `concerns_resource` proposed Product Revision                                  | Reuse the Core Graph concern edge after the proposed revision resolves; do not create a production/result relation.                       |
+| `committed_by`, `committed_to`, `evidenced_in_channel`, `concerns_resource` | native Commitment Core Graph edges                                                  | Preserve the canonical native vocabulary after every endpoint resolves.                                                                   |
+| `initiated_by`, `addressed_to`, `evidenced_in_channel`, `concerns_resource` | native Loop Core Graph edges                                                        | Preserve the canonical native vocabulary after every endpoint resolves.                                                                   |
+| `in_account`                                                                | Financial Transaction `in_account` Cash/Card Source Account                         | Derive only from exact owner rows; never use a general-ledger Financial Account as the provider account identity.                         |
+| Invoice vendor relationship                                                 | Invoice `issued_by` `nex.entity`                                                    | Use the reviewed AP-party Entity binding; the AP-party handle is not a graph identity.                                                    |
+
+SGD-0007 relationships supported jointly by F01/F02 and the later F03 do not
+cross the active cutoff. The `[2026-03-26T05:00:00Z,
+2026-04-02T05:00:00Z)` dry run must therefore exclude those non-candidates as
+unsupported future state, not manufacture partial support or count them as
+withheld links.
+
 ## Supplier packet census
 
 The accepted Supplier corpus contains 93 distinct Resource labels. All are
