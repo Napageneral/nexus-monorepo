@@ -1,6 +1,6 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "a097f3124d873ba8f9a48d545474f80b32432fe22fe6cb2327d333712b6a106d",
+  "registry_digest": "adae37079bca014d7cffe1f430c55ad1fa4b5b495cf2ac7acb2e230a451321fa",
   "registry": {
     "registry_id": "nex.canonical_objects",
     "schema_version": "2.0.0",
@@ -182,6 +182,44 @@
           "purchase order"
         ],
         "resolution_binding": "nex.canonical-object-kernel.v1"
+      },
+      {
+        "object_type_id": "moonsleep.commerce_order",
+        "names": {
+          "singular": "Commerce Order",
+          "plural": "Commerce Orders"
+        },
+        "owner_domain": "moonsleep.commerce",
+        "identity_contract_id": "moonsleep.commerce_order.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^commerce_order_[0-9a-f]{64}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "commerce_order",
+          "shopify_order"
+        ],
+        "search_terms": [
+          "Commerce Order",
+          "Shopify Order",
+          "Order"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
       },
       {
         "object_type_id": "nex.entity",
@@ -538,6 +576,10 @@
     ]
   },
   "declarations": [
+    {
+      "object_type_id": "moonsleep.commerce_order",
+      "declaration_sha256": "f2c640d2f3461d92dfd4c9eb863ec3c88cd379de08fe5da0edc202c27ac3c98a"
+    },
     {
       "object_type_id": "moonsleep.product_revision",
       "declaration_sha256": "fc8961c90999ebc21b11d04c235ae0580e0cfc4713130454619c846e97baadcc"

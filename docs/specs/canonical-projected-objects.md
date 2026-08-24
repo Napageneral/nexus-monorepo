@@ -32,10 +32,16 @@ objects.publish_revision
 objects.resolve_many
 ```
 
-Registering a complete MoonSleep object type immediately gives every instance
-the behavior owned by that kernel. A domain author does not create a new object
-table, revision table, head table, resolver, Observation adapter, graph writer,
-projector registration, or activation workflow.
+Registering a complete new MoonSleep object type immediately gives every
+instance the behavior owned by that kernel. A domain author does not create a
+new object table, revision table, head table, resolver, Observation adapter,
+graph writer, projector registration, or activation workflow.
+
+An already-deployed MoonSleep projection that demonstrably has the same stable
+identity, immutable revision history, target adapter, and owner read custody is
+reused through the owner-resolution seam while it is incrementally converged.
+Registration must never create a second canonical identity merely to move an
+existing object into the generic tables.
 
 There is no partially active registry entry. An incomplete candidate remains
 outside the canonical registry.
@@ -165,6 +171,13 @@ binding required by the shared resolver. The native domain remains the sole
 owner of its attributes, revisions, relationships, and storage. The Canonical
 Object Kernel never republishes a native Entity, Place, Contact, Channel, Loop,
 Commitment, Facet Definition, or Facet Attachment into projected-object tables.
+
+The same no-copy rule applies during migration to an existing owner-backed
+MoonSleep projection. Its v2 declaration imports its canonical address and
+owner resolver. New revisions continue through the existing owner until a
+separately proven storage migration can preserve every canonical ID, revision,
+receipt, and replay result exactly. New MoonSleep object types use the generic
+projected-object implementation immediately.
 
 Conceptually:
 
@@ -364,10 +377,11 @@ The read receipt is a deterministic digest of the request, registry digest,
 canonical identity, selected revision or native row, and complete owner read
 state. Resolution creates no receipt row and requires no receipt operator.
 
-Every `moonsleep.*` projected object uses the generic implementation. Native
-Nex objects use owner adapters behind this same interface. Routing by
-resolution binding is an internal implementation detail, not a separate
-declaration system or migration phase.
+Every new `moonsleep.*` projected object uses the generic implementation.
+Already-deployed MoonSleep projections and native Nex objects may reuse owner
+adapters behind this same interface when copying them would change canonical
+identity or revision custody. Routing by resolution binding is an internal
+implementation detail, not a separate declaration system or migration phase.
 
 ## Observation targeting and Core Graph
 

@@ -88,6 +88,32 @@
       "resolution_binding": "nex.canonical-object-kernel.v1"
     },
     {
+      "object_type_id": "moonsleep.commerce_order",
+      "names": {
+        "singular": "Commerce Order",
+        "plural": "Commerce Orders"
+      },
+      "owner_domain": "moonsleep.commerce",
+      "identity_contract_id": "moonsleep.commerce_order.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^commerce_order_[0-9a-f]{64}$" }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": ["commerce_order", "shopify_order"],
+      "search_terms": ["Commerce Order", "Shopify Order", "Order"],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
       "object_type_id": "nex.entity",
       "names": {
         "singular": "Entity",

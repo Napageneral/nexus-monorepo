@@ -54,9 +54,9 @@ not prerequisites for the new foundation.
 
 ## Current baselines
 
-- Umbrella exact `origin/main`: `2540d28ca32e3642bb5e922a7b6934765a83733d`
-- Nex exact `origin/main`: `7a7cea8966260c8ff998b1a418ad8c73ff9958de`
-- MoonSleep exact `origin/main`: `95a2ec2f6d8b8f2d16e3475490764fb739b9bc85`
+- Umbrella exact `origin/main`: `98174577d9cc20650c03e119d78c6471785c5902`
+- Nex exact `origin/main`: `32d750cd447d55f65be96760cf5549266f364829`
+- MoonSleep exact `origin/main`: `26d7e20aac1dab5f23eb605e4be8ad4d6bc02a29`
 - Native Channel completed branch: `codex/native-channel-cleanup-20260823`
   - native owner resolver: `2c12f89d78`
   - crosswalk lifecycle/fallback deletion: `cc4f53a095`
@@ -111,10 +111,10 @@ flowchart TD
     CPO005 --> CPO006[CPO-006 Legacy deletion and foundation closure]
 ```
 
-The foundation critical path is complete. The active path is:
+The foundation critical path and CPO-005A are complete. The active path is:
 
 ```text
-CPO-005A -> CPO-005B -> CPO-005C -> CPO-005D -> CPO-005E -> CPO-006
+CPO-005B -> CPO-005C -> CPO-005D -> CPO-005E -> CPO-006
 ```
 
 The only external implementation input is the already-completed native Channel
