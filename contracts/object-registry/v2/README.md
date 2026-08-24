@@ -35,6 +35,17 @@ Regenerate the deterministic compiled artifact:
 node contracts/object-registry/v2/registry-tools.mjs --write
 ```
 
+Regenerate Nex's runtime mirror from this source; never hand-author a runtime
+declaration:
+
+```bash
+node scripts/generate-canonical-object-registry.mjs \
+  /path/to/umbrella/contracts/object-registry/v2/registry.json \
+  src/runtime/domains/objects/canonical-object-registry.generated.ts
+pnpm exec oxfmt --write \
+  src/runtime/domains/objects/canonical-object-registry.generated.ts
+```
+
 Run the two-type compiler conformance proof:
 
 ```bash

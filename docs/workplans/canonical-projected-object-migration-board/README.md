@@ -55,13 +55,11 @@ not prerequisites for the new foundation.
 ## Current baselines
 
 - Umbrella exact `origin/main`: `98174577d9cc20650c03e119d78c6471785c5902`
-- Nex exact `origin/main`: `32d750cd447d55f65be96760cf5549266f364829`
-- MoonSleep exact `origin/main`: `26d7e20aac1dab5f23eb605e4be8ad4d6bc02a29`
-- Native Channel completed branch: `codex/native-channel-cleanup-20260823`
-  - native owner resolver: `2c12f89d78`
-  - crosswalk lifecycle/fallback deletion: `cc4f53a095`
-  - migration/materialization deletion: `2ec08313fd`
-  - generalized historical-ledger verification: `2acbd3e73d`
+- Nex exact `origin/main`: `cedd7a350bad789fc5ed316af89a1911a377d96b`
+- MoonSleep exact `origin/main`: `a9c61e9ad2d2c6eeab011a97109d3244531e40ec`
+- Native Channel cleanup is merged through Nex PR #432. Communication-storage
+  safety and parity work is merged through PR #453; current main is a
+  descendant of both.
 - Projecting and historical-interpretation agent:
   `codex://threads/019fec90-be1c-7cc3-8961-5c05caadd78d`
 

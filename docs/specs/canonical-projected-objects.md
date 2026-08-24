@@ -254,6 +254,26 @@ The following MoonSleep boundaries are canonical:
 - accepted inspection work is a native `nex.commitment`; a separate service
   procurement type is created only if it later proves an independent lifecycle.
 
+The first Supply convergence uses the generic kernel for Product Family, BOM
+Version, BOM Line, Sample Article, Supplier Freight Quote, Supplier Freight
+Quote Line, Purchase Order Component Line, Manufacturing Run, and Manufacturing
+Run Component. The packet-era `public.supply_*` tables do not qualify as owner
+imports: they expose mutable current rows and projection custody, but not one
+immutable canonical revision stream and owner resolver for each object.
+
+`sample_article_status` is not a second object type. Its historical rows are
+accepted status evidence for the identified Sample Article and become Sample
+Article revisions. Likewise, Product Component Variant Rule remains BOM or
+Product Revision specification state. Neither packet noun receives an identity,
+head, resolver, or registry entry.
+
+Supply composition uses one canonical edge direction. A child points to its
+parent (`part_of_bom_version`, `part_of_purchase_order`,
+`part_of_manufacturing_run`, or `part_of_freight_quote`). Historical inverse
+packet edges such as `has_quote_line` and `has_component_workstream` compile to
+that same edge and are not published in parallel. A BOM Version points to the
+Product Revision it specifies. A proposal does not publish `supersedes`.
+
 `supersedes` always points from a newer accepted Product Revision to the older
 accepted Product Revision it replaces. A proposed revision may exist with a
 proposed state, but proposal evidence does not emit a supersession edge. The
