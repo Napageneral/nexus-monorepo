@@ -1,12 +1,13 @@
 # MoonSleep canonical object consolidation baseline — v2
 
-Status: locked source-only v2 semantic baseline; implementation and production
-remain separately authorized
+Status: locked v2 semantic baseline; the complete-catalog source implementation
+is approved, while each production transaction remains separately bounded
 
 Date: 2026-08-25
 
-No executable registry change, schema change, object publication, historical-cursor
-movement, provider action, or production mutation is authorized by this document.
+This document does not itself perform a registry change, schema change, object
+publication, historical-cursor movement, provider action, or production
+mutation.
 
 ## Legacy extinction contract
 
@@ -132,11 +133,11 @@ moonsleep.interfacility_transfer
 moonsleep.facility_receipt
 ```
 
-This list is the locked semantic review catalog, not an authorization to
-bulk-register all 24 declarations. Each type is declared only when its
-business-value slice reaches the declaration/release transaction below. The
-current source registry's 23 entries remain research input and must not be
-bulk-promoted as the final business catalog.
+This list is the locked semantic catalog. The approved implementation declares
+all 24 projected types together, plus only the owner-native addresses needed by
+their relationships. Declaration makes the vocabulary uniformly targetable; it
+does not publish an object, migrate history, switch a consumer, or keep legacy
+storage alive. Those business changes remain family-by-family transactions.
 
 ## What changed from v1
 
@@ -1506,11 +1507,12 @@ create signed migration packets, custom digest protocols, candidate selector
 systems, per-object cleanrooms, a bespoke registry-activation framework,
 cross-track release gates, or bespoke receipt hierarchies.
 
-## Vertical-slice order
+## Dependency-closed family order
 
-1. **Product-to-PO trace:** Product, Product Specification, genuine BOM/BOM
-   Lines, Supplier Quote/Quote Lines, Purchase Plan where evidenced, Purchase
-   Order `SWRC26004`, and PO Lines, plus native Supplier Entity.
+1. **Product-to-PO family:** Product, Product Specification, genuine BOM/BOM
+   Lines, Component/Variant, Material Specification, Supplier Quote/Quote
+   Lines, Purchase Plan where evidenced, Purchase Orders and PO Lines, plus
+   native Supplier Entity.
 2. **Product development and cases:** Product Experiment, Sample Article,
    Product Quality Case, and Reconciliation Case.
 3. **Manufacturing and quality:** Inventory Lot, Manufacturing Run, Run
@@ -1524,8 +1526,10 @@ cross-track release gates, or bespoke receipt hierarchies.
    every other superseded surface are gone. This step discovers zero work; it
    does not hold deferred deletion.
 
-The first implementation batch is one useful Product-to-PO trace for
-`SWRC26004`, including exact BOM and Quote Lines when evidenced. It must answer:
+The first implementation batch migrates the complete Product-to-PO family and
+its active callers. `SWRC26004` is the first ordinary production acceptance
+readback, not a special sub-project, activation gate, or separate data model.
+That family must answer:
 
 - what exactly MoonSleep ordered;
 - from which Supplier and against which Product Specification/BOM;
@@ -1533,8 +1537,8 @@ The first implementation batch is one useful Product-to-PO trace for
 - which exact quote lines established price/terms;
 - what changed through inherent revisions.
 
-After that proof, migrate the complete PO/BOM/Quote family and its callers, then
-delete its superseded active surfaces before declaring the slice complete.
+The family is complete only after its full producer and consumer cutover and
+the deletion of its superseded active surfaces.
 
 ## Locked v2 decisions and remaining review points
 

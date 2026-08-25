@@ -51,6 +51,34 @@ surface, rerun the exact row's source search and production dependency query.
 - Matching production functions/procedures: **106**.
 - Matching non-internal production triggers: **123**.
 
+## Product-to-PO family execution status
+
+The full reviewed catalog is now one source candidate rather than a registry
+redesign repeated per family. It contains all 24 projected MoonSleep object
+types plus 13 owner-native imports, including the Finance-owned Invoice Line
+address required by Reconciliation Case. The resulting registry has 37
+declarations and digest
+`2d7289518cde0a33d97aa46e8b0559a4bf34551250234aab26c394b1c156c799`.
+
+| Terminal move | Current state | What repeats later |
+| --- | --- | --- |
+| registry and generic kernel | complete-catalog source candidate: all 24 projected types plus 13 native-owner imports; one major-version transition allowed only when affected types have zero objects; no new table, typed view, or per-object machinery | does not repeat during the planned family migrations |
+| canonical publication and bounded history migration | not started | one family compiler using existing Records, Facts, accepted Observations, and `objects.publish_revision` |
+| live consumer cutover | not started | one caller-bundle cutover per real API/UI surface, not once per object |
+| physical and language deletion | not started | one deletion transaction after the family has no remaining legacy readers or writers |
+| production acceptance | not started | ordinary SQL current/history queries, `objects.resolve_many`, and one real business query; `SWRC26004` is the first Product-to-PO readback |
+
+The fresh MoonSleep source census found 99 non-fixture, non-artifact files that
+mention at least one Product-to-PO legacy term: 29 historical compiler/operator
+scripts, 20 API/runtime files, 19 SQL files, 10 configuration files, five UI
+files, and 16 other operational scripts. This is a deletion/caller census, not
+an edit count. The intended implementation is one canonical family publisher,
+one consumer cutover across the actual live bundles, and bulk deletion of the
+superseded compiler/schema bundle.
+
+The family remains open until all five terminal moves above complete and a
+fresh source plus production census finds zero active legacy use.
+
 ## Live producer and consumer bundles
 
 These are current real caller families, not speculative interfaces.
