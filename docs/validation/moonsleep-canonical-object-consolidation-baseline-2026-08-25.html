@@ -1,0 +1,1671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MoonSleep Canonical Object Consolidation v2</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f4f1ea;
+      --muted: #aba9b4;
+      --soft: #777583;
+      --canvas: #0d0d12;
+      --panel: #15151c;
+      --panel-2: #1b1b24;
+      --line: #30303d;
+      --product: #a78bfa;
+      --commercial: #f7b955;
+      --production: #ff7e67;
+      --logistics: #58d3d8;
+      --native: #79d39a;
+      --evidence: #8d93a7;
+      --danger: #ff6c83;
+      --radius: 18px;
+      --shadow: 0 24px 64px rgba(0, 0, 0, .3);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 85% -10%, rgba(88, 211, 216, .12), transparent 31rem),
+        radial-gradient(circle at 5% 12%, rgba(167, 139, 250, .12), transparent 34rem),
+        var(--canvas);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    a { color: inherit; }
+    button, input { font: inherit; }
+    code, .mono {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: .91em;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 228px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    main { min-width: 0; }
+
+    .rail {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 20px;
+      border-right: 1px solid var(--line);
+      background: rgba(13, 13, 18, .88);
+      backdrop-filter: blur(18px);
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 32px;
+      font-size: 12px;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .brand-mark {
+      width: 18px;
+      height: 18px;
+      border: 1px solid rgba(255,255,255,.5);
+      border-radius: 50%;
+      box-shadow: inset -5px 0 0 var(--product);
+    }
+
+    .rail nav { display: grid; min-width: 0; gap: 5px; }
+    .rail nav a {
+      padding: 8px 10px;
+      border-radius: 9px;
+      text-decoration: none;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .rail nav a:hover { background: var(--panel-2); color: var(--ink); }
+    .rail-note {
+      margin-top: 28px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--soft);
+      font-size: 11px;
+    }
+
+    main { min-width: 0; }
+    .hero, .section { max-width: 1420px; margin: 0 auto; padding-left: 52px; padding-right: 52px; }
+    .hero { padding-top: 76px; padding-bottom: 74px; }
+    .section { padding-top: 68px; padding-bottom: 68px; border-top: 1px solid rgba(255,255,255,.055); }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 18px;
+      color: var(--commercial);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin: 0;
+      font-size: clamp(48px, 7.2vw, 104px);
+      line-height: .94;
+      letter-spacing: -.06em;
+      font-weight: 720;
+    }
+    h1 em { color: var(--product); font-style: normal; }
+
+    .dek {
+      max-width: 820px;
+      margin: 30px 0 0;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 25px);
+      line-height: 1.45;
+    }
+
+    .hero-callout {
+      display: grid;
+      grid-template-columns: 1.3fr .7fr;
+      gap: 18px;
+      margin-top: 48px;
+    }
+
+    .identity-card, .status-card, .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+      box-shadow: var(--shadow);
+    }
+    .identity-card { padding: 28px; }
+    .identity-value {
+      margin: 12px 0 8px;
+      color: var(--commercial);
+      font-size: clamp(34px, 4vw, 58px);
+      font-weight: 760;
+      letter-spacing: -.045em;
+    }
+    .identity-json {
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: #0a0a0e;
+      color: #d9d6e2;
+      overflow: auto;
+      white-space: pre;
+      overflow-wrap: anywhere;
+    }
+    .status-card { padding: 26px; display: grid; align-content: space-between; }
+    .status-card strong { display: block; font-size: 30px; letter-spacing: -.03em; }
+    .status-card p { margin: 18px 0 0; color: var(--muted); }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .metric {
+      padding: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+    }
+    .metric strong { display: block; color: var(--ink); font-size: 28px; line-height: 1.1; }
+
+    .notice {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      margin-top: 28px;
+      padding: 15px 17px;
+      border: 1px solid rgba(247, 185, 85, .34);
+      border-radius: 13px;
+      background: rgba(247, 185, 85, .055);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .notice strong {
+      color: var(--commercial);
+      font-size: 11px;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .extinction-contract {
+      margin-top: 30px;
+      padding: 24px;
+      border: 1px solid rgba(255, 108, 131, .65);
+      border-left: 5px solid var(--danger);
+      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(255,108,131,.12), rgba(255,108,131,.035));
+      box-shadow: var(--shadow);
+    }
+    .extinction-contract .contract-label {
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .extinction-contract h3 { margin-top: 9px; font-size: clamp(24px, 3vw, 38px); }
+    .extinction-contract p { max-width: 1040px; margin: 12px 0 0; color: var(--muted); }
+    .extinction-contract code { color: #ffd5dc; }
+
+    .completion-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: stretch;
+      margin-top: 16px;
+    }
+    .completion-gate, .completion-equals {
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(0,0,0,.18);
+    }
+    .completion-gate strong { display: block; font-size: 17px; }
+    .completion-gate span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .completion-gate.value strong { color: var(--commercial); }
+    .completion-gate.extinct strong { color: var(--danger); }
+    .completion-equals { display: grid; place-items: center; color: var(--ink); font-weight: 800; }
+
+    .state-path {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .state-path div { position: relative; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--muted); font-size: 12px; }
+    .state-path div:last-child { border-color: rgba(255,108,131,.55); color: var(--danger); }
+    .state-path div:not(:last-child)::after { content: "→"; position: absolute; right: -8px; top: 50%; z-index: 2; transform: translate(50%,-50%); color: var(--soft); }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 480px);
+      align-items: end;
+      gap: 36px;
+      margin-bottom: 34px;
+    }
+    h2 {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 66px);
+      line-height: 1;
+      letter-spacing: -.045em;
+    }
+    h3 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .section-head p, .muted { color: var(--muted); }
+    .section-head p { margin: 0; font-size: 17px; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 48px 1fr 48px 1fr 48px 1fr;
+      align-items: center;
+      gap: 0;
+    }
+    .flow-node {
+      min-height: 150px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--panel);
+    }
+    .flow-node small { color: var(--soft); text-transform: uppercase; letter-spacing: .1em; }
+    .flow-node strong { display: block; margin-top: 12px; font-size: 21px; }
+    .flow-node p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .flow-arrow { color: var(--soft); font-size: 27px; text-align: center; }
+
+    .compression {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr 1.7fr;
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .compression > div { padding: 24px; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); }
+    .compression strong { display: block; font-size: 44px; letter-spacing: -.05em; }
+    .compression span { color: var(--muted); }
+    .compression .from strong { color: var(--danger); }
+    .compression .to strong { color: var(--commercial); }
+    .compression .rest strong { color: var(--native); }
+
+    .legend, .filters { display: flex; flex-wrap: wrap; gap: 8px; }
+    .legend { margin: 18px 0 0; }
+    .legend span, .filter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--dot); }
+    .filter-btn { cursor: pointer; }
+    .filter-btn:hover, .filter-btn.active { color: var(--ink); background: var(--panel-2); border-color: #55556a; }
+
+    .graph-panel { margin-top: 24px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: #101016; }
+    .graph-wrap { min-width: 0; max-width: 100%; overflow-x: auto; }
+    #relationship-map { display: block; min-width: 1080px; width: 100%; height: auto; }
+    .map-node { transition: opacity .2s ease, filter .2s ease; }
+    .map-node rect { stroke-width: 1.5; }
+    .map-node .node-title { fill: #fbf9f2; font-size: 15px; font-weight: 700; }
+    .map-node .node-meta { fill: #a6a3b2; font-size: 10px; }
+    .map-edge { transition: opacity .2s ease; }
+    .map-edge path { fill: none; stroke: #777789; stroke-width: 1.35; opacity: .74; }
+    .map-edge text { fill: #d4d1dc; font-size: 9px; opacity: 0; transition: opacity .16s ease; pointer-events: none; }
+    .map-edge:hover path { stroke: #f2eee5; stroke-width: 2.2; opacity: 1; }
+    .map-edge:hover text { opacity: 1; }
+    .map-dim { opacity: .1 !important; }
+    .graph-hint { margin: 8px 10px 2px; color: var(--soft); font-size: 11px; }
+
+    .relation-list {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .relation-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      font-size: 11px;
+      background: rgba(255,255,255,.015);
+    }
+    .relation-item span { min-width: 0; overflow-wrap: anywhere; }
+    .relation-item span:nth-child(2) { color: var(--soft); }
+
+    .native-groups {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .native-group {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--native);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+    .native-group h3 { color: var(--native); font-size: 17px; }
+    .native-group > p { margin: 6px 0 15px; color: var(--soft); font-size: 11px; }
+    .native-item { padding: 10px 0; border-top: 1px solid var(--line); }
+    .native-item strong { display: block; font-size: 12px; }
+    .native-item span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .native-item code { color: #d9f4e2; }
+    .native-tag {
+      display: inline-block !important;
+      width: fit-content;
+      margin-top: 6px !important;
+      padding: 3px 6px;
+      border-radius: 5px;
+      background: rgba(121, 211, 154, .1);
+      color: var(--native) !important;
+      font-size: 9px !important;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .po-split {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 32px;
+      align-items: stretch;
+    }
+    .po-core {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      padding: 26px;
+      border: 1px solid rgba(247,185,85,.5);
+      border-radius: var(--radius);
+      background: rgba(247,185,85,.075);
+    }
+    .po-core .big { color: var(--commercial); font-size: 38px; font-weight: 760; letter-spacing: -.04em; }
+    .po-core ul { padding-left: 18px; color: var(--muted); }
+    .ownership-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .owner-card { padding: 18px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 12px; background: var(--panel); }
+    .owner-card strong { display: block; color: var(--accent); }
+    .owner-card p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .owner-card code { color: #d9d6e2; }
+
+    .catalog-tools { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 18px; }
+    .search {
+      width: min(460px, 100%);
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--ink);
+      outline: none;
+    }
+    .search:focus { border-color: var(--product); }
+    .catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .schema-card {
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--accent);
+      border-radius: 14px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .schema-card[hidden] { display: none; }
+    .schema-card summary {
+      padding: 18px 20px;
+      list-style: none;
+      cursor: pointer;
+    }
+    .schema-card summary::-webkit-details-marker { display: none; }
+    .schema-card summary small { display: block; margin-top: 5px; color: var(--muted); }
+    .schema-body { padding: 0 20px 20px; border-top: 1px solid var(--line); }
+    .schema-body h4 { margin: 17px 0 7px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .11em; }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { padding: 5px 7px; border-radius: 7px; background: #23232e; color: #d8d5df; font-size: 11px; }
+    .relationship { display: grid; grid-template-columns: minmax(120px,.8fr) 1.2fr; gap: 8px; padding: 5px 0; color: var(--muted); font-size: 12px; }
+    .relationship > * { min-width: 0; overflow-wrap: anywhere; }
+    .relationship code { color: var(--ink); overflow-wrap: anywhere; }
+
+    .decision-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .decision { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .decision .num { color: var(--product); font-weight: 700; }
+    .decision p { margin: 9px 0 0; color: var(--muted); font-size: 13px; }
+
+    .table-tools { display: flex; gap: 10px; margin-bottom: 12px; }
+    .table-wrap { overflow: auto; max-height: 660px; border: 1px solid var(--line); border-radius: 14px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { position: sticky; top: 0; z-index: 1; padding: 11px 13px; background: #1b1b24; color: var(--muted); text-align: left; }
+    td { padding: 10px 13px; border-top: 1px solid var(--line); vertical-align: top; }
+    td:first-child { color: #e8e4ec; white-space: nowrap; }
+    tr:hover td { background: rgba(255,255,255,.025); }
+    .delete { color: var(--danger); }
+    .keep { color: var(--native); }
+    .move { color: var(--commercial); }
+
+    .retirement-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .retirement-lane { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .retirement-lane h3 { color: var(--accent); }
+    .retirement-lane p { color: var(--muted); font-size: 13px; }
+    .retirement-lane code { display: block; padding: 5px 0; color: #d8d5df; }
+
+    .ledger-details {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .ledger-details > summary {
+      padding: 17px 20px;
+      cursor: pointer;
+      color: var(--ink);
+      font-weight: 700;
+      list-style-position: inside;
+    }
+    .ledger-details > p { margin: 0; padding: 0 20px 18px; color: var(--muted); font-size: 12px; }
+    .ledger-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0 20px 20px;
+    }
+    .ledger-family { padding: 17px; border: 1px solid var(--line); border-radius: 11px; background: #111117; }
+    .ledger-family h3 { font-size: 15px; }
+    .ledger-family p { margin: 5px 0 12px; color: var(--muted); font-size: 11px; }
+    .name-cloud { display: flex; flex-wrap: wrap; gap: 5px; }
+    .term { max-width: 100%; padding: 4px 6px; border-radius: 6px; background: #24242e; color: #d8d5df; font-size: 10px; overflow-wrap: anywhere; word-break: break-word; }
+
+    .language-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .language-panel { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .language-panel h3 { color: var(--accent); }
+    .language-panel > p { color: var(--muted); font-size: 12px; }
+
+    .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .source-link {
+      display: block;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      text-decoration: none;
+    }
+    .source-link:hover { border-color: var(--product); }
+    .source-link strong { display: block; }
+    .source-link span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+
+    .dag {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .dag-step { position: relative; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+    .dag-step:not(:last-child)::after { content: "→"; position: absolute; right: -16px; top: 50%; z-index: 2; color: var(--soft); transform: translateY(-50%); }
+    .dag-step strong { color: var(--commercial); }
+    .dag-step p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 30px;
+      padding-top: 30px;
+      padding-bottom: 46px;
+      color: var(--soft);
+      font-size: 11px;
+    }
+
+    @media (max-width: 1300px) {
+      .flow { grid-template-columns: 1fr; gap: 8px; }
+      .flow-arrow { transform: rotate(90deg); }
+      .po-split, .retirement-lanes { grid-template-columns: 1fr; }
+      .po-core { position: static; }
+    }
+
+    @media (max-width: 1050px) {
+      .shell { grid-template-columns: 1fr; }
+      .rail { position: static; width: 100%; max-width: 100vw; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 22px; }
+      .rail .brand { margin: 0 0 10px; }
+      .rail nav { display: flex; max-width: 100%; overflow-x: auto; }
+      .rail nav a { white-space: nowrap; }
+      .rail-note { display: none; }
+      .hero, .section { padding-left: 28px; padding-right: 28px; }
+      .relation-list { grid-template-columns: repeat(2, 1fr); }
+      .dag { grid-template-columns: repeat(2, 1fr); }
+      .dag-step::after { display: none; }
+    }
+
+    @media (max-width: 720px) {
+      .hero { padding-top: 48px; }
+      .hero-callout, .section-head, .catalog, .ownership-grid, .decision-grid, .retirement-lanes, .native-groups, .ledger-grid, .language-grid, .source-grid { grid-template-columns: 1fr; }
+      .metric-row { grid-template-columns: repeat(2, 1fr); }
+      .compression { grid-template-columns: 1fr; }
+      .relation-list { grid-template-columns: 1fr; }
+      .catalog-tools { align-items: stretch; flex-direction: column; }
+      .relationship { grid-template-columns: 1fr; gap: 2px; }
+      .relationship code { overflow-wrap: anywhere; }
+      .dag { grid-template-columns: 1fr; }
+      .foot { flex-direction: column; }
+      .notice, .completion-grid { grid-template-columns: 1fr; }
+      .completion-equals { min-height: 54px; }
+      .state-path { grid-template-columns: 1fr; }
+      .state-path div::after { display: none; }
+      #relationship-map { min-width: 1300px; }
+    }
+
+    @media print {
+      :root { color-scheme: light; --ink:#15141a; --muted:#4f4c59; --soft:#6b6872; --canvas:#fff; --panel:#f7f6f3; --panel-2:#f0eee9; --line:#d4d0c8; --product:#5b3fa8; --commercial:#6c4900; --production:#8a2e22; --logistics:#00666b; --native:#176c36; --danger:#9b1732; --accent:#6c4900; }
+      body { background: #fff; }
+      .shell { display: block; }
+      .rail { display: none; }
+      .hero, .section { max-width: none; padding-left: 24px; padding-right: 24px; }
+      .graph-panel, .identity-json, .ledger-family { background: #fff; }
+      .identity-json { color: #15141a; white-space: pre-wrap; }
+      .identity-value { color: #6c4900; }
+      .graph-wrap, .table-wrap { overflow: visible !important; max-height: none; }
+      #relationship-map { min-width: 0; width: 100%; }
+      .map-edge text { display: none; }
+      .map-node rect { stroke: #444 !important; }
+      .map-edge path { stroke: #777 !important; }
+      .graph-hint::after { content: " Relationship predicates are listed directly below and in the complete schema cards."; }
+      .schema-card { border-top-color: #555 !important; }
+      .owner-card { border-left-color: #555 !important; }
+      .native-group { border-top-color: #555 !important; }
+      details.schema-card:not([open]) > .schema-body { display: block !important; }
+      details.ledger-details:not([open]) > .ledger-grid { display: grid !important; }
+      details.ledger-details:not([open]) > p { display: block !important; }
+      #retirement table { table-layout: fixed; font-size: 7px; }
+      #retirement th, #retirement td { padding: 4px; overflow-wrap: anywhere; }
+      #retirement td:first-child { white-space: normal; }
+      details { break-inside: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand"><span class="brand-mark"></span>MoonSleep / Nex</div>
+      <nav>
+        <a href="#outcome">Outcome</a>
+        <a href="#extinction">Completion contract</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#map">Object map</a>
+        <a href="#native">Native owners</a>
+        <a href="#po">Purchase Order</a>
+        <a href="#catalog">24 schemas</a>
+        <a href="#legacy">86 historical types</a>
+        <a href="#language">Language</a>
+        <a href="#retirement">Extinction ledger</a>
+        <a href="#decisions">Decisions</a>
+        <a href="#sequence">Sequence</a>
+        <a href="#evidence">Evidence</a>
+      </nav>
+      <div class="rail-note">v2 source-only semantic reference<br>No registry, schema, object, cursor, or production mutation.</div>
+    </aside>
+
+    <main>
+      <header class="hero" id="outcome">
+        <div class="eyebrow">Canonical object consolidation · locked v2 semantic baseline</div>
+        <h1>From 86 packet nouns to <em>one coherent business model.</em></h1>
+        <p class="dek">A smaller MoonSleep object system: stable identities, inherent revision history, accepted-Observation custody, ordinary SQL, and no permanent legacy language.</p>
+
+        <div class="notice"><strong>Authority boundary</strong><span>This is the locked source-only semantic baseline, not a production census or bulk-registration instruction. It authorizes no registry publication, schema or object write, historical cursor movement, provider action, or production mutation.</span></div>
+
+        <div class="hero-callout">
+          <article class="identity-card">
+            <span class="muted">Purchase Order business identity</span>
+            <div class="identity-value">SWRC26004</div>
+            <div class="identity-json mono">{
+  "purchase_order_id": "SWRC26004"
+}</div>
+          </article>
+          <article class="status-card">
+            <div>
+              <span class="muted">Proposal state</span>
+              <strong>Semantics locked, not activated</strong>
+            </div>
+            <p><code>SWRC26004</code> is globally unique in the MoonSleep Purchase Order namespace; collisions fail closed. Surewal is a <code>placed_with_supplier</code> relationship, never identity material. <span class="delete">surewal-2026-05-6000</span> and its <span class="delete">-inner</span> mirror are bounded migration inputs.</p>
+          </article>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric"><strong>24</strong>reviewed projected objects</div>
+          <div class="metric"><strong>17</strong>Supplier chapter bundles reviewed</div>
+          <div class="metric"><strong>759</strong>historical Resource rows</div>
+          <div class="metric"><strong>705</strong>historical identities</div>
+          <div class="metric"><strong>86 / 86</strong>historical types classified</div>
+          <div class="metric"><strong>1,183</strong>type + field pairs inventoried</div>
+          <div class="metric"><strong>811</strong>historical relationships audited</div>
+          <div class="metric"><strong>160</strong>outbound type + relationship pairs</div>
+        </div>
+      </header>
+
+      <section class="section" id="extinction">
+        <div class="section-head">
+          <h2>Value live is not the finish line.</h2>
+          <p>Each vertical slice closes only when the replacement works for the business and every superseded active semantic surface has disappeared.</p>
+        </div>
+        <div class="extinction-contract">
+          <span class="contract-label">Legacy extinction contract · non-negotiable</span>
+          <h3>One surviving executable legacy path means consolidation is incomplete.</h3>
+          <p>Extinct means zero old tables/views/functions/triggers/columns/registry rows, zero active producers or consumers, zero runtime aliases and compatibility reads/writes, zero compiler/decoder branches, zero legacy object IDs/relationship names/fields in canonical state, and zero active prompts/APIs/jobs/docs teaching old vocabulary.</p>
+          <p>Immutable Records, historical packets, Git history, and this inert ledger preserve the words exactly as received because they are evidence. They can never be accepted as runtime semantic language after migration.</p>
+          <div class="completion-grid">
+            <div class="completion-gate value"><strong>Business value live</strong><span>Approved objects answer named SQL questions and one real workflow.</span></div>
+            <div class="completion-gate extinct"><strong>Legacy surfaces extinct</strong><span>Every replaced producer, consumer, schema surface, alias and branch is gone.</span></div>
+            <div class="completion-equals">Both = complete</div>
+          </div>
+        </div>
+        <div class="state-path" aria-label="Vertical slice state path">
+          <div>01 · declaration live</div><div>02 · canonical published</div><div>03 · history migrated</div><div>04 · consumers migrated</div><div>05 · physically extinct</div>
+        </div>
+      </section>
+
+      <section class="section" id="architecture">
+        <div class="section-head">
+          <h2>The smallest correct architecture</h2>
+          <p>Objects are projections of evidence. The generic kernel owns identity and history once; domain schemas describe business state.</p>
+        </div>
+        <div class="flow">
+          <div class="flow-node"><small>Source custody</small><strong>Nex Records</strong><p>Messages, documents, provider payloads and immutable source evidence.</p></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node"><small>Interpretation</small><strong>Facts + accepted Observations</strong><p>Evidence-backed claims and relationships with explicit target addresses.</p></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node"><small>Projection</small><strong>objects.publish_revision</strong><p>Validates identity, schema, relationships and Observation custody.</p></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node"><small>Business use</small><strong>Stable objects + ordinary SQL</strong><p>Current head, immutable history, resolver, graph and measured indexes.</p></div>
+        </div>
+
+        <div class="compression">
+          <div class="from"><strong>86</strong><span>packet Resource types mixed objects, events, lines, evidence and views</span></div>
+          <div class="to"><strong>24</strong><span>joint-corpus projected MoonSleep objects with inherent revision history</span></div>
+          <div class="rest"><strong>Reuse / embed / observe / derive / delete</strong><span>Native owners, structured children, Facts, relationships, SQL reads and deleted legacy language handle everything else.</span></div>
+        </div>
+        <div class="notice"><strong>One kernel</strong><span>Twenty-four object types do not mean twenty-four physical tables or generated views. The existing generic identity, immutable revision, registry-version, and type-registration tables are the initial product; indexes and read views are added only when measured SQL workloads justify them.</span></div>
+        <div class="notice"><strong>Catalog, not batch activation</strong><span>The 24 types are the locked review catalog. A type is declared only when its own business-value slice reaches declaration/release; this document never authorizes bulk registration.</span></div>
+        <div class="notice"><strong>One component authority</strong><span>Product Specification owns finished-design constraints and intended behavior. A genuine BOM’s Lines exclusively own exact component selections, quantities, units and assembly requirements. Component Variant owns the reusable physical option; Material Specification owns supplier-scoped technical truth. Exact composition is never copied across those owners.</span></div>
+        <div class="notice"><strong>v1 → v2</strong><span>The joint historical review proved seven additional identities: Bill of Materials, BOM Line, Supplier Quote Line, Purchase Plan, Product Experiment, Product Quality Case and Reconciliation Case. It also tightened native Claims/Finance reuse, stable IDs and readiness-based relationship rules. No generic Case/Line framework or second revision system was added.</span></div>
+      </section>
+
+      <section class="section" id="map">
+        <div class="section-head">
+          <h2>Object and owner linkage map</h2>
+          <p>An intentionally selective overview of the v2 dependency shape. The schema cards and Markdown ledger carry the complete proposed links, admitted target sets and publication directions.</p>
+        </div>
+        <div class="filters" id="map-filters"></div>
+        <div class="legend">
+          <span style="--dot:var(--product)"><i></i>Product</span>
+          <span style="--dot:var(--commercial)"><i></i>Commercial</span>
+          <span style="--dot:var(--production)"><i></i>Production</span>
+          <span style="--dot:var(--logistics)"><i></i>Logistics</span>
+          <span style="--dot:var(--native)"><i></i>Native owner</span>
+        </div>
+        <div class="graph-panel">
+          <div class="graph-wrap"><svg id="relationship-map" viewBox="0 0 1580 1370" role="img" aria-label="MoonSleep canonical object relationship map"></svg></div>
+          <div class="graph-hint">Arrows point from stored subject to canonical target. Reverse navigation is derived through ordinary SQL/Core Graph—never published as a duplicate inverse. Scroll horizontally on narrow screens.</div>
+        </div>
+        <div class="relation-list" id="relationship-list"></div>
+      </section>
+
+      <section class="section" id="native">
+        <div class="section-head">
+          <h2>Native owners stay native</h2>
+          <p>These are legitimate targetable objects, but their existing owner supplies identity, state, history and resolver receipts. Registration imports an address; it does not copy owner state into the generic projection store.</p>
+        </div>
+        <div class="native-groups" id="native-groups"></div>
+      </section>
+
+      <section class="section" id="po">
+        <div class="section-head">
+          <h2>Purchase Order gets much smaller</h2>
+          <p>The PO header owns the commercial agreement. Sixty-one packet fields move to the object that actually owns their lifecycle.</p>
+        </div>
+        <div class="po-split">
+          <aside class="po-core">
+            <span class="muted">What remains on the PO</span>
+            <div class="big">9 revision attributes</div>
+            <ul>
+              <li>provider order reference</li>
+              <li>commercial or sample purpose</li>
+              <li>ordered timestamp</li>
+              <li>status + effective timestamp</li>
+              <li>currency</li>
+              <li>commercial total</li>
+              <li>payment terms</li>
+              <li>notes</li>
+            </ul>
+            <p class="muted">Identity is the stable external PO ID. Supplier is a relationship. Revision pointers and supersession fields never enter the domain schema.</p>
+          </aside>
+          <div class="ownership-grid" id="po-ownership"></div>
+        </div>
+        <div class="notice"><strong>First vertical slice</strong><span>Product → Product Specification → genuine BOM/BOM Lines → Supplier Quote/Quote Lines → Purchase Plan where evidenced → SWRC26004/PO Lines, with native Surewal Entity. It must answer what was ordered, from whom, against which specification and recipe, at which quantities/terms, with exact quote provenance and inherent revision history—then migrate the complete family and delete its old surfaces.</span></div>
+        <details class="ledger-details">
+          <summary>Complete 61-field relocation ledger</summary>
+          <p>Every historical Purchase Order-shaped field is retained, relocated, derived, or deliberately removed from authoritative state. No field is silently discarded.</p>
+          <div class="ledger-grid" id="po-field-ledger"></div>
+        </details>
+      </section>
+
+      <section class="section" id="catalog">
+        <div class="section-head">
+          <h2>The 24 reviewed schemas</h2>
+          <p>Each card shows business boundary, immutable identity material, revision attributes, the complete proposed typed links and the old language it absorbs. The map above is a readable overview; these cards and the Markdown ledger are authoritative.</p>
+        </div>
+        <div class="catalog-tools">
+          <input class="search" id="schema-search" type="search" placeholder="Search schemas, fields or legacy names…" aria-label="Search schema catalog">
+          <span class="muted">Open a card for complete field and linkage detail.</span>
+        </div>
+        <div class="catalog" id="schema-catalog"></div>
+        <div class="notice"><strong>Shared rules</strong><span>Every object receives inherent immutable Object Revisions. Existing revisions are never rewritten. Child collections remain embedded unless independently targetable. Money uses integer minor units plus ISO currency; quantities carry a unit of measure. Records, messages, milestones, status reports and counts remain Records/Facts/Observations unless independent identity is proven. Object existence stays flexible: action/readiness policy—not speculative required edges—decides when a Shipment can depart, a PO can carry money, or an Inspection has enough targets.</span></div>
+      </section>
+
+      <section class="section" id="legacy">
+        <div class="section-head">
+          <h2>Every historical type has a destination</h2>
+          <p>No “and so on.” All 86 packet Resource names are classified. The linked field appendix preserves all 1,183 observed field pairs and 160 outbound type/relationship pairs.</p>
+        </div>
+        <div class="table-tools"><input class="search" id="legacy-search" type="search" placeholder="Filter 86 historical types or destinations…" aria-label="Filter historical resource types"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Historical Resource</th><th>Disposition</th></tr></thead>
+            <tbody id="legacy-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="language">
+        <div class="section-head">
+          <h2>Language that leaves the model</h2>
+          <p>Legacy recognition is a bounded compiler concern, not a permanent alias system. Packet nouns without independent identity collapse into child values, native owners, evidence or SQL.</p>
+        </div>
+        <div class="language-grid">
+          <article class="language-panel" style="--accent:var(--danger)">
+          <h3>Terms removed from executable language</h3>
+            <p>Not stored type IDs and not accepted semantic aliases. <code>PO</code> remains human search shorthand only.</p>
+            <div class="name-cloud" id="removed-terms"></div>
+          </article>
+          <article class="language-panel" style="--accent:var(--product)">
+            <h3>Nouns still deliberately not proposed</h3>
+            <p>Each can be promoted later if a real independent identity and consumer appear; none is registered speculatively.</p>
+            <div class="name-cloud" id="deferred-nouns"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="retirement">
+        <div class="section-head">
+          <h2>Extinction happens inside each slice</h2>
+          <p>Old language leaves the runtime as its family migrates. The final program audit must discover zero remaining cleanup work.</p>
+        </div>
+        <div class="retirement-lanes">
+          <article class="retirement-lane" style="--accent:var(--danger)">
+            <h3>Delete now from language</h3>
+            <p>Packet-only nouns with no owner table or legitimate independent identity.</p>
+            <code>purchase_order_revision</code><code>purchase_order_adjustment</code><code>inventory_purchase_order_component</code><code>sample_article_status</code><code>shipment_routing_revision</code>
+          </article>
+          <article class="retirement-lane" style="--accent:var(--commercial)">
+            <h3>Migrate, then delete</h3>
+            <p>Live compatibility tables with actual Inventory, Supply, Dispatch and Order Journey callers.</p>
+            <code>inventory_purchase_orders</code><code>inventory_purchase_order_lots</code><code>inventory_shipments</code><code>supply_interfacility_transfers</code><code>supply_joint_cargo_plans</code>
+          </article>
+          <article class="retirement-lane" style="--accent:var(--native)">
+            <h3>Reuse existing owners</h3>
+            <p>No copy into generic object state. Bind the registry address to the owner resolver.</p>
+            <code>nex.entity / contact / place</code><code>nex.loop / commitment / channel</code><code>Finance objects</code><code>Commerce Order</code><code>Fulfillment objects</code>
+          </article>
+        </div>
+        <div class="table-wrap" style="max-height:none;margin-top:16px">
+          <table aria-label="Extinction ledger execution columns">
+            <thead><tr><th>Legacy surface</th><th>Destination</th><th>Producers</th><th>Consumers</th><th>Data migrated</th><th>Producer removed</th><th>Consumers removed</th><th>DB removed</th><th>Status</th></tr></thead>
+            <tbody><tr><td><em>one exact table/view/API/alias/branch per row</em></td><td>approved object/native/evidence/SQL owner</td><td>named writers</td><td>named readers</td><td>yes / no</td><td>yes / no</td><td>yes / no</td><td>yes / no</td><td>reviewed → declaration live → canonical published → history migrated → consumers migrated → physically extinct</td></tr></tbody>
+          </table>
+        </div>
+        <details class="ledger-details">
+          <summary>Complete source-audited extinction ledger</summary>
+          <p>Each exact relation acquires named producers/consumers and eight execution columns during its slice: data migrated, producer removed, consumers removed, database removed, and state from reviewed through extinct. Source existence is not production proof; fresh census precedes authorized deletion.</p>
+          <div class="ledger-grid" id="physical-ledger"></div>
+        </details>
+        <div class="notice"><strong>Owner-storage boundary</strong><span>Legitimate append-only stock-event and physical-count workflows may remain only as operational owner custody, using final vocabulary and never posing as canonical object storage. Every superseded object table still disappears.</span></div>
+      </section>
+
+      <section class="section" id="decisions">
+        <div class="section-head">
+          <h2>Locked v2 decisions</h2>
+          <p>These are the semantic consequences incorporated from the historical-ingestion review. Object-by-object field review remains part of each slice.</p>
+        </div>
+        <div class="decision-grid" id="decision-grid"></div>
+      </section>
+
+      <section class="section" id="sequence">
+        <div class="section-head">
+          <h2>One business slice. Five terminal transactions.</h2>
+          <p>Tyler approves the model first. Each transaction below finishes and releases its exact resource custody before the next begins; disjoint production work is not globally serialized.</p>
+        </div>
+        <div class="dag">
+          <div class="dag-step"><strong>01 · Declare / release</strong><p>Only approved declarations and links go live; ordinary runtime health/readback closes.</p></div>
+          <div class="dag-step"><strong>02 · Publish canonical</strong><p>Real accepted-Observation-backed objects prove SQL, history, resolver and workflow.</p></div>
+          <div class="dag-step"><strong>03 · Migrate history</strong><p>Compile the bounded evidence family and cut over its producer with ordinary parity.</p></div>
+          <div class="dag-step"><strong>04 · Migrate consumers</strong><p>Move every named reader and remove any temporary dual-read.</p></div>
+          <div class="dag-step"><strong>05 · Delete legacy</strong><p>Remove aliases, old code, schemas, prompts, docs and eligible physical storage.</p></div>
+        </div>
+        <div class="notice"><strong>Close the logical slice</strong><span>After transaction five, perform the production business readback and zero-active-legacy census. No deployment, lock, rollback marker or bespoke proof packet spans the whole slice.</span></div>
+        <div class="notice"><strong>Complexity ceiling</strong><span>Use normal tests, one disposable PostgreSQL migration test, SQL parity, caller census, standard backup/rollback and production readback. Do not create signed migration packets, custom digest protocols, selector systems, per-object cleanrooms, a bespoke registry-activation framework, cross-track gates or bespoke receipt hierarchies.</span></div>
+      </section>
+
+      <section class="section" id="evidence">
+        <div class="section-head">
+          <h2>Evidence and exhaustive appendices</h2>
+          <p>The proposal is pinned to source research, not production activation. The current 23-entry source registry is input evidence only—not an approved final catalog.</p>
+        </div>
+        <div class="source-grid">
+          <a class="source-link" href="moonsleep-canonical-object-consolidation-baseline-2026-08-25.md"><strong>Full v2 consolidation reference</strong><span>Extinction contract, 24 schemas, SQL examples, relationship directions, field relocations and exact execution rules.</span></a>
+          <a class="source-link" href="supplier-historical-resource-fields-relationships-appendix-2026-08-25.md"><strong>Historical field + relationship appendix</strong><span>Verbatim inventory of all 1,183 unique type/field pairs and 160 outbound type/relationship pairs.</span></a>
+        </div>
+        <div class="notice"><strong>Exact source pins</strong><span>MoonSleep commit/tree <code>574589bad8a5… / a8543048fc94…</code> · umbrella commit/tree <code>5ce327ed362c… / 509455e…</code> · Nex commit/tree <code>06d5ad028438… / 1e2791d21f4c…</code>. Supplier evidence: accepted SGD-0001 through SGD-0016 plus approved post-cutoff SGD-0017.</span></div>
+      </section>
+
+      <footer class="section foot">
+        <span>Exact proposal sources: MoonSleep 574589bad8a5 · umbrella 5ce327ed362c · Nex 06d5ad028438</span>
+        <span>locked v2 semantics · source-only · 2026-08-25 · no production mutation</span>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    "use strict";
+
+    const domainColors = {
+      product: "#a78bfa",
+      commercial: "#f7b955",
+      production: "#ff7e67",
+      logistics: "#58d3d8",
+      native: "#79d39a"
+    };
+
+    const schemaObjects = [
+      {
+        id: "moonsleep.product", domain: "product", title: "Product",
+        boundary: "A stable MoonSleep product identity—not a batch, color, quote or historical design state.",
+        identity: ["product_id"],
+        fields: ["canonical_name", "customer_display_name?", "status", "notes?"],
+        relationships: [],
+        consolidates: ["product_family", "supply_product_families"]
+      },
+      {
+        id: "moonsleep.product_specification", domain: "product", title: "Product Specification",
+        boundary: "An independently released design used by purchasing, manufacturing, samples and quality. It owns finished-design constraints and intended behavior, never a genuine BOM's exact composition.",
+        identity: ["product_specification_id"],
+        fields: ["label", "status", "effective_from?", "effective_through?", "approval_status?", "change_summary?", "technical_specification?", "direct_requirements[]? · intrinsic/collapsed one-line only"],
+        relationships: [["for_product", "Product · required one"], ["uses_component_variant", "Component Variant · optional many · intrinsic/collapsed case only"], ["uses_material_specification", "Material Specification · optional many · intrinsic/collapsed case only"]],
+        consolidates: ["product_revision", "product version", "simple one-line pseudo-BOM content"]
+      },
+      {
+        id: "moonsleep.bill_of_materials", domain: "product", title: "Bill of Materials",
+        boundary: "One independently selected composition that may be approved, quoted, ordered, executed, reused or superseded.",
+        identity: ["bill_of_materials_id"],
+        fields: ["label", "status", "effective_from?", "effective_through?", "output_quantity?", "output_unit_of_measure?", "approval_status?", "change_summary?", "notes?"],
+        relationships: [["for_product_specification", "Product Specification · required one"], ["supersedes", "Bill of Materials · optional one"]],
+        consolidates: ["product_bom_version", "supply_product_bom_versions"]
+      },
+      {
+        id: "moonsleep.bill_of_materials_line", domain: "product", title: "Bill of Materials Line",
+        boundary: "One targetable component/material requirement inside a genuine BOM.",
+        identity: ["bill_of_materials_id", "line_reference"],
+        fields: ["description", "quantity", "unit_of_measure", "component_role?", "requirement_specification?", "notes?"],
+        relationships: [["part_of_bill_of_materials", "Bill of Materials · required one"], ["requires_component_variant", "Component Variant · optional one"], ["uses_material_specification", "Material Specification · optional many"]],
+        consolidates: ["genuine product_bom_line", "supply_product_bom_lines"]
+      },
+      {
+        id: "moonsleep.component", domain: "product", title: "Component",
+        boundary: "A reusable physical component such as an outer cover or inner core.",
+        identity: ["component_id"],
+        fields: ["canonical_name", "status", "component_role?", "default_unit_of_measure?", "description?", "notes?"],
+        relationships: [],
+        consolidates: ["inventory_components"]
+      },
+      {
+        id: "moonsleep.component_variant", domain: "product", title: "Component Variant",
+        boundary: "An independently stocked or ordered option of one Component.",
+        identity: ["component_id", "variant_id"],
+        fields: ["display_name", "status", "option_values?", "supplier_codes[]?", "sku_references[]?", "color_display_name?", "notes?"],
+        relationships: [["of_component", "Component · required one"], ["uses_material_specification", "Material Specification · optional many"]],
+        consolidates: ["inventory_registry_variants", "inventory_variants", "product_colorway"]
+      },
+      {
+        id: "moonsleep.material_specification", domain: "product", title: "Material Specification",
+        boundary: "A stable material identity reused by specifications, variants, POs and inspection; Supplier is a relationship.",
+        identity: ["material_specification_id"],
+        fields: ["supplier_material_name", "status", "moonsleep_display_name?", "material_family?", "composition?", "weight_gsm?", "technical_specification?", "notes?"],
+        relationships: [["specified_by_supplier", "nex.entity · required one"]],
+        consolidates: ["supplier_material_specification"]
+      },
+      {
+        id: "moonsleep.supplier_quote", domain: "commercial", title: "Supplier Quote",
+        boundary: "One independently issued supplier quotation header for product, freight or both.",
+        identity: ["supplier_quote_id"],
+        fields: ["supplier_quote_reference?", "quote_scope", "issued_at", "valid_through?", "status", "currency", "incoterm_code?", "transport_mode?", "service_scope?", "lead_time_days?", "transit_min_days?", "transit_max_days?", "quoted_total_minor_units?", "deposit_minor_units?", "terms?", "packaging_options[]?"],
+        relationships: [["issued_by_supplier", "nex.entity · required one"]],
+        consolidates: ["supplier_product_quotation", "supplier_freight_quotation", "quote header tables"]
+      },
+      {
+        id: "moonsleep.supplier_quote_line", domain: "commercial", title: "Supplier Quote Line",
+        boundary: "One targetable product, freight, service or packaging offer selected by planning and purchasing.",
+        identity: ["supplier_quote_id", "line_reference"],
+        fields: ["line_scope", "description", "quantity?", "unit_of_measure?", "quantity_break_units?", "unit_price_minor_units?", "quoted_amount_minor_units?", "carton_count?", "transit_min_days?", "transit_max_days?", "delivery_to_address_included?", "customs_clearance_included?", "duties_included?", "status?", "notes?"],
+        relationships: [["part_of_supplier_quote", "Supplier Quote · required one"], ["quotes_object", "any admitted registered target · optional one"]],
+        consolidates: ["supplier_product_quotation_line", "supplier_freight_quotation_line", "both line-table families"]
+      },
+      {
+        id: "moonsleep.purchase_plan", domain: "commercial", title: "Purchase Plan",
+        boundary: "One procurement decision process that evaluates exact requirements and quote lines and may create multiple POs.",
+        identity: ["purchase_plan_id"],
+        fields: ["title", "status", "opened_at?", "closed_at?", "target_quantity?", "unit_of_measure?", "decision_summary?", "options[]?", "requirements[]?", "notes?"],
+        relationships: [["plans_for_product_specification", "Product Specification · optional one"], ["requires_bill_of_materials_line", "BOM Line · optional many"], ["evaluates_supplier_quote_line", "Supplier Quote Line · optional many"], ["results_in_purchase_order", "Purchase Order · optional many"]],
+        consolidates: ["purchase_plan", "purchase_plan_option", "purchase_plan_requirement", "planning join tables"]
+      },
+      {
+        id: "moonsleep.purchase_order", domain: "commercial", title: "Purchase Order",
+        boundary: "One commercial order under one stable external PO reference; Supplier is a relationship.",
+        identity: ["purchase_order_id · globally unique in type namespace · e.g. SWRC26004"],
+        fields: ["provider_order_reference?", "order_purpose", "ordered_at?", "status", "status_effective_at?", "currency?", "commercial_total_minor_units?", "payment_terms?", "notes?"],
+        relationships: [["placed_with_supplier", "nex.entity · required one"]],
+        consolidates: ["inventory_purchase_order", "supply_order", "inventory_purchase_orders", "sample_order", "purchase_order_revision", "purchase_order_adjustment"]
+      },
+      {
+        id: "moonsleep.purchase_order_line", domain: "commercial", title: "Purchase Order Line",
+        boundary: "An independently targetable commercial line carrying ordered quantity, price, typed specification/BOM/quote links and evidenced order-specific deltas—never authoritative BOM composition.",
+        identity: ["purchase_order_id", "line_reference"],
+        fields: ["description", "quantity", "unit_of_measure", "status?", "unit_price_minor_units?", "currency?", "line_total_minor_units?", "supplier_color_label?", "order_specific_specification_delta?"],
+        relationships: [["part_of_purchase_order", "Purchase Order · required one"], ["orders_component_variant", "Component Variant · optional one"], ["orders_product_specification", "Product Specification · optional one"], ["uses_material_specification", "Material Specification · optional many"], ["based_on_bill_of_materials_line", "BOM Line · optional one"], ["based_on_supplier_quote_line", "Supplier Quote Line · optional one"]],
+        consolidates: ["inventory_purchase_order_component", "purchase_order_component_line", "surewal-…-inner mirror"]
+      },
+      {
+        id: "moonsleep.product_experiment", domain: "product", title: "Product Experiment",
+        boundary: "One hypothesis-test-decision lifecycle independent of any open communication.",
+        identity: ["product_experiment_id"],
+        fields: ["title", "status", "hypothesis", "method?", "results?", "decision?", "opened_at?", "closed_at?", "alternatives[]?", "notes?"],
+        relationships: [["experiments_on_product_specification", "Product Specification · optional one"], ["uses_sample_article", "Sample Article · optional many"], ["results_in_product_specification", "Product Specification · optional one"]],
+        consolidates: ["product_experiment", "product_experiment_option"]
+      },
+      {
+        id: "moonsleep.inventory_lot", domain: "production", title: "Inventory Lot",
+        boundary: "An independently identifiable committed, produced, in-transit, received or physically counted cohort. A hypothetical plan is not inventory.",
+        identity: ["inventory_lot_id"],
+        fields: ["status", "unit_of_measure", "supplier_lot_reference?", "committed_quantity?", "received_quantity?", "usable_quantity?", "blocked_quantity?", "physical_status?", "supplier_color_code?", "received_at?", "notes?"],
+        relationships: [["from_purchase_order_line", "Purchase Order Line · optional one"], ["for_component_variant", "Component Variant · required one"], ["stored_at_place", "nex.place · optional one"]],
+        consolidates: ["inventory_purchase_order_lot", "independently identified committed/physical run component cohorts"]
+      },
+      {
+        id: "moonsleep.sample_article", domain: "production", title: "Sample Article",
+        boundary: "One physical sample, prototype, approval or retained comparison article, even before a specification is known.",
+        identity: ["sample_article_id"],
+        fields: ["label", "article_role", "status", "commercial_inventory", "article_context?", "completed_at?", "received_at?", "notes?"],
+        relationships: [["implements_product_specification", "Product Specification · optional one"], ["ordered_on_purchase_order_line", "Purchase Order Line · optional one"], ["located_at_place", "nex.place · optional one"]],
+        consolidates: ["sample_article", "sample_article_status", "product_prototype"]
+      },
+      {
+        id: "moonsleep.manufacturing_run", domain: "production", title: "Manufacturing Run",
+        boundary: "One supplier production execution lifecycle, separate from order, shipment and receipt.",
+        identity: ["manufacturing_run_id"],
+        fields: ["supplier_run_reference?", "status", "status_effective_at?", "planned_start_at?", "started_at?", "planned_completion_at?", "completed_at?", "planned_quantity?", "finished_quantity?", "packed_quantity?", "unit_of_measure?", "hold_reason?", "packing_status?", "notes?"],
+        relationships: [["performed_by_supplier", "nex.entity · required one"], ["executes_purchase_order", "Purchase Order · required many"], ["at_facility", "nex.place · optional one"], ["governed_by_product_specification", "Product Specification · optional many"], ["uses_approval_sample_article", "Sample Article · optional many"]],
+        consolidates: ["manufacturing_run", "production_schedule"]
+      },
+      {
+        id: "moonsleep.manufacturing_run_component", domain: "production", title: "Manufacturing Run Component",
+        boundary: "An independently targetable component workstream whose progress can diverge inside a run.",
+        identity: ["manufacturing_run_id", "workstream_reference"],
+        fields: ["status", "unit_of_measure", "planned_quantity?", "finished_quantity?", "packed_quantity?", "unpacked_finished_quantity?", "status_effective_at?", "notes?"],
+        relationships: [["part_of_manufacturing_run", "Manufacturing Run · required one"], ["executes_purchase_order_line", "Purchase Order Line · required one"], ["consumes_inventory_lot", "Inventory Lot · optional many"]],
+        consolidates: ["manufacturing_run_component", "manufacturing_run_component_cohort", "production_schedule_line"]
+      },
+      {
+        id: "moonsleep.quality_inspection", domain: "production", title: "Quality Inspection",
+        boundary: "One issued inspection result; findings and tests remain contained content.",
+        identity: ["quality_inspection_id"],
+        fields: ["provider_reference?", "inspection_date", "status", "overall_disposition", "issued_at?", "inspection_method?", "inspection_scope?", "carton_count?", "sampled_quantities?", "severity_counts?", "findings[]?", "test_results[]?", "repair_required?", "notes?"],
+        relationships: [["performed_by", "nex.entity · required one"], ["inspects_object", "approved target set · required many"], ["at_place", "nex.place · optional one"]],
+        consolidates: ["quality_inspection", "quality_inspection_finding", "quality_inspection_scope_line", "quality_inspection_test_result"]
+      },
+      {
+        id: "moonsleep.product_quality_case", domain: "production", title: "Product Quality Case",
+        boundary: "One investigation and disposition lifecycle spanning affected objects, inspections and commitments.",
+        identity: ["product_quality_case_id"],
+        fields: ["category", "status", "opened_at", "severity?", "cause?", "batch_wide_effect?", "disposition?", "resolved_at?", "notes?"],
+        relationships: [["concerns_object", "approved product/supply target set · required many"], ["supported_by_quality_inspection", "Quality Inspection · optional many"], ["governed_by_commitment", "nex.commitment · optional many"]],
+        consolidates: ["product_quality_case", "Loop-as-case compatibility"]
+      },
+      {
+        id: "moonsleep.reconciliation_case", domain: "logistics", title: "Reconciliation Case",
+        boundary: "One cross-domain discrepancy investigation spanning Supply, Inventory and Finance.",
+        identity: ["reconciliation_case_id"],
+        fields: ["category", "status", "discrepancy_summary", "opened_at", "governing_source?", "resolution?", "resolved_at?", "measurements[]?", "notes?"],
+        relationships: [["reconciles_object", "approved Supply/Inventory/Finance target set · required many"]],
+        consolidates: ["supply_reconciliation_case", "supply_reconciliation_case_line", "Loop-as-case compatibility"]
+      },
+      {
+        id: "moonsleep.supply_shipment", domain: "logistics", title: "Supply Shipment",
+        boundary: "One stable planned-to-physical movement; planning state may exist before route endpoints are known.",
+        identity: ["shipment_id"],
+        fields: ["shipment_purpose", "status", "status_effective_at?", "shipment_reference?", "carrier?", "service?", "transport_mode?", "vessel?", "voyage?", "container_number?", "tracking_references[]?", "planned_departure_at?", "departed_at?", "planned_arrival_at?", "arrived_at?", "delivered_at?", "carton_count?", "weight?", "weight_unit?", "cargo_lines[]? · intrinsic summaries only", "notes?"],
+        relationships: [["origin_place", "nex.place · optional one; required to depart"], ["destination_place", "nex.place · optional many; required to depart"], ["fulfills_purchase_order_line", "Purchase Order Line · optional many"], ["carries_inventory_lot", "Inventory Lot · optional many"], ["carries_sample_article", "Sample Article · optional one"], ["part_of_joint_cargo_plan", "Joint Cargo Plan · optional one"], ["realizes_interfacility_transfer", "Interfacility Transfer · optional one"]],
+        consolidates: ["inventory_shipment", "sample_shipment", "supply_shipment_wave", "destination plans", "routing revisions", "manifests"]
+      },
+      {
+        id: "moonsleep.joint_cargo_plan", domain: "logistics", title: "Joint Cargo Plan",
+        boundary: "One stable consolidation plan coordinating several POs or Shipments without collapsing them.",
+        identity: ["joint_cargo_plan_id"],
+        fields: ["status", "planned_departure_at?", "allocation_basis?", "destination_allocations?", "uncertainty_note?", "notes?"],
+        relationships: [["includes_purchase_order", "Purchase Order · optional many"], ["destination_place", "nex.place · optional many"]],
+        consolidates: ["joint_cargo_plan", "supply_joint_cargo_plan", "joint_cargo_plan_membership"]
+      },
+      {
+        id: "moonsleep.interfacility_transfer", domain: "logistics", title: "Interfacility Transfer",
+        boundary: "The authorized movement intent between facilities, separate from its physical Shipment.",
+        identity: ["interfacility_transfer_id"],
+        fields: ["status", "carrier?", "service_level?", "bol_number?", "pro_number?", "pallet_count?", "carton_count?", "weight?", "weight_unit?", "dimensions?", "picked_up_at?", "received_at?", "notes?"],
+        relationships: [["origin_place", "nex.place · optional one"], ["destination_place", "nex.place · optional one"], ["moves_inventory_lot", "Inventory Lot · optional many"]],
+        consolidates: ["interfacility_transfer", "interfacility_transfer_document", "interfacility_transfer_event"]
+      },
+      {
+        id: "moonsleep.facility_receipt", domain: "logistics", title: "Facility Receipt",
+        boundary: "One receiving transaction at one facility; partial progress is inherent history.",
+        identity: ["facility_receipt_id"],
+        fields: ["provider_receipt_reference?", "status", "received_at?", "physically_available_at?", "carrier?", "service?", "signed_by?", "expected_carton_count?", "delivered_carton_count?", "component_lines[]?", "reconciliation_status?", "usable_inventory_status?", "notes?"],
+        relationships: [["received_at_place", "nex.place · required one"], ["receives_movement", "Supply Shipment or Interfacility Transfer · required one"], ["creates_or_updates_inventory_lot", "Inventory Lot · optional many"]],
+        consolidates: ["facility_receipt", "facility_receipt_line", "facility_receipt_event", "facility_receipt_event_line"]
+      }
+    ];
+
+    const mapNodes = [
+      { id: "entity", label: "nex.entity", meta: "supplier / provider", domain: "native", x: 20, y: 150 },
+      { id: "place", label: "nex.place", meta: "facility / route endpoint", domain: "native", x: 20, y: 440 },
+      { id: "finance", label: "Finance owners", meta: "invoice / transaction / allocation", domain: "native", x: 20, y: 730 },
+      { id: "work", label: "Loop + Commitment", meta: "communication concerns domain object", domain: "native", x: 20, y: 1020 },
+
+      { id: "product", label: "Product", meta: "stable product identity", domain: "product", x: 300, y: 30 },
+      { id: "spec", label: "Product Specification", meta: "released design", domain: "product", x: 560, y: 30 },
+      { id: "bom", label: "Bill of Materials", meta: "selected recipe", domain: "product", x: 820, y: 30 },
+      { id: "bomline", label: "BOM Line", meta: "targetable requirement", domain: "product", x: 1080, y: 30 },
+      { id: "component", label: "Component", meta: "outer / inner / packaging", domain: "product", x: 1340, y: 30 },
+
+      { id: "variant", label: "Component Variant", meta: "color / material / option", domain: "product", x: 300, y: 280 },
+      { id: "material", label: "Material Specification", meta: "stable technical material", domain: "product", x: 560, y: 280 },
+      { id: "experiment", label: "Product Experiment", meta: "hypothesis → decision", domain: "product", x: 820, y: 280 },
+      { id: "sample", label: "Sample Article", meta: "prototype / approval / retained", domain: "production", x: 1080, y: 280 },
+      { id: "qualitycase", label: "Product Quality Case", meta: "investigation + disposition", domain: "production", x: 1340, y: 280 },
+
+      { id: "quote", label: "Supplier Quote", meta: "commercial header", domain: "commercial", x: 300, y: 540 },
+      { id: "quoteline", label: "Supplier Quote Line", meta: "exact option / price break", domain: "commercial", x: 560, y: 540 },
+      { id: "plan", label: "Purchase Plan", meta: "alternatives → decision", domain: "commercial", x: 820, y: 540 },
+      { id: "po", label: "Purchase Order", meta: "SWRC26004", domain: "commercial", x: 1080, y: 540 },
+      { id: "line", label: "Purchase Order Line", meta: "quantity / price / provenance", domain: "commercial", x: 1340, y: 540 },
+
+      { id: "run", label: "Manufacturing Run", meta: "production lifecycle", domain: "production", x: 300, y: 800 },
+      { id: "runcomponent", label: "Run Component", meta: "divergent workstream", domain: "production", x: 560, y: 800 },
+      { id: "lot", label: "Inventory Lot", meta: "traceable physical cohort", domain: "production", x: 820, y: 800 },
+      { id: "inspection", label: "Quality Inspection", meta: "scope / findings / tests", domain: "production", x: 1080, y: 800 },
+      { id: "reconcile", label: "Reconciliation Case", meta: "cross-domain discrepancy", domain: "logistics", x: 1340, y: 800 },
+
+      { id: "cargo", label: "Joint Cargo Plan", meta: "multi-PO consolidation", domain: "logistics", x: 300, y: 1080 },
+      { id: "transfer", label: "Interfacility Transfer", meta: "authorized movement intent", domain: "logistics", x: 560, y: 1080 },
+      { id: "shipment", label: "Supply Shipment", meta: "planned → physical movement", domain: "logistics", x: 820, y: 1080 },
+      { id: "receipt", label: "Facility Receipt", meta: "receiving transaction", domain: "logistics", x: 1080, y: 1080 }
+    ];
+
+    const mapEdges = [
+      ["spec", "product", "for_product", "product"],
+      ["bom", "spec", "for_product_specification", "product"],
+      ["bomline", "bom", "part_of_bill_of_materials", "product"],
+      ["bomline", "variant", "requires_component_variant", "product"],
+      ["bomline", "material", "uses_material_specification", "product"],
+      ["variant", "component", "of_component", "product"],
+      ["variant", "material", "uses_material_specification", "product"],
+      ["material", "entity", "specified_by_supplier", "product"],
+      ["experiment", "spec", "experiments_on_product_specification", "product"],
+      ["experiment", "sample", "uses_sample_article", "product"],
+      ["sample", "spec", "implements_product_specification", "production"],
+      ["qualitycase", "sample", "concerns_object", "production"],
+      ["qualitycase", "inspection", "supported_by_quality_inspection", "production"],
+      ["qualitycase", "work", "governed_by_commitment", "production"],
+      ["quote", "entity", "issued_by_supplier", "commercial"],
+      ["quoteline", "quote", "part_of_supplier_quote", "commercial"],
+      ["quoteline", "bomline", "quotes_object", "commercial"],
+      ["plan", "spec", "plans_for_product_specification", "commercial"],
+      ["plan", "bomline", "requires_bill_of_materials_line", "commercial"],
+      ["plan", "quoteline", "evaluates_supplier_quote_line", "commercial"],
+      ["plan", "po", "results_in_purchase_order", "commercial"],
+      ["po", "entity", "placed_with_supplier", "commercial"],
+      ["line", "po", "part_of_purchase_order", "commercial"],
+      ["line", "variant", "orders_component_variant", "commercial"],
+      ["line", "spec", "orders_product_specification", "commercial"],
+      ["line", "bomline", "based_on_bill_of_materials_line", "commercial"],
+      ["line", "quoteline", "based_on_supplier_quote_line", "commercial"],
+      ["lot", "line", "from_purchase_order_line", "production"],
+      ["lot", "variant", "for_component_variant", "production"],
+      ["lot", "place", "stored_at_place", "production"],
+      ["run", "po", "executes_purchase_order", "production"],
+      ["run", "entity", "performed_by_supplier", "production"],
+      ["runcomponent", "run", "part_of_manufacturing_run", "production"],
+      ["runcomponent", "line", "executes_purchase_order_line", "production"],
+      ["runcomponent", "lot", "consumes_inventory_lot", "production"],
+      ["inspection", "entity", "performed_by", "production"],
+      ["inspection", "run", "inspects_object", "production"],
+      ["reconcile", "po", "reconciles_object", "logistics"],
+      ["reconcile", "receipt", "reconciles_object", "logistics"],
+      ["reconcile", "finance", "reconciles_object", "logistics"],
+      ["shipment", "line", "fulfills_purchase_order_line", "logistics"],
+      ["shipment", "lot", "carries_inventory_lot", "logistics"],
+      ["shipment", "place", "origin_place", "logistics"],
+      ["shipment", "place", "destination_place", "logistics"],
+      ["shipment", "cargo", "part_of_joint_cargo_plan", "logistics"],
+      ["cargo", "po", "includes_purchase_order", "logistics"],
+      ["transfer", "place", "origin_place", "logistics"],
+      ["transfer", "place", "destination_place", "logistics"],
+      ["transfer", "lot", "moves_inventory_lot", "logistics"],
+      ["shipment", "transfer", "realizes_interfacility_transfer", "logistics"],
+      ["receipt", "shipment", "receives_movement", "logistics"],
+      ["receipt", "place", "received_at_place", "logistics"],
+      ["receipt", "lot", "creates_or_updates_inventory_lot", "logistics"],
+      ["finance", "po", "pays_purchase_order", "native"],
+      ["work", "plan", "concerns", "native"],
+      ["work", "qualitycase", "concerns", "native"]
+    ];
+
+    const poOwnership = [
+      ["Purchase Order Line", "Ordered selections, quantities, prices, colors, typed BOM/quote provenance and commercial deltas; BOM Lines remain composition authority.", "outer_cover_quantity · inner_cover_quantity · unit prices · variant allocation", "commercial"],
+      ["BOM + BOM Line", "The exact selected recipe and component/material requirements the order realizes.", "product_bom_version · product_bom_line · governing specification", "product"],
+      ["Finance", "Deposits, balances, paid amounts, wire/processing fees, credits and settlement.", "deposit_minor_units · paid_product_minor_units · outstanding_product_minor_units", "native"],
+      ["Supplier Quote + Line", "Exact product/freight option, price break, basis, inclusions, terms and transit expectations.", "freight_estimate_minor_units · freight_quote_state · incoterm", "commercial"],
+      ["Supply Shipment", "Carrier, route, container, tracking, physical departure and actual milestone state.", "freight_state · shipment_2_freight_state · strongest physical evidence", "logistics"],
+      ["Manufacturing Run", "Production state, component progress, completion plans, packing and holds.", "production_state · grey_fabric_state · planned_completion_date", "production"],
+      ["Inventory Lot + Receipt", "Physical/usable quantities, receipt evidence, supplier lot and storage location.", "received quantity · usable quantity · supplier_receipt_state", "production"],
+      ["Derived SQL", "Complete-pillow capacity, cover-only capacity, strongest physical state and cohort display.", "complete_pillow_capacity · cover_only_capacity · batch_label", "native"],
+      ["Generic Object Revision", "Current head, revision number, previous-revision lineage and schema digest.", "current_revision_id · revision_number · previous_revision_id", "native"]
+    ];
+
+    const poFieldGroups = [
+      ["Identity", "supplier_reference", "Globally unique Purchase Order ID in the moonsleep.purchase_order namespace; collision fails closed; Supplier remains a relationship"],
+      ["Provider contract", "provider_order_reference", "Purchase Order attribute"],
+      ["Commercial header", "ordered_at · status · status_effective_at · currency · commercial_total_minor_units", "Purchase Order attributes"],
+      ["Derived header quantity", "ordered_set_quantity", "Derived SQL over compatible PO Lines"],
+      ["Component quantity + allocation", "outer_cover_quantity · inner_cover_quantity · variant_allocation_state", "Purchase Order Lines and Inventory Lots"],
+      ["Product/spec references", "governing_product_revision_id · governing_revision_id", "Typed PO Line → Product Specification relationships"],
+      ["Revision pointer", "current_revision_id", "Generic canonical-object kernel only"],
+      ["Freight + transport", "initial_freight_minor_units · freight_estimate_minor_units · freight_deposit_minor_units · freight_included · freight_state · freight_quote_state · final_freight_amount_state · shipment_2_freight_state · current_freight_quotation_id · supplier_funded_freight_selected · freight_estimate_state", "Supplier Quote and Supply Shipment revisions"],
+      ["Settlement", "deposit_minor_units · deposit_principal_minor_units · deposit_percent · second_payment_percent · final_payment_percent · paid_product_minor_units · outstanding_product_minor_units · remaining_product_principal_minor_units · remaining_under_revision_minor_units · wire_fee_minor_units · processing_fee_minor_units · total_initial_payment_minor_units · supplier_receipt_state · balance_minor_units · deposit_state · product_gross_minor_units · product_principal_minor_units", "Finance Transaction, Invoice, Payment Order and Payment Allocation"],
+      ["Credit/correction", "product_credit_minor_units", "PO revision when agreement changes; Finance allocation when settlement alone changes"],
+      ["Production", "manufacturing_run_id · production_state · grey_fabric_state · inner_fabric_progress_state · planned_completion_date · planned_completion_window_start · planned_completion_window_end · planned_completion_state · planned_completion_evidence_state", "Manufacturing Run, Run Component and schedule Observations"],
+      ["Physical state", "strongest_physical_state", "Derived SQL over Shipment, Receipt and Lot"],
+      ["Capacity", "complete_pillow_capacity · cover_only_capacity", "Derived SQL over PO Lines, Lots and fulfillment reservations"],
+      ["Display/cohort", "accounting_cohort_alias · batch_label", "Contextual read projection; never identity"],
+      ["Authority", "action_authority · customer_promise_authority", "Operation/policy boundary; not projected object state"],
+      ["Historical arithmetic", "initial_total_minor_units · remaining_under_revision_minor_units · product_quantity_changed_by_freight_revision", "Recompute from exact PO revisions and Finance state"]
+    ];
+
+    const nativeGroups = [
+      {
+        title: "Identity + context", note: "Owner-native identity and contextual roles.",
+        items: [
+          ["nex.entity", "Person or organization identity: suppliers, people, customers, carriers and factories.", "linked in map"],
+          ["nex.contact", "Contact-point identity; replaces packet Contact and supplier-contact copies.", "owner reuse"],
+          ["nex.place", "Physical place identity: facility, warehouse, factory and fulfillment location.", "linked in map"],
+          ["nex.facet_definition / attachment", "Supply Organization, Supplier Representative, Facility, Customer and other roles.", "owner reuse"]
+        ]
+      },
+      {
+        title: "Communication + work", note: "No Communication Stream copy or second resolver.",
+        items: [
+          ["nex.channel", "Immutable native communication container; derived email collections expand to native routes.", "owner reuse"],
+          ["nex.loop", "One unresolved communicative expectation; it may concern a Plan, Experiment or Case but never replaces it.", "owner reuse"],
+          ["nex.commitment", "Promise or obligation identity: supplier, replacement and delivery commitments.", "owner reuse"]
+        ]
+      },
+      {
+        title: "Commerce + finance", note: "Financial custody remains with Finance owners.",
+        items: [
+          ["moonsleep.commerce_order", "Commerce-owned order identity and history.", "owner reuse"],
+          ["moonsleep.cash_card_account", "Finance-owned cash or card account.", "owner reuse"],
+          ["moonsleep.financial_transaction", "Finance-owned transaction identity and immutable revisions.", "owner reuse"],
+          ["moonsleep.invoice", "Finance-owned AP Invoice identity and revisions.", "owner reuse"],
+          ["moonsleep.invoice_line", "Finance-owned targetable line; Claims reuses it rather than duplicating it.", "owner reuse"],
+          ["Finance Payment Order", "Finance-owned payment instruction and revisions.", "owner reuse"],
+          ["Finance Payment Allocation", "Exact invoice/payment allocation linked to a Purchase Order.", "linked in map"]
+        ]
+      },
+      {
+        title: "Fulfillment + returns", note: "Dispatch and Returns remain their own action owners.",
+        items: [
+          ["Fulfillment Obligation", "Order-line fulfillment state.", "owner reuse"],
+          ["Delivery Plan", "Route and readiness plan state.", "owner reuse"],
+          ["Fulfillment Package", "Package identity with inherent owner revisions.", "owner reuse"],
+          ["Fulfillment Label", "Label and provider-artifact custody.", "owner reuse"],
+          ["Fulfillment Wave", "Execution cohort owner.", "owner reuse"],
+          ["Fulfillment Packet Edition", "Immutable rendered-artifact owner.", "owner reuse"],
+          ["Return Case", "Return, refund and return-label workflow.", "owner reuse"]
+        ]
+      },
+      {
+        title: "Claims", note: "Claims-native custody remains outside the generic projection store.",
+        items: [
+          ["moonsleep.carrier_incident", "Operational carrier incident identity and lifecycle.", "owner reuse"],
+          ["moonsleep.carrier_case", "Provider claim/case; events remain Facts and Observations.", "owner reuse"],
+          ["moonsleep.carrier_recovery_receipt", "Monetary recovery custody and Finance reconciliation.", "owner reuse"]
+        ]
+      }
+    ];
+
+    const removedTerms = [
+      "inventory_purchase_order", "supply_order", "inventory_purchase_orders", "inventory_purchase_order_component", "purchase_order_component_line", "purchase_order_revision", "purchase_order_adjustment", "product_revision", "product version", "product_bom_version", "product_bom_line", "supplier_product_quotation_line", "supplier_freight_quotation_line", "sample_order", "sample_order_status", "sample_article_status", "inventory_shipment", "sample_shipment", "supply_shipment_wave", "supply_joint_cargo_plan", "shipment_routing_revision", "facility_receipt_event", "transport_milestone", "supply_manifest_observation", "supply_reconciliation_case", "moonsleep.communication_loop", "moonsleep.commitment"
+    ];
+
+    const deferredNouns = [
+      "Product Family", "Product Revision", "BOM Version", "Product Colorway", "Product Prototype", "Product Experiment Option", "Purchase Plan Option / Requirement", "Sample Order / Status", "Production Planning Profile / Stage", "Production Schedule / Line", "Reconciliation Case Line", "Shipment Manifest / Line", "Transport Document", "Transport Milestone", "Receipt Event / Line", "Facility snapshots and lines", "Supplier capture checkpoint", "Supply manifest observation"
+    ];
+
+    const physicalFamilies = [
+      {
+        title: "Inventory source surfaces · 11 relations", note: "Delete superseded object storage after consumer migration; retain only legitimate stock-event/count owner custody under final vocabulary.",
+        items: ["inventory_purchase_orders", "inventory_purchase_order_lots", "inventory_purchase_order_lot_eta_history", "inventory_shipments", "inventory_stock_events", "inventory_components", "inventory_registry_variants", "inventory_variants", "inventory_skus", "inventory_physical_count_sessions", "inventory_physical_count_lines"]
+      },
+      {
+        title: "Duplicate identity/facility · 9 relations", note: "Bind readers to Entity, Contact, Place and Facets first.",
+        items: ["supply_organizations", "supply_people", "supply_contact_methods", "supply_facilities", "supply_facility_locations", "supply_facility_contact_assignments", "supply_organization_relationships", "supply_component_suppliers", "supply_facility_node_mappings"]
+      },
+      {
+        title: "Table-per-type commercial · 25 relations", note: "Migrate retained rows; do not preserve dedicated revision/status/option families.",
+        items: ["supply_product_families", "supply_product_revisions", "supply_product_prototypes", "supply_product_bom_versions", "supply_product_bom_lines", "supply_product_experiments", "supply_product_experiment_options", "supply_supplier_product_quotations", "supply_supplier_product_quotation_lines", "supply_supplier_product_quotation_packaging_options", "supply_supplier_freight_quotations", "supply_supplier_freight_quotation_lines", "supply_purchase_plans", "supply_purchase_plan_options", "supply_purchase_plan_requirements", "supply_purchase_plan_product_quote_lines", "supply_purchase_plan_freight_quote_lines", "supply_purchase_plan_proposals", "supply_purchase_plan_purchase_orders", "supply_sample_orders", "supply_sample_order_lines", "supply_sample_order_status_history", "supply_sample_order_payment_reports", "supply_sample_articles", "supply_sample_article_status_history"]
+      },
+      {
+        title: "PO/cargo/schedule/transport · 24 relations", note: "Several have real readers; migrate them in bounded consumer slices.",
+        items: ["supply_purchase_order_proposals", "supply_purchase_order_proposal_sources", "supply_purchase_order_payment_links", "supply_joint_cargo_plans", "supply_joint_cargo_purchase_orders", "supply_joint_cargo_destinations", "supply_joint_cargo_sources", "supply_shipment_waves", "supply_shipment_wave_destination_observations", "supply_joint_cargo_wave_memberships", "supply_supplier_shipping_schedule_entries", "supply_supplier_schedule_shipment_links", "supply_supplier_schedule_wave_links", "supply_component_supply_links", "supply_manifest_observations", "supply_interfacility_transfers", "supply_interfacility_transfer_events", "supply_interfacility_transfer_documents", "supply_transport_source_captures", "supply_vessel_identities", "supply_vessel_identity_evidence", "supply_shipment_vessel_assignments", "supply_vessel_observations", "supply_transport_milestones"]
+      },
+      {
+        title: "Evidence/adoption/projection · 64 relations", note: "Freeze new dependencies; delete each family after historical compiler/current producer parity and consumer exit.",
+        items: ["evidence_source_records", "evidence_source_record_relations", "evidence_record_fragments", "evidence_episodes", "evidence_episode_records", "evidence_episode_seals", "evidence_fact_assertions", "evidence_fact_support", "evidence_fact_episode_memberships", "evidence_domain_field_links", "evidence_resource_attribute_observation_links", "evidence_resource_relationship_observation_links", "evidence_nex_resource_refs", "evidence_nex_entity_identity_bindings", "evidence_nex_observation_refs", "evidence_nex_semantic_adoption_receipts", "evidence_nex_semantic_adoption_observations", "evidence_resource_projection_receipt_nex_observations", "evidence_resource_projection_target_readbacks", "evidence_resource_target_adapter_deployment_receipts", "evidence_resource_target_adapter_schema_migrations", "supply_observations", "supply_observation_fact_inputs", "supply_observation_input_sets", "supply_observation_relations", "supply_adoption_source_records", "supply_adoption_source_record_relations", "supply_adoption_record_fragments", "supply_adoption_fact_assertions", "supply_adoption_fact_support", "supply_adoption_domain_field_links", "supply_adoption_observations", "supply_adoption_observation_inputs", "supply_adoption_observation_relations", "supply_adoption_projection_receipts", "supply_adoption_coverage_scopes", "supply_adoption_coverage_instances", "supply_adoption_coverage_proofs", "supply_projection_receipts", "supply_projection_receipt_observations", "supply_projection_publications", "supply_projection_receipt_coverage_scopes", "supply_projection_receipt_coverage_instances", "supply_projection_receipt_coverage_proofs", "supply_provenance_field_registry", "supply_provenance_coverage_contract", "supply_provenance_coverage_requirements", "supply_provenance_adoption_receipts", "supply_nex_evidence_projection_items", "supply_nex_evidence_projection_bindings", "supply_nex_semantic_terminal_receipts", "supply_nex_semantic_orchestrator_receipts", "supply_nex_semantic_sync_receipts", "supply_partner_event_proposals", "supply_partner_event_proposal_sources", "supply_partner_event_review_decisions", "supply_partner_events", "supply_partner_event_purchase_orders", "supply_partner_event_lots", "supply_partner_event_joint_cargo", "supply_partner_event_shipments", "supply_partner_event_nodes", "supply_partner_event_obligations", "supply_partner_event_interfacility_transfers"]
+      },
+      {
+        title: "Packet-only · 9 nouns", note: "No live-table migration; these disappear from semantic language.",
+        items: ["purchase_order_revision", "purchase_order_adjustment", "inventory_purchase_order_component", "sample_article_status", "sample_order_status", "shipment_routing_revision", "facility_receipt_event", "transport_milestone", "supply_manifest_observation"]
+      }
+    ];
+
+    const legacyRows = [
+      ["facility_fulfillment_snapshot", "Fact/Observation targeting Place or Fulfillment owner; derived SQL read"],
+      ["facility_fulfillment_snapshot_line", "Structured Fact values; no object"],
+      ["facility_inventory_snapshot", "Physical-count Facts/Observations targeting Place"],
+      ["facility_inventory_snapshot_line", "Structured count Facts; no object"],
+      ["facility_receipt", "CREATE → moonsleep.facility_receipt"],
+      ["facility_receipt_event", "Fact/Observation supporting a Receipt revision"],
+      ["facility_receipt_event_line", "Receipt content plus Facts"],
+      ["facility_receipt_line", "Embed in Facility Receipt component_lines"],
+      ["facility_throughput_snapshot", "Fact/Observation plus derived read"],
+      ["financial_transaction", "REUSE → Finance-owned transaction"],
+      ["interfacility_transfer", "CREATE → moonsleep.interfacility_transfer"],
+      ["interfacility_transfer_document", "Immutable Record evidence"],
+      ["interfacility_transfer_event", "Transfer revision Fact/Observation"],
+      ["inventory_purchase_order", "CREATE → moonsleep.purchase_order; delete old term"],
+      ["inventory_purchase_order_component", "MOVE → moonsleep.purchase_order_line; delete old term"],
+      ["inventory_purchase_order_lot", "CREATE → moonsleep.inventory_lot"],
+      ["inventory_shipment", "MOVE → moonsleep.supply_shipment; delete old term"],
+      ["joint_cargo_plan", "CREATE → moonsleep.joint_cargo_plan"],
+      ["joint_cargo_plan_membership", "Typed relationships; no object"],
+      ["manufacturing_run", "CREATE → moonsleep.manufacturing_run"],
+      ["manufacturing_run_component", "CREATE → moonsleep.manufacturing_run_component"],
+      ["manufacturing_run_component_cohort", "Run Component revision + Inventory Lot relationships"],
+      ["nex.commitment", "REUSE → owner-native nex.commitment"],
+      ["nex.contact", "REUSE → owner-native nex.contact"],
+      ["nex.entity", "REUSE → owner-native nex.entity"],
+      ["nex.facet_attachment", "REUSE → owner-native Facet Attachment"],
+      ["nex.loop", "REUSE → owner-native nex.loop"],
+      ["nex.place", "REUSE → owner-native nex.place"],
+      ["payment_application", "REUSE → Finance Payment Allocation + PO relationship"],
+      ["planned_component_cohort", "Hypothetical plan → Purchase Plan/PO Line/Run Observation; only an independently identified committed/physical cohort becomes a Lot"],
+      ["product_bom_line", "MOVE → genuine BOM Line; collapse only one-line pseudo-BOM content"],
+      ["product_bom_version", "MOVE → Bill of Materials; delete version-shaped type"],
+      ["product_colorway", "Component Variant attributes initially"],
+      ["product_component_variant_rule", "Intrinsic/collapsed-one-line constraint → Product Specification; exact genuine-BOM composition → BOM Line"],
+      ["product_experiment", "CREATE → moonsleep.product_experiment"],
+      ["product_experiment_option", "Structured Product Experiment alternative"],
+      ["product_family", "MOVE → moonsleep.product"],
+      ["product_prototype", "MOVE → Sample Article with prototype role"],
+      ["product_quality_case", "CREATE → moonsleep.product_quality_case; Loops may concern it"],
+      ["product_revision", "MOVE → moonsleep.product_specification; delete revision-shaped type"],
+      ["production_planning_profile", "Governed configuration Record/read model"],
+      ["production_planning_stage", "Embedded configuration content"],
+      ["production_schedule", "Manufacturing Run planned-state Observations"],
+      ["production_schedule_line", "Run Component planned-state Observations"],
+      ["purchase_order_adjustment", "DELETE → accepted change Fact/Observation or Finance allocation"],
+      ["purchase_order_component_line", "MOVE → moonsleep.purchase_order_line"],
+      ["purchase_order_payment_link", "Finance allocation relationship; no Supply object"],
+      ["purchase_order_revision", "DELETE → inherent Purchase Order Object Revision"],
+      ["purchase_plan", "CREATE → moonsleep.purchase_plan; Loops may concern it"],
+      ["purchase_plan_option", "Structured Purchase Plan decision content"],
+      ["purchase_plan_requirement", "Structured Purchase Plan requirement + typed targets"],
+      ["quality_inspection", "CREATE → moonsleep.quality_inspection"],
+      ["quality_inspection_finding", "Embed in Quality Inspection"],
+      ["quality_inspection_scope_line", "Embed in Quality Inspection"],
+      ["quality_inspection_test_result", "Embed in Quality Inspection"],
+      ["sample_article", "CREATE → moonsleep.sample_article"],
+      ["sample_article_status", "DELETE → inherent Sample Article Object Revision"],
+      ["sample_order", "MOVE → Purchase Order with sample purpose"],
+      ["sample_order_line", "MOVE → Purchase Order Line"],
+      ["sample_order_status", "DELETE → inherent Purchase Order Object Revision"],
+      ["sample_payment_report", "Payment evidence + Finance transaction/allocation"],
+      ["sample_shipment", "MOVE → Supply Shipment with sample purpose"],
+      ["shipment_destination_plan", "Planned Supply Shipment / Joint Cargo state"],
+      ["shipment_destination_plan_line", "Destination relationships + allocation values"],
+      ["shipment_manifest", "Record + intrinsic Supply Shipment cargo lines; exact Lot membership is typed"],
+      ["shipment_manifest_line", "Intrinsic Shipment cargo summary; exact Lot membership is typed"],
+      ["shipment_routing_revision", "DELETE → inherent Supply Shipment Object Revision"],
+      ["shipment_routing_revision_line", "Reroute Fact + destination relationship change"],
+      ["supplier_capture_checkpoint", "Operational receipt; delete from active business vocabulary"],
+      ["supplier_freight_quotation", "MOVE → Supplier Quote with freight scope"],
+      ["supplier_freight_quotation_line", "MOVE → moonsleep.supplier_quote_line; delete old family name"],
+      ["supplier_material_specification", "CREATE → moonsleep.material_specification"],
+      ["supplier_product_quotation", "MOVE → Supplier Quote with product scope"],
+      ["supplier_product_quotation_line", "MOVE → moonsleep.supplier_quote_line; delete old family name"],
+      ["supplier_product_quotation_packaging_option", "Embed in Supplier Quote packaging_options"],
+      ["supplier_shipment_schedule", "Record + Facts revising Shipment/Run state"],
+      ["supplier_shipment_schedule_line", "Structured schedule Facts; no identity"],
+      ["supply_component_supply_link", "Typed Lot/PO Line/Fulfillment relationship"],
+      ["supply_joint_cargo_plan", "MOVE → Joint Cargo Plan; delete duplicate term"],
+      ["supply_manifest_observation", "DELETE wrapper → direct Observation"],
+      ["supply_reconciliation_case", "CREATE → moonsleep.reconciliation_case; Loops may concern it"],
+      ["supply_reconciliation_case_line", "Structured Reconciliation Case measurements; no line object"],
+      ["supply_shipment_wave", "MOVE → planned Supply Shipment"],
+      ["supply_shipment_wave_destination_observation", "Destination-allocation Observation"],
+      ["transport_document", "Immutable Record attached to movement evidence"],
+      ["transport_milestone", "Timed Fact/Observation revising Shipment"]
+    ];
+
+    const decisions = [
+      "Use Product rather than Product Family.",
+      "Use Product Specification rather than Product Revision; knowledge changes use inherent revisions.",
+      "Create genuine Bill of Materials and BOM Lines; collapse only one-line pseudo-BOM artifacts, and never duplicate a genuine BOM's exact composition on Product Specification.",
+      "A material recipe change after outside use creates a successor BOM identity linked by the established supersedes predicate, not a BOM Revision type.",
+      "Keep Colorway inside Component Variant initially.",
+      "Use one Supplier Quote header plus targetable Supplier Quote Lines for exact options and price breaks.",
+      "Treat Sample Order as Purchase Order with sample purpose.",
+      "Create Purchase Plan, Product Experiment, Product Quality Case and Reconciliation Case; Loops may concern them but never replace them. Exact Purchase Plan requirements target BOM Lines through requires_bill_of_materials_line.",
+      "Keep Manufacturing Run Component independently targetable.",
+      "Inventory Lot begins only with an independently identifiable committed, produced, in-transit, received or counted cohort; hypothetical quantities remain planning state or Observations.",
+      "Assign stable Shipment identity before carrier/container references exist.",
+      "Supplier, facility and provider are relationships, never object identity material; external IDs are globally unique in their type namespace and collisions fail closed.",
+      "Most relationship requiredness belongs to action/readiness policy; structural child-parent edges remain required.",
+      "Reuse Claims-native Carrier Incident/Case/Recovery and Finance Invoice Line.",
+      "The 24 types are a review catalog, never a bulk-registration instruction; declare each type only in its business-value slice.",
+      "Declaration/release, canonical publication, historical migration, consumer migration and physical deletion terminalize separately.",
+      "A slice is complete only when canonical value is live and every superseded active surface is extinct."
+    ];
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.getElementById("relationship-map");
+    const nodeById = new Map(mapNodes.map(node => [node.id, node]));
+
+    function svgEl(name, attrs = {}) {
+      const element = document.createElementNS(svgNS, name);
+      for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
+      return element;
+    }
+
+    function renderMap() {
+      const title = svgEl("title");
+      title.textContent = "MoonSleep canonical object publication-direction map";
+      const description = svgEl("desc");
+      description.textContent = "Twenty-four reviewed projected objects connect to one another and to native Entity, Place, work and Finance owners. Arrows point from stored subject to canonical target.";
+      svg.append(title, description);
+      const defs = svgEl("defs");
+      for (const [domain, color] of Object.entries(domainColors)) {
+        const marker = svgEl("marker", { id: `arrow-${domain}`, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "5", markerHeight: "5", orient: "auto-start-reverse" });
+        marker.append(svgEl("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: color }));
+        defs.append(marker);
+      }
+      svg.append(defs);
+
+      const edgeLayer = svgEl("g", { id: "edge-layer" });
+      mapEdges.forEach(([fromId, toId, label, domain], index) => {
+        const from = nodeById.get(fromId);
+        const to = nodeById.get(toId);
+        const fromCenterX = from.x + 95;
+        const fromCenterY = from.y + 34;
+        const toCenterX = to.x + 95;
+        const toCenterY = to.y + 34;
+        const dx = toCenterX - fromCenterX;
+        const dy = toCenterY - fromCenterY;
+        const lineLength = Math.max(1, Math.hypot(dx, dy));
+        const boundaryScale = Math.min(dx ? 95 / Math.abs(dx) : Infinity, dy ? 34 / Math.abs(dy) : Infinity);
+        const parallelOffset = label === "origin_place" ? -12 : label === "destination_place" ? 12 : 0;
+        const offsetX = (-dy / lineLength) * parallelOffset;
+        const offsetY = (dx / lineLength) * parallelOffset;
+        const sx = fromCenterX + dx * boundaryScale + offsetX;
+        const sy = fromCenterY + dy * boundaryScale + offsetY;
+        const tx = toCenterX - dx * boundaryScale + offsetX;
+        const ty = toCenterY - dy * boundaryScale + offsetY;
+        const bend = Math.max(42, Math.abs(tx - sx) * .35);
+        const direction = tx >= sx ? 1 : -1;
+        const pathId = `edge-path-${index}`;
+        const d = `M ${sx} ${sy} C ${sx + bend * direction} ${sy}, ${tx - bend * direction} ${ty}, ${tx} ${ty}`;
+        const group = svgEl("g", { class: "map-edge", "data-domain": domain, "data-from": fromId, "data-to": toId });
+        const edgeTitle = svgEl("title");
+        edgeTitle.textContent = `${from.label} — ${label} → ${to.label}`;
+        group.append(edgeTitle);
+        group.append(svgEl("path", { id: pathId, d, stroke: domainColors[domain], "marker-end": `url(#arrow-${domain})` }));
+        const textNode = svgEl("text", { dy: "-4" });
+        const textPath = svgEl("textPath", { href: `#${pathId}`, startOffset: "50%", "text-anchor": "middle" });
+        textPath.textContent = label;
+        textNode.append(textPath);
+        group.append(textNode);
+        edgeLayer.append(group);
+      });
+      svg.append(edgeLayer);
+
+      const nodeLayer = svgEl("g", { id: "node-layer" });
+      mapNodes.forEach(node => {
+        const group = svgEl("g", { class: "map-node", "data-domain": node.domain, transform: `translate(${node.x} ${node.y})`, tabindex: "0" });
+        const nodeTitle = svgEl("title");
+        nodeTitle.textContent = `${node.label}: ${node.meta}`;
+        group.append(nodeTitle);
+        group.append(svgEl("rect", { width: "190", height: "68", rx: "12", fill: "#191920", stroke: domainColors[node.domain] }));
+        const title = svgEl("text", { x: "14", y: "28", class: "node-title" });
+        title.textContent = node.label;
+        group.append(title);
+        const meta = svgEl("text", { x: "14", y: "48", class: "node-meta" });
+        meta.textContent = node.meta;
+        group.append(meta);
+        nodeLayer.append(group);
+      });
+      svg.append(nodeLayer);
+    }
+
+    function renderFilters() {
+      const host = document.getElementById("map-filters");
+      ["all", "product", "commercial", "production", "logistics", "native"].forEach((domain, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `filter-btn${index === 0 ? " active" : ""}`;
+        button.textContent = domain === "all" ? "All linkages" : domain[0].toUpperCase() + domain.slice(1);
+        button.addEventListener("click", () => {
+          host.querySelectorAll("button").forEach(item => item.classList.remove("active"));
+          button.classList.add("active");
+          document.querySelectorAll(".map-node").forEach(node => node.classList.toggle("map-dim", domain !== "all" && node.dataset.domain !== domain && node.dataset.domain !== "native"));
+          document.querySelectorAll(".map-edge").forEach(edge => edge.classList.toggle("map-dim", domain !== "all" && edge.dataset.domain !== domain));
+        });
+        host.append(button);
+      });
+    }
+
+    function renderRelations() {
+      const host = document.getElementById("relationship-list");
+      mapEdges.filter(([, , label]) => !["concerns"].includes(label)).forEach(([from, to, label]) => {
+        const item = document.createElement("div");
+        item.className = "relation-item";
+        item.innerHTML = `<span>${nodeById.get(from).label}</span><span>→</span><span>${nodeById.get(to).label}<br><code>${label}</code></span>`;
+        host.append(item);
+      });
+    }
+
+    function renderPoOwnership() {
+      const host = document.getElementById("po-ownership");
+      poOwnership.forEach(([owner, description, examples, domain]) => {
+        const card = document.createElement("article");
+        card.className = "owner-card";
+        card.style.setProperty("--accent", domainColors[domain]);
+        card.innerHTML = `<strong>${owner}</strong><p>${description}</p><p><code>${examples}</code></p>`;
+        host.append(card);
+      });
+    }
+
+    function renderPoFieldLedger() {
+      const host = document.getElementById("po-field-ledger");
+      poFieldGroups.forEach(([group, fields, destination]) => {
+        const card = document.createElement("article");
+        card.className = "ledger-family";
+        card.innerHTML = `<h3>${group}</h3><p>${destination}</p><div class="name-cloud">${fields.split(" · ").map(value => `<code class="term">${value}</code>`).join("")}</div>`;
+        host.append(card);
+      });
+    }
+
+    function renderNativeGroups() {
+      const host = document.getElementById("native-groups");
+      nativeGroups.forEach(group => {
+        const card = document.createElement("article");
+        card.className = "native-group";
+        card.innerHTML = `<h3>${group.title}</h3><p>${group.note}</p>${group.items.map(([address, description, tag]) => `<div class="native-item"><strong><code>${address}</code></strong><span>${description}</span><span class="native-tag">${tag}</span></div>`).join("")}`;
+        host.append(card);
+      });
+    }
+
+    function renderTermCloud(hostId, terms) {
+      const host = document.getElementById(hostId);
+      terms.forEach(value => {
+        const term = document.createElement("code");
+        term.className = "term";
+        term.textContent = value;
+        host.append(term);
+      });
+    }
+
+    function renderPhysicalLedger() {
+      const host = document.getElementById("physical-ledger");
+      physicalFamilies.forEach(family => {
+        const card = document.createElement("article");
+        card.className = "ledger-family";
+        card.innerHTML = `<h3>${family.title}</h3><p>${family.note}</p><div class="name-cloud">${family.items.map(value => `<code class="term">${value}</code>`).join("")}</div>`;
+        host.append(card);
+      });
+    }
+
+    function renderSchemas() {
+      const host = document.getElementById("schema-catalog");
+      schemaObjects.forEach((schema, index) => {
+        const card = document.createElement("details");
+        card.className = "schema-card";
+        card.style.setProperty("--accent", domainColors[schema.domain]);
+        const titleNeedle = schema.title.toLowerCase();
+        const idNeedle = schema.id.toLowerCase();
+        const mappedLegacyNames = legacyRows
+          .filter(([, destination]) => {
+            const normalizedDestination = destination.toLowerCase();
+            const destinationIdentifiers = normalizedDestination.match(/[a-z0-9_.]+/g) ?? [];
+            const exactIdTarget = schemaObjects.find(candidate => destinationIdentifiers.includes(candidate.id.toLowerCase()));
+            if (exactIdTarget) return exactIdTarget.id === schema.id;
+            const bestTitleMatch = schemaObjects
+              .filter(candidate => normalizedDestination.includes(candidate.title.toLowerCase()))
+              .sort((left, right) => right.title.length - left.title.length)[0];
+            return bestTitleMatch?.id === schema.id && normalizedDestination.includes(titleNeedle);
+          })
+          .map(([source]) => source);
+        card.dataset.search = [
+          schema.id,
+          schema.title,
+          schema.boundary,
+          ...schema.identity,
+          ...schema.fields,
+          ...schema.relationships.flat(),
+          ...schema.consolidates,
+          ...mappedLegacyNames
+        ].join(" ").toLowerCase();
+        if (schema.id === "moonsleep.purchase_order") card.open = true;
+        const relationships = schema.relationships.length
+          ? schema.relationships.map(([name, target]) => `<div class="relationship"><code>${name}</code><span>${target}</span></div>`).join("")
+          : `<span class="muted">No proposed relationships.</span>`;
+        card.innerHTML = `
+          <summary><h3>${String(index + 1).padStart(2, "0")} · ${schema.title}</h3><small><code>${schema.id}</code></small></summary>
+          <div class="schema-body">
+            <h4>Business boundary</h4><div>${schema.boundary}</div>
+            <h4>Identity</h4><div class="chip-row">${schema.identity.map(value => `<span class="chip">${value}</span>`).join("")}</div>
+            <h4>Revision attributes</h4><div class="chip-row">${schema.fields.map(value => `<span class="chip">${value}</span>`).join("")}</div>
+            <h4>Proposed schema links</h4>${relationships}
+            <h4>Must disappear from active semantics</h4><div class="chip-row">${schema.consolidates.map(value => `<span class="chip delete">${value}</span>`).join("")}</div>
+          </div>`;
+        host.append(card);
+      });
+
+      document.getElementById("schema-search").addEventListener("input", event => {
+        const query = event.target.value.trim().toLowerCase();
+        host.querySelectorAll(".schema-card").forEach(card => card.hidden = query && !card.dataset.search.includes(query));
+      });
+    }
+
+    function dispositionClass(value) {
+      if (/REUSE/.test(value)) return "keep";
+      if (/CREATE|MOVE/.test(value)) return "move";
+      if (/DELETE|delete|extinct/.test(value)) return "delete";
+      return "";
+    }
+
+    function renderLegacyRows() {
+      const host = document.getElementById("legacy-table");
+      legacyRows.forEach(([source, destination]) => {
+        const row = document.createElement("tr");
+        row.dataset.search = `${source} ${destination}`.toLowerCase();
+        row.innerHTML = `<td><code>${source}</code></td><td class="${dispositionClass(destination)}">${destination}</td>`;
+        host.append(row);
+      });
+      document.getElementById("legacy-search").addEventListener("input", event => {
+        const query = event.target.value.trim().toLowerCase();
+        host.querySelectorAll("tr").forEach(row => row.hidden = query && !row.dataset.search.includes(query));
+      });
+    }
+
+    function renderDecisions() {
+      const host = document.getElementById("decision-grid");
+      decisions.forEach((decision, index) => {
+        const card = document.createElement("article");
+        card.className = "decision";
+        card.innerHTML = `<span class="num">${String(index + 1).padStart(2, "0")}</span><p>${decision}</p>`;
+        host.append(card);
+      });
+    }
+
+    renderMap();
+    renderFilters();
+    renderRelations();
+    renderPoOwnership();
+    renderPoFieldLedger();
+    renderNativeGroups();
+    renderSchemas();
+    renderLegacyRows();
+    renderDecisions();
+    renderTermCloud("removed-terms", removedTerms);
+    renderTermCloud("deferred-nouns", deferredNouns);
+    renderPhysicalLedger();
+  </script>
+</body>
+</html>
