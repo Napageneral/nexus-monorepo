@@ -58,7 +58,7 @@ redesign repeated per family. It contains all 24 projected MoonSleep object
 types plus 13 owner-native imports, including the Finance-owned Invoice Line
 address required by Reconciliation Case. The resulting registry has 37
 declarations and digest
-`2d7289518cde0a33d97aa46e8b0559a4bf34551250234aab26c394b1c156c799`.
+`bae66c3544f1eb764a6ad42d2872b15a5948da084137401e62226341635f8bf3`.
 
 | Terminal move | Current state | What repeats later |
 | --- | --- | --- |

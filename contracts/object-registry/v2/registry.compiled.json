@@ -1,9 +1,9 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "2d7289518cde0a33d97aa46e8b0559a4bf34551250234aab26c394b1c156c799",
+  "registry_digest": "bae66c3544f1eb764a6ad42d2872b15a5948da084137401e62226341635f8bf3",
   "registry": {
     "registry_id": "nex.canonical_objects",
-    "schema_version": "3.0.0",
+    "schema_version": "4.0.0",
     "entries": [
       {
         "object_type_id": "moonsleep.product",

@@ -1,7 +1,7 @@
 {
   "$schema": "./registry.schema.json",
   "registry_id": "nex.canonical_objects",
-  "schema_version": "3.0.0",
+  "schema_version": "4.0.0",
   "entries": [
     {
       "object_type_id": "moonsleep.product",
