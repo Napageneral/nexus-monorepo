@@ -1,6 +1,6 @@
 # MoonSleep canonical object consolidation execution checklist
 
-Status: source-committed execution checklist; no production mutation authorized
+Status: execution in progress; first Product-to-PO canonical publication live
 
 Date: 2026-08-25
 
@@ -62,11 +62,30 @@ declarations and digest
 
 | Terminal move | Current state | What repeats later |
 | --- | --- | --- |
-| registry and generic kernel | complete-catalog source candidate: all 24 projected types plus 13 native-owner imports; one major-version transition allowed only when affected types have zero objects; no new table, typed view, or per-object machinery | does not repeat during the planned family migrations |
-| canonical publication and bounded history migration | not started | one family compiler using existing Records, Facts, accepted Observations, and `objects.publish_revision` |
+| registry and generic kernel | **live**: registry v4 has all 24 projected types plus 13 native-owner imports at digest `bae66c3544f1eb764a6ad42d2872b15a5948da084137401e62226341635f8bf3`; no new table, typed view, or per-object machinery was needed for publication | does not repeat during the planned family migrations |
+| canonical publication and bounded history migration | **first reviewed trace live; full family migration remains open**: 20 objects and 20 initial revisions cover Product, Product Specification, one BOM with six lines, Supplier Quote with six lines, Purchase Plan, SWRC26004, and two PO Lines | one family compiler using existing Records, Facts, accepted Observations, and `objects.publish_revision` |
 | live consumer cutover | not started | one caller-bundle cutover per real API/UI surface, not once per object |
 | physical and language deletion | not started | one deletion transaction after the family has no remaining legacy readers or writers |
-| production acceptance | not started | ordinary SQL current/history queries, `objects.resolve_many`, and one real business query; `SWRC26004` is the first Product-to-PO readback |
+| production acceptance | **first readback complete**: ordinary SQL returns one SWRC26004 Purchase Order plus its inner- and outer-cover lines; all three resolve at revision 1, the native Supplier Entity resolves, and a deliberate missing PO fails closed | repeat ordinary SQL, `objects.resolve_many`, and the affected real business query after each consumer cutover |
+
+### First live publication boundary
+
+- Exact merged MoonSleep source: `d5cc1a249c73b33f51eaa4b6b25cdace588ee32b`.
+- Evidence transaction: seven immutable Records verified; three Facts and three
+  accepted Observations committed; receipt SHA-256
+  `616df5054cd34d9e5c391ffe0a62267fb536c7168b8299c07617989ba4004490`.
+- Canonical state: **20 objects / 20 revisions**, all revision 1, all bound to
+  registry v4.
+- Commercial identity: one `moonsleep.purchase_order` identified by external
+  `SWRC26004`, with two `moonsleep.purchase_order_line` objects. The legacy
+  storage identifiers are not canonical identities or aliases.
+- Deliberately absent: inferred PO total, inferred PO-line price, January quote
+  acceptance for the May order, payment allocation, manufacturing completion,
+  and shipment state.
+- Existing legacy state is still live: `inventory_purchase_orders` remains at
+  26 rows, including `surewal-2026-05-6000` and
+  `surewal-2026-05-6000-inner`. Therefore no legacy row in this checklist is
+  checked complete yet.
 
 The fresh MoonSleep source census found 99 non-fixture, non-artifact files that
 mention at least one Product-to-PO legacy term: 29 historical compiler/operator
