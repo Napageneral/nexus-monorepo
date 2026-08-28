@@ -10,7 +10,7 @@ const SOURCE_FIXTURES = [
   [
     "orders-delta",
     "orders.delta",
-    "Capture one bounded Shopify order delta page and durably ingest its exact records",
+    "Drain bounded Shopify order delta pages and durably ingest their exact records",
     "0 0-59/20 * * * *",
   ],
   [

@@ -75,6 +75,8 @@ families. This prevents duplicate queue fanout: each newly committed Shopify
 revision schedules exactly one projector. Source jobs advance the Shopify cursor
 only after every Record in one provider page is durably ingested, so a failed
 page can be retried from its existing cursor with idempotent Record replay.
+Scheduled `orders.delta` work may commit and continue through up to ten pages
+inside one run; the page boundary remains the atomic custody boundary.
 
 ## Authority
 
