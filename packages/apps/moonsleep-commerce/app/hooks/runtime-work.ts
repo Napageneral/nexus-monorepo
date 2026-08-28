@@ -45,7 +45,7 @@ const JOB_SPECS = Object.freeze([
   {
     name: "moonsleep-commerce.shopify-source.orders-delta",
     description:
-      "Capture one bounded Shopify order delta page and durably ingest its exact records",
+      "Drain bounded Shopify order delta pages and durably ingest their exact records",
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "orders.delta" },

@@ -136,6 +136,119 @@ describe("Shopify source observation job", () => {
     );
   });
 
+  it("drains continued order pages in the same scheduled run", async () => {
+    const test = fixture({ recordCount: 0 });
+    test.capture
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "11111111111111111111111111111111",
+          records: [record("order:1")],
+          complete: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "22222222222222222222222222222222",
+          records: [record("order:2")],
+          complete: true,
+        },
+      });
+    test.commit
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "11111111111111111111111111111111",
+          cursor_iso: "2026-07-22T11:40:00Z",
+          page_cursor: "next-page",
+          complete: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "22222222222222222222222222222222",
+          cursor_iso: "2026-07-22T12:00:00Z",
+          complete: true,
+        },
+      });
+
+    await expect(shopifySourceObservationJob(test.ctx)).resolves.toMatchObject({
+      ok: true,
+      family: "orders.delta",
+      pages: 2,
+      records: 2,
+      inserted: 2,
+      replayed: 0,
+      complete: true,
+      cursor_iso: "2026-07-22T12:00:00Z",
+      page_cursor_present: false,
+    });
+    expect(test.capture).toHaveBeenCalledTimes(2);
+    expect(test.ingestMany).toHaveBeenCalledTimes(2);
+    expect(test.commit).toHaveBeenCalledTimes(2);
+    expect(test.abort).not.toHaveBeenCalled();
+  });
+
+  it("aborts only the current continued page after an ingest failure", async () => {
+    const test = fixture({ recordCount: 0 });
+    test.capture
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "11111111111111111111111111111111",
+          records: [record("order:1")],
+          complete: false,
+        },
+      })
+      .mockResolvedValueOnce({
+        payload: {
+          version: 1,
+          family: "orders.delta",
+          capture_id: "22222222222222222222222222222222",
+          records: [record("order:2")],
+          complete: true,
+        },
+      });
+    test.commit.mockResolvedValueOnce({
+      payload: {
+        version: 1,
+        family: "orders.delta",
+        capture_id: "11111111111111111111111111111111",
+        cursor_iso: "2026-07-22T11:40:00Z",
+        page_cursor: "next-page",
+        complete: false,
+      },
+    });
+    test.ingestMany
+      .mockResolvedValueOnce({
+        payload: {
+          records: 1,
+          inserted: 1,
+          replayed: 0,
+          record_ids: [`record_${"0".repeat(63)}1`],
+        },
+      })
+      .mockRejectedValueOnce(new Error("synthetic second-page ingest failure"));
+
+    await expect(shopifySourceObservationJob(test.ctx)).rejects.toThrow(
+      "synthetic second-page ingest failure",
+    );
+    expect(test.commit).toHaveBeenCalledTimes(1);
+    expect(test.abort).toHaveBeenCalledTimes(1);
+    expect(test.abort).toHaveBeenCalledWith({
+      connection_id: "shopify-production",
+      family: "orders.delta",
+      capture_id: "22222222222222222222222222222222",
+    });
+  });
+
   it("passes an immutable observation into capture and returns a terminal digest", async () => {
     const test = fixture({ recordCount: 2 });
     const observation = {

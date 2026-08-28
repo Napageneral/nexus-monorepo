@@ -38,5 +38,6 @@ projector. Disabled legacy broad subscriptions are migrated; active or foreign
 subscriptions fail closed.
 
 Source-job tests must prove that one provider page advances its cursor only
-after every Record is durably ingested, and that a failed page leaves the cursor
-unchanged for an idempotent retry.
+after every Record is durably ingested, that a failed page leaves the cursor
+unchanged for an idempotent retry, and that a continued `orders.delta` window
+drains sequentially within the same scheduled run.

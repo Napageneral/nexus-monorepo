@@ -36,10 +36,11 @@ schedule by editing its row directly. The installed UTC expressions stagger
 each family into its own second/minute slot so activation does not create a
 provider-call burst.
 
-Each source invocation captures one provider page. The app commits the Shopify
-cursor only after every Record is durably ingested. A failed page is aborted
-without cursor advancement and may be retried idempotently from the same native
-capture boundary.
+Each source capture owns one provider page. The app commits the Shopify cursor
+only after every Record is durably ingested. Scheduled `orders.delta` runs drain
+up to ten sequential pages without waiting for the next recurring slot; each
+page retains an independent commit/abort boundary. A failed page is aborted
+without advancing that page and may be retried idempotently.
 
 ## Boundaries
 
