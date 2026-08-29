@@ -1,9 +1,9 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "bae66c3544f1eb764a6ad42d2872b15a5948da084137401e62226341635f8bf3",
+  "registry_digest": "6ab9037181bb9ddbf8d46a756b0fccac0922e18ec0b933ef00604ef977e093c2",
   "registry": {
     "registry_id": "nex.canonical_objects",
-    "schema_version": "4.0.0",
+    "schema_version": "4.1.0",
     "entries": [
       {
         "object_type_id": "moonsleep.product",
@@ -2976,6 +2976,83 @@
         "resolution_binding": "nex.core-graph.subject-resolver.v1"
       },
       {
+        "object_type_id": "moonsleep.payment_allocation",
+        "names": {
+          "singular": "Payment Allocation",
+          "plural": "Payment Allocations"
+        },
+        "owner_domain": "moonsleep.finance",
+        "identity_contract_id": "moonsleep.payment_allocation.identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "payment_allocation_id"
+          ],
+          "properties": {
+            "payment_allocation_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "allocated_amount_minor_units",
+            "currency",
+            "allocation_state"
+          ],
+          "properties": {
+            "allocated_amount_minor_units": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
+            },
+            "allocation_state": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "relationship_slots": [
+          {
+            "relationship_id": "allocates_financial_transaction",
+            "cardinality": "required_one",
+            "target_object_type_ids": [
+              "moonsleep.financial_transaction"
+            ]
+          },
+          {
+            "relationship_id": "applies_to_purchase_order",
+            "cardinality": "required_one",
+            "target_object_type_ids": [
+              "moonsleep.purchase_order"
+            ]
+          },
+          {
+            "relationship_id": "covers_purchase_order_line",
+            "cardinality": "optional_many",
+            "target_object_type_ids": [
+              "moonsleep.purchase_order_line"
+            ]
+          }
+        ],
+        "accepted_input_terms": [
+          "payment_allocation"
+        ],
+        "search_terms": [
+          "payment allocation",
+          "purchase order payment allocation"
+        ],
+        "resolution_binding": "nex.canonical-object-kernel.v1"
+      },
+      {
         "object_type_id": "moonsleep.invoice",
         "names": {
           "singular": "Invoice",
@@ -3467,6 +3544,10 @@
     {
       "object_type_id": "moonsleep.material_specification",
       "declaration_sha256": "aa01b8248dc25e222e7294fe15f09cc7c38da6e718975577ff976fb482f7ec6c"
+    },
+    {
+      "object_type_id": "moonsleep.payment_allocation",
+      "declaration_sha256": "e0770ef82eec639d199542c76bf609717ba30043d25335ac4ed2628e79253227"
     },
     {
       "object_type_id": "moonsleep.product",
