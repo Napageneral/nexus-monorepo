@@ -1,8 +1,6 @@
 import {
-  type AdapterBackfillWindow,
   type AdapterContext,
   type AdapterHealth,
-  type AdapterInboundRecord,
   defineAdapter,
 } from "@nexus-project/adapter-sdk-ts";
 
@@ -141,32 +139,12 @@ function health(config: BordenFedexRuntimeConfig): Omit<AdapterHealth, "connecti
   };
 }
 
-async function waitForAbort(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return;
-  await new Promise<void>((resolvePromise) => {
-    signal.addEventListener("abort", () => resolvePromise(), { once: true });
-  });
-}
-
-async function backfill(
-  _ctx: RuntimeContextLike,
-  _args: Omit<AdapterBackfillWindow, "connection_id">,
-  _emit: (record: AdapterInboundRecord) => void,
-): Promise<void> {}
-
-async function monitor(
-  ctx: RuntimeContextLike,
-  _emit: (record: AdapterInboundRecord) => void,
-): Promise<void> {
-  await waitForAbort(ctx.signal);
-}
-
 export const __test__ = { health, readRuntimeConfig, setupConfig, setupFields };
 
 export const bordenFedexAdapter = defineAdapter({
   platform: PLATFORM,
   name: "borden-fedex-billing-adapter",
-  version: "0.1.0",
+  version: "0.1.1",
   multi_account: true,
   auth: {
     methods: [
@@ -241,5 +219,4 @@ export const bordenFedexAdapter = defineAdapter({
       };
     },
   },
-  ingest: { backfill, monitor },
 });
