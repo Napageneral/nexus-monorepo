@@ -43,6 +43,10 @@ Current scope:
 - a cross-process per-store governor with two request slots, request pacing,
   proactive REST-pressure delay, durable 429 backoff, and a shared token cache
 - conservative identity behavior with no email, phone, or name merge
+- one paid-order shadow job that groups the verified webhook observation,
+  source Run, projector Runs, Records, and four provider effect intents under a
+  stable `shopify:orders-paid:<webhook-receipt>` root; it reserves Effect
+  Journal entries only and has no provider-write authority
 
 The cohort method accepts 1-50 exact committed record IDs. It validates the
 entire cohort before the first identity observation, then uses the same

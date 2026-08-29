@@ -42,6 +42,14 @@ up to ten sequential pages without waiting for the next recurring slot; each
 page retains an independent commit/abort boundary. A failed page is aborted
 without advancing that page and may be retried idempotently.
 
+For a verified `orders/paid` webhook, the channel worker invokes one bounded
+`moonsleep-commerce.shopify-paid-order-effects` Job after the source and
+projector receipts are terminal. That Job reserves deterministic Google Ads,
+Meta, Pinterest, and TikTok Effect Journal entries under the webhook receipt's
+stable work root. It never starts an Effect and therefore never authorizes a
+provider call. The existing channel terminal receipt is the work-graph
+readback; no separate workflow engine or graph schema is involved.
+
 ## Boundaries
 
 - Do not query Nex or MoonSleep databases directly.
