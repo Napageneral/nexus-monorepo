@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UMBRELLA_ROOT="$(cd "${ROOT_DIR}/../../../.." && pwd)"
 NEX_IMAGE="${NEX_RELEASE_IMAGE:?set NEX_RELEASE_IMAGE to the exact Linux/AMD64 Nex release image}"
-runner_temp="$(mktemp -d /private/tmp/moonsleep-commerce-release-cleanroom.XXXXXX)"
+runner_temp="$(mktemp -d "${CLEANROOM_TEMP_ROOT:-/private/tmp}/moonsleep-commerce-release-cleanroom.XXXXXX")"
 chmod 0700 "${runner_temp}"
 
 cleanup() {
