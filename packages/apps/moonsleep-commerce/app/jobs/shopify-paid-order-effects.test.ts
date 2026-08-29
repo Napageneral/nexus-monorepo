@@ -17,6 +17,8 @@ function fixture() {
     receipt: {
       action: "reserve",
       effectId: (request.effect as Record<string, unknown>).effectId,
+      receiptId: `effectreceipt_${"4".repeat(32)}`,
+      readbackSha256: "5".repeat(64),
       resultingEffect: {
         ...(request.effect as Record<string, unknown>),
         revision: 1,
@@ -100,5 +102,24 @@ describe("Shopify paid-order Effects Job", () => {
       }),
     ).rejects.toThrow("shopify_paid_order_effects_input_invalid");
     expect(test.perform).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when reservation readback lacks durable receipt evidence", async () => {
+    const test = fixture();
+    test.perform.mockImplementationOnce(async ({ request }) => {
+      const effectId = (request.effect as Record<string, unknown>).effectId;
+      return {
+        receipt: {
+          action: "reserve",
+          effectId,
+          resultingEffect: { effectId, status: "reserved" },
+        },
+        provider_write_authorized: false,
+      };
+    });
+
+    await expect(shopifyPaidOrderEffectsJob(test.context)).rejects.toThrow(
+      "shopify_paid_order_effect_reservation_invalid",
+    );
   });
 });

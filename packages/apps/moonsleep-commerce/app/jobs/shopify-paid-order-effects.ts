@@ -121,6 +121,8 @@ function terminalReceipt(value: unknown, expectedEffectId: string): RuntimeRow {
     result.provider_write_authorized !== false ||
     receipt.action !== "reserve" ||
     receipt.effectId !== expectedEffectId ||
+    !/^effectreceipt_[0-9a-f]{32}$/.test(exactString(receipt.receiptId, 46)) ||
+    !/^[0-9a-f]{64}$/.test(exactString(receipt.readbackSha256, 64)) ||
     effect.effectId !== expectedEffectId ||
     effect.status !== "reserved"
   ) {
@@ -178,8 +180,8 @@ export default async function shopifyPaidOrderEffectsJob(
       effect_id: effectId,
       effect_key: effectKey,
       request_digest_sha256: requestDigestSha256,
-      receipt_id: exactString(receipt.receiptId) || null,
-      receipt_sha256: exactString(receipt.readbackSha256, 64) || null,
+      receipt_id: exactString(receipt.receiptId, 46),
+      receipt_sha256: exactString(receipt.readbackSha256, 64),
       status: "reserved",
     });
   }
