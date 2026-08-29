@@ -13,7 +13,7 @@ const INPUT_KEYS = [
   "work_root_id",
 ] as const;
 const PROVIDERS = ["google_ads", "meta", "pinterest", "tiktok"] as const;
-const WORK_ROOT_ID_RE = /^shopify:orders-paid:\S{1,200}$/;
+const WORK_ROOT_ID_RE = /^shopify:orders-paid:\S{1,512}$/;
 const OBSERVATION_RECEIPT_ID_RE = /^channelobs_[0-9a-f]{32}$/;
 const PROJECTION_WORK_ID_RE = /^channelprojection_[0-9a-f]{32}$/;
 const RECORD_ID_RE = /^record_[0-9a-f]{64}$/;
@@ -65,7 +65,7 @@ function parseInput(value: unknown): PaidOrderEffectsInput {
   const keys = Object.keys(input).toSorted();
   const projectorRunIds = exactUniqueStrings(input.projector_run_ids, /^jobrun_\S+$/, 100);
   const recordIds = exactUniqueStrings(input.record_ids, RECORD_ID_RE, 1_000);
-  const workRootId = exactString(input.work_root_id, 221);
+  const workRootId = exactString(input.work_root_id, 533);
   const shopifyOrderId = exactString(input.shopify_order_id, 64);
   if (
     keys.join(",") !== [...INPUT_KEYS].toSorted().join(",") ||
