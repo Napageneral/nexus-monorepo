@@ -36,6 +36,34 @@ const SOURCE_JOB_PROFILE_REVISION_ID = "job_profile_adapter_capture_r1";
 const PROJECTOR_JOB_PROFILE_REVISION_ID = "job_profile_adapter_projection_r1";
 const PAID_ORDER_EFFECTS_TIMEOUT_MS = 5 * 60 * 1000;
 const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_provider_effect_r1";
+const SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "record.ingest",
+  "record.ingest_many",
+  "shopify.source.abort",
+  "shopify.source.capture",
+  "shopify.source.commit",
+]);
+const CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "contacts.observe",
+  "facets.attachments.get",
+  "memory.evidence.profiles.list",
+  "memory.evidence.profiles.register",
+  "records.get",
+  "records.get_many",
+  "semantics.apply",
+]);
+const COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "commerce.line-items.observe",
+  "commerce.line-items.observe_many",
+  "commerce.orders.get",
+  "commerce.orders.observe",
+  "commerce.orders.observe_many",
+  "contacts.observe",
+  "contacts.resolve",
+  "entities.resolve",
+  "records.get",
+  "records.get_many",
+]);
 const PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST = JSON.stringify(["jobs.effects.perform"]);
 const JOB_SPECS = Object.freeze([
   {
@@ -300,7 +328,11 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       : PROJECTOR_JOB_PROFILE_REVISION_ID;
   const runtimeMethodAllowlist = isPaidOrderEffects
     ? PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST
-    : "";
+    : "config" in spec
+      ? SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST
+      : spec.name === CUSTOMER_JOB_NAME
+        ? CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST
+        : COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST;
   if (existing) {
     const id = asString(existing.id);
     const status =
@@ -320,8 +352,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       asString(existing.lane_id) !== laneId ||
       (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
       asString(existing.execution_profile_revision_id) !== executionProfileRevisionId ||
-      (runtimeMethodAllowlist !== "" &&
-        asString(existing.runtime_method_allowlist) !== runtimeMethodAllowlist) ||
+      asString(existing.runtime_method_allowlist) !== runtimeMethodAllowlist ||
       asString(existing.status) !== status;
     if (!needsUpdate) {
       return id;
@@ -335,7 +366,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
         ...(laneId ? { lane_id: laneId } : {}),
         ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
         execution_profile_revision_id: executionProfileRevisionId,
-        ...(runtimeMethodAllowlist ? { runtime_method_allowlist: runtimeMethodAllowlist } : {}),
+        runtime_method_allowlist: runtimeMethodAllowlist,
         status,
         created_by: appId,
       }),
@@ -352,7 +383,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       ...(laneId ? { lane_id: laneId } : {}),
       ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
       execution_profile_revision_id: executionProfileRevisionId,
-      ...(runtimeMethodAllowlist ? { runtime_method_allowlist: runtimeMethodAllowlist } : {}),
+      runtime_method_allowlist: runtimeMethodAllowlist,
       status: spec.status,
       created_by: appId,
     }),

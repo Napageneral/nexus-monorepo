@@ -81,6 +81,35 @@ const SOURCE_FIXTURES = [
   ],
 ] as const;
 
+const SOURCE_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "record.ingest",
+  "record.ingest_many",
+  "shopify.source.abort",
+  "shopify.source.capture",
+  "shopify.source.commit",
+]);
+const CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "contacts.observe",
+  "facets.attachments.get",
+  "memory.evidence.profiles.list",
+  "memory.evidence.profiles.register",
+  "records.get",
+  "records.get_many",
+  "semantics.apply",
+]);
+const COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "commerce.line-items.observe",
+  "commerce.line-items.observe_many",
+  "commerce.orders.get",
+  "commerce.orders.observe",
+  "commerce.orders.observe_many",
+  "contacts.observe",
+  "contacts.resolve",
+  "entities.resolve",
+  "records.get",
+  "records.get_many",
+]);
+
 function runtimeFixture(
   initial: {
     jobs?: Array<Record<string, unknown>>;
@@ -220,13 +249,20 @@ describe("MoonSleep commerce runtime work", () => {
         lane_id: "adapter_io",
         timeout_ms: 900_000,
         execution_profile_revision_id: "job_profile_adapter_capture_r1",
+        runtime_method_allowlist: SOURCE_RUNTIME_METHOD_ALLOWLIST,
       });
     }
+    expect(fixture.runtime.jobs.create.mock.calls[0]![0]).toMatchObject({
+      lane_id: "automation",
+      execution_profile_revision_id: "job_profile_adapter_projection_r1",
+      runtime_method_allowlist: CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST,
+    });
+    expect(fixture.runtime.jobs.create.mock.calls[1]![0]).toMatchObject({
+      lane_id: "automation",
+      execution_profile_revision_id: "job_profile_adapter_projection_r1",
+      runtime_method_allowlist: COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST,
+    });
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(0, 2)) {
-      expect(call[0]).toMatchObject({
-        lane_id: "automation",
-        execution_profile_revision_id: "job_profile_adapter_projection_r1",
-      });
       expect(call[0]).not.toHaveProperty("timeout_ms");
     }
     expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
@@ -284,6 +320,7 @@ describe("MoonSleep commerce runtime work", () => {
           status: "inactive",
           lane_id: "automation",
           execution_profile_revision_id: "job_profile_adapter_projection_r1",
+          runtime_method_allowlist: CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST,
         },
         {
           id: "job-3",
@@ -307,6 +344,7 @@ describe("MoonSleep commerce runtime work", () => {
           lane_id: "adapter_io",
           timeout_ms: 900_000,
           execution_profile_revision_id: "job_profile_adapter_capture_r1",
+          runtime_method_allowlist: SOURCE_RUNTIME_METHOD_ALLOWLIST,
         })),
         {
           id: "job-2",
@@ -317,6 +355,7 @@ describe("MoonSleep commerce runtime work", () => {
           status: "inactive",
           lane_id: "automation",
           execution_profile_revision_id: "job_profile_adapter_projection_r1",
+          runtime_method_allowlist: COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST,
         },
       ],
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
@@ -416,6 +455,7 @@ describe("MoonSleep commerce runtime work", () => {
         lane_id: "adapter_io",
         timeout_ms: 900_000,
         execution_profile_revision_id: "job_profile_adapter_capture_r1",
+        runtime_method_allowlist: SOURCE_RUNTIME_METHOD_ALLOWLIST,
       })),
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
         id: `schedule-${index + 1}`,
@@ -452,6 +492,7 @@ describe("MoonSleep commerce runtime work", () => {
         lane_id: "adapter_io",
         timeout_ms: index === 0 ? null : 900_000,
         execution_profile_revision_id: "job_profile_adapter_capture_r1",
+        runtime_method_allowlist: SOURCE_RUNTIME_METHOD_ALLOWLIST,
       })),
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
         id: `schedule-${index + 1}`,
