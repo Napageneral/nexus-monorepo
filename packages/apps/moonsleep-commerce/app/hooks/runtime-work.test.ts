@@ -239,7 +239,7 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.jobs.create.mock.calls[2]![0]).toMatchObject({
       name: "moonsleep-commerce.shopify-paid-order-effects",
       lane_id: "adapter_io",
-      execution_profile_revision_id: "job_profile_provider_effect_r1",
+      execution_profile_revision_id: "job_profile_bulk_compute_r1",
       runtime_method_allowlist: JSON.stringify(["jobs.effects.perform"]),
       status: "active",
       timeout_ms: 300_000,
@@ -331,7 +331,7 @@ describe("MoonSleep commerce runtime work", () => {
           status: "active",
           lane_id: "adapter_io",
           timeout_ms: 300_000,
-          execution_profile_revision_id: "job_profile_provider_effect_r1",
+          execution_profile_revision_id: "job_profile_bulk_compute_r1",
           runtime_method_allowlist: JSON.stringify(["jobs.effects.perform"]),
         },
         ...SOURCE_FIXTURES.map(([suffix, family, description], index) => ({

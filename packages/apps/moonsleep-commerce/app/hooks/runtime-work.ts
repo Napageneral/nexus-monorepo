@@ -35,7 +35,7 @@ const SOURCE_JOB_TIMEOUT_MS = 15 * 60 * 1000;
 const SOURCE_JOB_PROFILE_REVISION_ID = "job_profile_adapter_capture_r1";
 const PROJECTOR_JOB_PROFILE_REVISION_ID = "job_profile_adapter_projection_r1";
 const PAID_ORDER_EFFECTS_TIMEOUT_MS = 5 * 60 * 1000;
-const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_provider_effect_r1";
+const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_bulk_compute_r1";
 const SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
   "record.ingest",
   "record.ingest_many",
