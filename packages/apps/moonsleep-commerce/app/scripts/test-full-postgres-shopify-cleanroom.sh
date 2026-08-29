@@ -199,12 +199,13 @@ runtime_counts() {
       'ingest_receipts', (SELECT COUNT(*) FROM nex_runtime_immutable_records_v1.record_ingest_receipts),
       'legacy_records', (SELECT COUNT(*) FROM nex_runtime.records),
       'legacy_receipts', (SELECT COUNT(*) FROM nex_runtime.record_ingest_receipts),
-      'legacy_events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
+      'events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
       'entities', (SELECT COUNT(*) FROM nex_runtime.entities),
       'contacts', (SELECT COUNT(*) FROM nex_runtime.contacts),
       'observations', (SELECT COUNT(*) FROM nex_runtime.contact_observations),
       'tags', (SELECT COUNT(*) FROM nex_runtime.entity_tags),
-      'queue', (SELECT COUNT(*) FROM nex_runtime.job_queue),
+      'queue_rows', (SELECT COUNT(*) FROM nex_runtime.job_queue),
+      'active_queue_rows', (SELECT COUNT(*) FROM nex_runtime.job_queue WHERE queue_status IN ('queued', 'leased')),
       'dispatch_receipts', (SELECT COUNT(*) FROM nex_runtime.event_dispatch_receipts),
       'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances),
       'commerce_orders', (SELECT COUNT(*) FROM nex_runtime.commerce_orders),
@@ -526,9 +527,10 @@ jq -e '.definition.id == "moonsleep.customer.v1" and .definition.definition_vers
 initial_counts="$(runtime_counts)"
 jq -e '
   .records == 0 and .ingest_receipts == 0 and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == 0 and
   .entities == 4 and .contacts == 0 and .observations == 0 and
-  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
+  .queue_rows == 0 and .active_queue_rows == 0 and
+  .dispatch_receipts == 0 and .adapter_instances == 0 and
   .commerce_orders == 0 and .commerce_order_revisions == 0 and
   .commerce_line_items == 0 and .commerce_line_item_revisions == 0 and
   .customer_facets == 0 and .accepted_observation_compatibility_receipts == 0
@@ -677,9 +679,10 @@ counts_before_restart="$(runtime_counts)"
 echo "[cleanroom] pre-restart counts $(jq -c . <<<"${counts_before_restart}")"
 jq -e '
   .records == 3 and .ingest_receipts == 6 and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == 3 and
   .entities == 7 and .contacts == 4 and .observations == 4 and .tags == 11 and
-  .queue == 0 and .dispatch_receipts == 3 and .adapter_instances == 0 and
+  .queue_rows == 3 and .active_queue_rows == 0 and
+  .dispatch_receipts == 3 and .adapter_instances == 0 and
   .commerce_orders == 1 and .commerce_order_revisions == 1 and
   .commerce_line_items == 1 and .commerce_line_item_revisions == 1 and
   .customer_facets == 1 and .accepted_observation_compatibility_receipts == 0
@@ -765,10 +768,11 @@ counts_after_restart="$(runtime_counts)"
 jq -e --argjson before "${counts_before_restart}" '
   .records == $before.records and
   .ingest_receipts == ($before.ingest_receipts + 3) and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == $before.events and
   .entities == $before.entities and .contacts == $before.contacts and
   .observations == $before.observations and .tags == $before.tags and
-  .queue == $before.queue and .dispatch_receipts == $before.dispatch_receipts and
+  .queue_rows == $before.queue_rows and .active_queue_rows == 0 and
+  .dispatch_receipts == $before.dispatch_receipts and
   .adapter_instances == $before.adapter_instances and
   .commerce_orders == $before.commerce_orders and
   .commerce_order_revisions == $before.commerce_order_revisions and
@@ -818,7 +822,7 @@ jq -n \
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",pre_restart_ingest_receipts:6,post_restart_ingest_receipts:9,record_contract:$record_contract},
     customer_projection:{path:"record.ingested event",orders:0,line_items:0,customer_facets:1,canonical_contact_link:true},
     commerce_projection:{path:"record.ingested event",orders:1,line_items:1,canonical_customer_link:true,address_snapshots_sha256_bound:true},
-    work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",paid_order_effects_job_count:1,paid_order_effects_mode:"reserve_only",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
+    work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",paid_order_effects_job_count:1,paid_order_effects_mode:"reserve_only",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:3,active_queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,
     terminal_counts:$terminal_counts,
