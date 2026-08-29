@@ -32,6 +32,8 @@ const PAID_ORDER_EFFECTS_JOB_SPEC = Object.freeze({
 const PROJECTOR_JOB_LANE_ID = "automation";
 const SOURCE_JOB_LANE_ID = "adapter_io";
 const SOURCE_JOB_TIMEOUT_MS = 15 * 60 * 1000;
+const SOURCE_JOB_PROFILE_REVISION_ID = "job_profile_adapter_capture_r1";
+const PROJECTOR_JOB_PROFILE_REVISION_ID = "job_profile_adapter_projection_r1";
 const PAID_ORDER_EFFECTS_TIMEOUT_MS = 5 * 60 * 1000;
 const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_provider_effect_r1";
 const PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST = JSON.stringify(["jobs.effects.perform"]);
@@ -293,7 +295,9 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       : null;
   const executionProfileRevisionId = isPaidOrderEffects
     ? PAID_ORDER_EFFECTS_PROFILE_REVISION_ID
-    : "";
+    : "config" in spec
+      ? SOURCE_JOB_PROFILE_REVISION_ID
+      : PROJECTOR_JOB_PROFILE_REVISION_ID;
   const runtimeMethodAllowlist = isPaidOrderEffects
     ? PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST
     : "";
@@ -315,8 +319,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       configNeedsUpdate ||
       asString(existing.lane_id) !== laneId ||
       (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
-      (executionProfileRevisionId !== "" &&
-        asString(existing.execution_profile_revision_id) !== executionProfileRevisionId) ||
+      asString(existing.execution_profile_revision_id) !== executionProfileRevisionId ||
       (runtimeMethodAllowlist !== "" &&
         asString(existing.runtime_method_allowlist) !== runtimeMethodAllowlist) ||
       asString(existing.status) !== status;
@@ -331,9 +334,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
         ...(configNeedsUpdate ? { config_json: configJson } : {}),
         ...(laneId ? { lane_id: laneId } : {}),
         ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
-        ...(executionProfileRevisionId
-          ? { execution_profile_revision_id: executionProfileRevisionId }
-          : {}),
+        execution_profile_revision_id: executionProfileRevisionId,
         ...(runtimeMethodAllowlist ? { runtime_method_allowlist: runtimeMethodAllowlist } : {}),
         status,
         created_by: appId,
@@ -350,9 +351,7 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
       ...(configJson ? { config_json: configJson } : {}),
       ...(laneId ? { lane_id: laneId } : {}),
       ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
-      ...(executionProfileRevisionId
-        ? { execution_profile_revision_id: executionProfileRevisionId }
-        : {}),
+      execution_profile_revision_id: executionProfileRevisionId,
       ...(runtimeMethodAllowlist ? { runtime_method_allowlist: runtimeMethodAllowlist } : {}),
       status: spec.status,
       created_by: appId,

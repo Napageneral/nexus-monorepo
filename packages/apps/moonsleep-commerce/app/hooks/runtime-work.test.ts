@@ -216,10 +216,17 @@ describe("MoonSleep commerce runtime work", () => {
       timeout_ms: 300_000,
     });
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(3)) {
-      expect(call[0]).toMatchObject({ lane_id: "adapter_io", timeout_ms: 900_000 });
+      expect(call[0]).toMatchObject({
+        lane_id: "adapter_io",
+        timeout_ms: 900_000,
+        execution_profile_revision_id: "job_profile_adapter_capture_r1",
+      });
     }
     for (const call of fixture.runtime.jobs.create.mock.calls.slice(0, 2)) {
-      expect(call[0]).toMatchObject({ lane_id: "automation" });
+      expect(call[0]).toMatchObject({
+        lane_id: "automation",
+        execution_profile_revision_id: "job_profile_adapter_projection_r1",
+      });
       expect(call[0]).not.toHaveProperty("timeout_ms");
     }
     expect(fixture.runtime.schedules.create).toHaveBeenCalledTimes(12);
@@ -276,6 +283,7 @@ describe("MoonSleep commerce runtime work", () => {
           script_path: expectedScript,
           status: "inactive",
           lane_id: "automation",
+          execution_profile_revision_id: "job_profile_adapter_projection_r1",
         },
         {
           id: "job-3",
@@ -298,6 +306,7 @@ describe("MoonSleep commerce runtime work", () => {
           status: "active",
           lane_id: "adapter_io",
           timeout_ms: 900_000,
+          execution_profile_revision_id: "job_profile_adapter_capture_r1",
         })),
         {
           id: "job-2",
@@ -307,6 +316,7 @@ describe("MoonSleep commerce runtime work", () => {
           script_path: expectedCommerceScript,
           status: "inactive",
           lane_id: "automation",
+          execution_profile_revision_id: "job_profile_adapter_projection_r1",
         },
       ],
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
@@ -405,6 +415,7 @@ describe("MoonSleep commerce runtime work", () => {
         status: "active",
         lane_id: "adapter_io",
         timeout_ms: 900_000,
+        execution_profile_revision_id: "job_profile_adapter_capture_r1",
       })),
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
         id: `schedule-${index + 1}`,
@@ -440,6 +451,7 @@ describe("MoonSleep commerce runtime work", () => {
         status: "active",
         lane_id: "adapter_io",
         timeout_ms: index === 0 ? null : 900_000,
+        execution_profile_revision_id: "job_profile_adapter_capture_r1",
       })),
       schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
         id: `schedule-${index + 1}`,
