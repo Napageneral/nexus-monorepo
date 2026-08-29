@@ -45,6 +45,16 @@ function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
+function unwrapPayload(value: unknown): RuntimeRow {
+  const row = asRecord(value);
+  if (row.ok === false) {
+    const error = asRecord(row.error);
+    throw new Error(exactString(error.message) || "shopify_paid_order_effect_reservation_failed");
+  }
+  const payload = asRecord(row.payload);
+  return Object.keys(payload).length > 0 ? payload : row;
+}
+
 function exactString(value: unknown, maximum = 512): string {
   return typeof value === "string" && value === value.trim() && value.length <= maximum
     ? value
@@ -155,24 +165,26 @@ export default async function shopifyPaidOrderEffectsJob(
       record_ids: input.record_ids,
     });
     const receipt = terminalReceipt(
-      await context.nex.jobs.effects.perform({
-        request: {
-          action: "reserve",
-          transitionId: `shopify-paid-order:${rootDigest}:${provider}:reserve`,
-          transitionIdempotencyKey: `shopify-paid-order:${rootDigest}:${provider}:reserve`,
-          requestedAt,
-          effect: {
-            effectId,
-            runId,
-            effectKey,
-            requestDigestSha256,
-            providerId: provider,
-            providerIdempotencyKey: `shopify-paid-order:${input.shopify_order_id}:${provider}`,
-            providerIdempotencySupport: "required",
+      unwrapPayload(
+        await context.nex.jobs.effects.perform({
+          request: {
+            action: "reserve",
+            transitionId: `shopify-paid-order:${rootDigest}:${provider}:reserve`,
+            transitionIdempotencyKey: `shopify-paid-order:${rootDigest}:${provider}:reserve`,
+            requestedAt,
+            effect: {
+              effectId,
+              runId,
+              effectKey,
+              requestDigestSha256,
+              providerId: provider,
+              providerIdempotencyKey: `shopify-paid-order:${input.shopify_order_id}:${provider}`,
+              providerIdempotencySupport: "required",
+            },
+            maxDispatches: 1,
           },
-          maxDispatches: 1,
-        },
-      }),
+        }),
+      ),
       effectId,
     );
     effects.push({

@@ -14,18 +14,21 @@ const INPUT = {
 
 function fixture() {
   const perform = vi.fn(async ({ request }: { request: Record<string, unknown> }) => ({
-    receipt: {
-      action: "reserve",
-      effectId: (request.effect as Record<string, unknown>).effectId,
-      receiptId: `effectreceipt_${"4".repeat(32)}`,
-      readbackSha256: "5".repeat(64),
-      resultingEffect: {
-        ...(request.effect as Record<string, unknown>),
-        revision: 1,
-        status: "reserved",
+    ok: true,
+    payload: {
+      receipt: {
+        action: "reserve",
+        effectId: (request.effect as Record<string, unknown>).effectId,
+        receiptId: `effectreceipt_${"4".repeat(32)}`,
+        readbackSha256: "5".repeat(64),
+        resultingEffect: {
+          ...(request.effect as Record<string, unknown>),
+          revision: 1,
+          status: "reserved",
+        },
       },
+      provider_write_authorized: false,
     },
-    provider_write_authorized: false,
   }));
   return {
     perform,
@@ -109,12 +112,15 @@ describe("Shopify paid-order Effects Job", () => {
     test.perform.mockImplementationOnce(async ({ request }) => {
       const effectId = (request.effect as Record<string, unknown>).effectId;
       return {
-        receipt: {
-          action: "reserve",
-          effectId,
-          resultingEffect: { effectId, status: "reserved" },
+        ok: true,
+        payload: {
+          receipt: {
+            action: "reserve",
+            effectId,
+            resultingEffect: { effectId, status: "reserved" },
+          },
+          provider_write_authorized: false,
         },
-        provider_write_authorized: false,
       };
     });
 
