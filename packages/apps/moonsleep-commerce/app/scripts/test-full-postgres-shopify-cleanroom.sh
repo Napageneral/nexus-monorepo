@@ -172,7 +172,24 @@ wait_for_postgres() {
 }
 
 wait_for_runtime() {
-  local attempt
+  local attempt ready_marker=0 started_at
+  started_at="$(docker inspect --format '{{.State.StartedAt}}' "${runtime_container}")"
+  for attempt in $(seq 1 90); do
+    if docker logs --since "${started_at}" "${runtime_container}" 2>&1 \
+      | grep -F 'runtime started (no adapter monitors started)' >/dev/null; then
+      ready_marker=1
+      break
+    fi
+    if [[ "$(docker inspect --format '{{.State.Running}}' "${runtime_container}")" != "true" ]]; then
+      docker logs "${runtime_container}" >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+  if [[ "${ready_marker}" != "1" ]]; then
+    docker logs "${runtime_container}" >&2 || true
+    return 1
+  fi
   for attempt in $(seq 1 90); do
     if docker exec "${runtime_container}" sh -c '
       token=$(cat /run/moonsleep-load-credentials/runtime-token)
