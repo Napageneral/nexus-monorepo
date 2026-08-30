@@ -127,28 +127,55 @@ function requireShopifyObservation(value: unknown, family: string): RuntimeRow |
   ) {
     throw new Error("observation.source_stream does not match family");
   }
-  requireExactObservationString(observation, "external_receipt_id");
-  requireExactObservationString(observation, "semantic_revision_id");
-  if (
-    requireExactObservationString(observation, "verification_issuer", 64) !==
-    "shopify-hmac-sha256"
-  ) {
+  const externalReceiptId = requireExactObservationString(
+    observation,
+    "external_receipt_id",
+  );
+  const semanticRevisionId = requireExactObservationString(
+    observation,
+    "semantic_revision_id",
+  );
+  const verificationIssuer = requireExactObservationString(
+    observation,
+    "verification_issuer",
+    64,
+  );
+  if (verificationIssuer !== "shopify-hmac-sha256") {
     throw new Error("observation.verification_issuer must be shopify-hmac-sha256");
   }
+  const digests: RuntimeRow = {};
   for (const field of [
     "raw_body_sha256",
     "verification_receipt_sha256",
     "observation_sha256",
     "immutable_facts_sha256",
   ]) {
-    if (!SHA256_RE.test(requireExactObservationString(observation, field, 64))) {
+    const digest = requireExactObservationString(observation, field, 64);
+    if (!SHA256_RE.test(digest)) {
       throw new Error(`observation.${field} must be a lowercase SHA-256 digest`);
     }
+    digests[field] = digest;
   }
-  if (Object.keys(asRecord(observation.immutable_facts)).length === 0) {
+  const immutableFacts = asRecord(observation.immutable_facts);
+  if (Object.keys(immutableFacts).length === 0) {
     throw new Error("observation.immutable_facts must be a non-empty object");
   }
-  return observation;
+  return {
+    projection_work_id: projectionWorkId,
+    observation_receipt_id: observationReceiptId,
+    projection_target: "nex",
+    source_system: "shopify",
+    source_account_ref: "moonsleep",
+    source_stream: sourceStream,
+    external_receipt_id: externalReceiptId,
+    semantic_revision_id: semanticRevisionId,
+    raw_body_sha256: digests.raw_body_sha256,
+    verification_issuer: verificationIssuer,
+    verification_receipt_sha256: digests.verification_receipt_sha256,
+    observation_sha256: digests.observation_sha256,
+    immutable_facts_sha256: digests.immutable_facts_sha256,
+    immutable_facts: immutableFacts,
+  };
 }
 
 function unwrapPayload(value: unknown): RuntimeRow {

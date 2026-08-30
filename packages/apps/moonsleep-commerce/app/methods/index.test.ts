@@ -390,6 +390,9 @@ describe("Shopify source manual trigger", () => {
         updated_at: "2026-08-22T20:00:00Z",
         line_items: [{ id: 1, quantity: 1 }],
       },
+      business_admission_outcome: "pending",
+      accepted_order_receipt_id: null,
+      accepted_order_revision_id: null,
     };
     const ctx = {
       params: {
@@ -425,9 +428,50 @@ describe("Shopify source manual trigger", () => {
       run_id: "run-observation-1",
       provider_write_authority: false,
     });
-    expect(invoke).toHaveBeenCalledWith({
+    const immutableObservation = {
+      projection_work_id: observation.projection_work_id,
+      observation_receipt_id: observation.observation_receipt_id,
+      projection_target: observation.projection_target,
+      source_system: observation.source_system,
+      source_account_ref: observation.source_account_ref,
+      source_stream: observation.source_stream,
+      external_receipt_id: observation.external_receipt_id,
+      semantic_revision_id: observation.semantic_revision_id,
+      raw_body_sha256: observation.raw_body_sha256,
+      verification_issuer: observation.verification_issuer,
+      verification_receipt_sha256: observation.verification_receipt_sha256,
+      observation_sha256: observation.observation_sha256,
+      immutable_facts_sha256: observation.immutable_facts_sha256,
+      immutable_facts: observation.immutable_facts,
+    };
+    expect(invoke).toHaveBeenLastCalledWith({
       job_id: "job-orders",
-      input: { family: "orders.delta", connection_id: "shopify-primary", observation },
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}`,
+    });
+
+    ctx.params.observation = {
+      ...observation,
+      business_admission_outcome: "accepted",
+      accepted_order_receipt_id: "acceptedorderreceipt_" + "7".repeat(32),
+      accepted_order_revision_id: "acceptedorderrevision_" + "8".repeat(32),
+    };
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      run_id: "run-observation-1",
+    });
+    expect(invoke).toHaveBeenLastCalledWith({
+      job_id: "job-orders",
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
       trigger_source: "moonsleep-commerce-shopify-observation",
       max_attempts: 3,
       idempotency_key: `shopify-observation:${observation.projection_work_id}`,
