@@ -834,7 +834,12 @@ if [[ "${paid_order_prior_idempotency_readback}" != "[]" ]]; then
   printf 'paid-order idempotency key was claimed before explicit invocation: %s\n' \
     "${paid_order_prior_idempotency_readback}" >&2
 fi
-if ! paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"; then
+paid_order_invoke_status=0
+set +e
+paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+paid_order_invoke_status=$?
+set -e
+if [[ "${paid_order_invoke_status}" -ne 0 ]]; then
   paid_order_idempotency_readback="$(postgres_json "
     SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
     FROM (
