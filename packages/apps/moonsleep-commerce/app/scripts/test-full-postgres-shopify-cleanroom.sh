@@ -818,7 +818,22 @@ paid_order_invoke_params="$(jq -nc \
   --arg job_id "${paid_order_effects_job_id}" \
   --argjson input "${paid_order_effects_input}" \
   '{job_id:$job_id,input:$input,trigger_source:"cleanroom.shopify.orders_paid",idempotency_key:"shopify:orders-paid:cleanroom-webhook-receipt",max_attempts:3}')"
-paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+if ! paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"; then
+  paid_order_idempotency_readback="$(postgres_json "
+    SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
+    FROM (
+      SELECT reservation.idempotency_key, reservation.job_definition_id,
+             reservation.request_fingerprint, reservation.status,
+             reservation.first_run_id, reservation.active_run_id, reservation.latest_run_id,
+             run.trigger_source, run.status AS run_status, run.input_json
+      FROM nex_runtime.job_idempotency AS reservation
+      LEFT JOIN nex_runtime.job_runs AS run ON run.id = reservation.latest_run_id
+      WHERE reservation.idempotency_key = 'shopify:orders-paid:cleanroom-webhook-receipt'
+    ) AS candidate
+  ")"
+  printf 'paid-order idempotency readback: %s\n' "${paid_order_idempotency_readback}" >&2
+  exit 1
+fi
 paid_order_run_id="$(jq -er '.run.id' <<<"${paid_order_invocation}")"
 paid_order_run='{}'
 for _ in $(seq 1 90); do
