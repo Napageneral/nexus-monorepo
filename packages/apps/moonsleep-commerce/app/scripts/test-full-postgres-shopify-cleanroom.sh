@@ -449,7 +449,7 @@ jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_versio
 jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state}" >/dev/null
 
 health_before="$(runtime_call moonsleep-commerce.healthcheck '{}')"
-jq -e --arg app_sha256 "${app_sha256}" '
+jq -e '
   .status == "ok" and
   .projectors.shopify_customer_identity == "dormant_ready_full_postgres_activation_gates" and
   .projectors.shopify_order_commerce == "available_event_projector" and
@@ -459,7 +459,7 @@ jq -e --arg app_sha256 "${app_sha256}" '
 jobs_before="$(runtime_call jobs.list '{}')"
 subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
 schedules_before="$(runtime_call schedules.list '{}')"
-jq -e '
+jq -e --arg app_sha256 "${app_sha256}" '
   (.jobs | length) == 15 and
   ([.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce")] | length) == 2 and
   all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "inactive") and
