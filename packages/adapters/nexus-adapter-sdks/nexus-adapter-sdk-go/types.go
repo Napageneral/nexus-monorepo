@@ -26,8 +26,9 @@ type AdapterInfo struct {
 	Projection *AdapterProjection `json:"projection,omitempty"`
 
 	// Credential linking
-	CredentialService string `json:"credential_service,omitempty"` // Links to credential store service
-	MultiAccount      bool   `json:"multi_account"`
+	CredentialService   string `json:"credential_service,omitempty"` // Links to credential store service
+	MultiAccount        bool   `json:"multi_account"`
+	SupportsPayloadFile bool   `json:"supports_payload_file,omitempty"`
 
 	// Platform capabilities (for agent context)
 	PlatformCapabilities ChannelCapabilities `json:"platform_capabilities"`
