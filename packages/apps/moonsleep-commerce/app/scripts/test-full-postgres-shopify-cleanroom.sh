@@ -384,13 +384,12 @@ docker run -d \
   --name "${runtime_container}" \
   --platform linux/amd64 \
   --network "${network}" \
+  --privileged \
+  --cgroupns=private \
   --read-only \
   --security-opt no-new-privileges \
-  --cap-drop ALL \
-  --cap-add CHOWN \
-  --cap-add SETUID \
-  --cap-add SETGID \
-  --cap-add SETPCAP \
+  --env NEXUS_WORKER_PROCESSES=1 \
+  --env NEXUS_WORKER_CGROUP_ROOT=/sys/fs/cgroup/nex-job-attempts \
   --mount "type=volume,src=${state_volume},dst=/var/lib/nex" \
   --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
   --mount "type=bind,src=$(dirname "${adapter_artifact}"),dst=/artifacts/adapter,readonly" \
@@ -817,6 +816,11 @@ for _ in $(seq 1 90); do
   fi
   sleep 1
 done
+if [[ "$(jq -r '.run.status // ""' <<<"${paid_order_run}")" != "completed" ]]; then
+  printf 'paid-order Effects Run did not complete: %s\n' "$(jq -c . <<<"${paid_order_run}")" >&2
+  docker logs "${runtime_container}" >&2 || true
+  exit 1
+fi
 paid_order_output="$(jq -er '.run | select(.status == "completed") | .output_json | fromjson' <<<"${paid_order_run}")"
 jq -e '
   .contract_id == "moonsleep-commerce.shopify-paid-order-effects-result.v1" and
