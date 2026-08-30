@@ -839,7 +839,8 @@ set +e
 paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
 paid_order_invoke_status=$?
 set -e
-if [[ "${paid_order_invoke_status}" -ne 0 ]]; then
+if [[ "${paid_order_invoke_status}" -ne 0 ]] || \
+  ! jq -e '.run.id | type == "string" and length > 0' <<<"${paid_order_invocation}" >/dev/null 2>&1; then
   paid_order_idempotency_readback="$(postgres_json "
     SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
     FROM (
