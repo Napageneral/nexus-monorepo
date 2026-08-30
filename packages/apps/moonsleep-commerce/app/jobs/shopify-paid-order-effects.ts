@@ -4,6 +4,9 @@ import type { JobScriptContext } from "../../../../../nex/src/api/server-work.js
 type RuntimeRow = Record<string, unknown>;
 
 const INPUT_KEYS = [
+  "accepted_order_receipt_id",
+  "accepted_order_revision_id",
+  "accepted_order_revision_sha256",
   "contract_id",
   "observation_receipt_id",
   "projection_work_id",
@@ -14,7 +17,8 @@ const INPUT_KEYS = [
   "work_root_id",
 ] as const;
 const PROVIDERS = ["google_ads", "meta", "pinterest", "tiktok"] as const;
-const WORK_ROOT_ID_RE = /^shopify:orders-paid:\S{1,512}$/;
+const ACCEPTED_ORDER_RECEIPT_ID_RE = /^acceptance_[0-9a-f]{32}$/;
+const WORK_ROOT_ID_RE = /^shopify:accepted-order-receipt:acceptance_[0-9a-f]{32}$/;
 const OBSERVATION_RECEIPT_ID_RE = /^channelobs_[0-9a-f]{32}$/;
 const PROJECTION_WORK_ID_RE = /^channelprojection_[0-9a-f]{32}$/;
 const RECORD_ID_RE = /^record_[0-9a-f]{64}$/;
@@ -23,6 +27,9 @@ type PaidOrderEffectsInput = Readonly<{
   contract_id: "moonsleep-commerce.shopify-paid-order-effects-input.v1";
   work_root_id: string;
   shopify_order_id: string;
+  accepted_order_receipt_id: string;
+  accepted_order_revision_id: string;
+  accepted_order_revision_sha256: string;
   observation_receipt_id: string;
   projection_work_id: string;
   source_run_id: string;
@@ -68,10 +75,17 @@ function parseInput(value: unknown): PaidOrderEffectsInput {
   const recordIds = exactUniqueStrings(input.record_ids, RECORD_ID_RE, 1_000);
   const workRootId = exactString(input.work_root_id, 533);
   const shopifyOrderId = exactString(input.shopify_order_id, 64);
+  const acceptedOrderReceiptId = exactString(input.accepted_order_receipt_id, 43);
+  const acceptedOrderRevisionId = exactString(input.accepted_order_revision_id, 240);
+  const acceptedOrderRevisionSha256 = exactString(input.accepted_order_revision_sha256, 64);
   if (
     keys.join(",") !== [...INPUT_KEYS].toSorted().join(",") ||
     input.contract_id !== "moonsleep-commerce.shopify-paid-order-effects-input.v1" ||
     !WORK_ROOT_ID_RE.test(workRootId) ||
+    workRootId !== `shopify:accepted-order-receipt:${acceptedOrderReceiptId}` ||
+    !ACCEPTED_ORDER_RECEIPT_ID_RE.test(acceptedOrderReceiptId) ||
+    !acceptedOrderRevisionId ||
+    !/^[0-9a-f]{64}$/.test(acceptedOrderRevisionSha256) ||
     !/^[1-9][0-9]{0,63}$/.test(shopifyOrderId) ||
     !OBSERVATION_RECEIPT_ID_RE.test(exactString(input.observation_receipt_id, 43)) ||
     !PROJECTION_WORK_ID_RE.test(exactString(input.projection_work_id, 50)) ||
@@ -85,6 +99,9 @@ function parseInput(value: unknown): PaidOrderEffectsInput {
     contract_id: input.contract_id,
     work_root_id: workRootId,
     shopify_order_id: shopifyOrderId,
+    accepted_order_receipt_id: acceptedOrderReceiptId,
+    accepted_order_revision_id: acceptedOrderRevisionId,
+    accepted_order_revision_sha256: acceptedOrderRevisionSha256,
     observation_receipt_id: input.observation_receipt_id as string,
     projection_work_id: input.projection_work_id as string,
     source_run_id: input.source_run_id as string,
@@ -150,6 +167,9 @@ export default async function shopifyPaidOrderEffectsJob(
       contract_id: "moonsleep-commerce.shopify-paid-order-provider-intent.v1",
       provider,
       shopify_order_id: input.shopify_order_id,
+      accepted_order_receipt_id: input.accepted_order_receipt_id,
+      accepted_order_revision_id: input.accepted_order_revision_id,
+      accepted_order_revision_sha256: input.accepted_order_revision_sha256,
       work_root_id: input.work_root_id,
       source_run_id: input.source_run_id,
       projector_run_ids: input.projector_run_ids,
@@ -192,6 +212,9 @@ export default async function shopifyPaidOrderEffectsJob(
     contract_id: "moonsleep-commerce.shopify-paid-order-effects-result.v1",
     work_root_id: input.work_root_id,
     shopify_order_id: input.shopify_order_id,
+    accepted_order_receipt_id: input.accepted_order_receipt_id,
+    accepted_order_revision_id: input.accepted_order_revision_id,
+    accepted_order_revision_sha256: input.accepted_order_revision_sha256,
     run_id: runId,
     source_run_id: input.source_run_id,
     projector_run_ids: input.projector_run_ids,

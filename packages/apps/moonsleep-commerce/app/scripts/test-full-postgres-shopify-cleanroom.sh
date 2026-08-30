@@ -823,11 +823,11 @@ paid_order_effects_input="$(jq -nc \
   --arg customer_record_id "${CUSTOMER_SOURCE_ID}" \
   --arg order_record_id "${ORDER_SOURCE_ID}" \
   --arg line_record_id "${LINE_SOURCE_ID}" \
-  '{contract_id:"moonsleep-commerce.shopify-paid-order-effects-input.v1",work_root_id:"shopify:orders-paid:cleanroom-webhook-receipt",shopify_order_id:"900719925474099312346",observation_receipt_id:("channelobs_" + ("1" * 32)),projection_work_id:("channelprojection_" + ("2" * 32)),source_run_id:"jobrun_cleanroom_source",projector_run_ids:["jobrun_cleanroom_projector"],record_ids:[$order_record_id,$line_record_id,$customer_record_id]}')"
+  '{contract_id:"moonsleep-commerce.shopify-paid-order-effects-input.v1",work_root_id:("shopify:accepted-order-receipt:acceptance_" + ("a" * 32)),shopify_order_id:"900719925474099312346",accepted_order_receipt_id:("acceptance_" + ("a" * 32)),accepted_order_revision_id:"900719925474099312346:2026-08-30T00:00:00Z",accepted_order_revision_sha256:("b" * 64),observation_receipt_id:("channelobs_" + ("1" * 32)),projection_work_id:("channelprojection_" + ("2" * 32)),source_run_id:"jobrun_cleanroom_source",projector_run_ids:["jobrun_cleanroom_projector"],record_ids:[$order_record_id,$line_record_id,$customer_record_id]}')"
 paid_order_invoke_params="$(jq -nc \
   --arg job_id "${paid_order_effects_job_id}" \
   --argjson input "${paid_order_effects_input}" \
-  '{job_id:$job_id,input:$input,trigger_source:"cleanroom.shopify.orders_paid",idempotency_key:"shopify:orders-paid:cleanroom-webhook-receipt",max_attempts:3}')"
+  '{job_id:$job_id,input:$input,trigger_source:"cleanroom.shopify.orders_paid",idempotency_key:("shopify:accepted-order-receipt:acceptance_" + ("a" * 32)),max_attempts:3}')"
 paid_order_prior_idempotency_readback="$(postgres_json "
   SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
   FROM (
@@ -837,7 +837,7 @@ paid_order_prior_idempotency_readback="$(postgres_json "
            run.trigger_source, run.status AS run_status, run.input_json
     FROM nex_runtime.job_idempotency AS reservation
     LEFT JOIN nex_runtime.job_runs AS run ON run.id = reservation.latest_run_id
-    WHERE reservation.idempotency_key = 'shopify:orders-paid:cleanroom-webhook-receipt'
+    WHERE reservation.idempotency_key = 'shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   ) AS candidate
 ")"
 if [[ "${paid_order_prior_idempotency_readback}" != "[]" ]]; then
@@ -860,7 +860,7 @@ if [[ "${paid_order_invoke_status}" -ne 0 ]] || \
              run.trigger_source, run.status AS run_status, run.input_json
       FROM nex_runtime.job_idempotency AS reservation
       LEFT JOIN nex_runtime.job_runs AS run ON run.id = reservation.latest_run_id
-      WHERE reservation.idempotency_key = 'shopify:orders-paid:cleanroom-webhook-receipt'
+      WHERE reservation.idempotency_key = 'shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     ) AS candidate
   ")"
   printf 'paid-order idempotency readback: %s\n' "${paid_order_idempotency_readback}" >&2
@@ -888,7 +888,9 @@ fi
 paid_order_output="$(jq -er '.run | select(.status == "completed") | .output_json | fromjson' <<<"${paid_order_run}")"
 jq -e '
   .contract_id == "moonsleep-commerce.shopify-paid-order-effects-result.v1" and
-  .work_root_id == "shopify:orders-paid:cleanroom-webhook-receipt" and
+  .work_root_id == "shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  .accepted_order_receipt_id == "acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  .accepted_order_revision_sha256 == ("b" * 64) and
   .provider_write_authority == false and .provider_write_count == 0 and
   (.effects | length) == 4 and
   ([.effects[].provider] | sort) == ["google_ads","meta","pinterest","tiktok"] and
