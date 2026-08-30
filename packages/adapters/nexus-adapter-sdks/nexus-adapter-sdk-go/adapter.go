@@ -169,11 +169,11 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  records.backfill --connection <id> --since <date> [--to <date>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.health --connection <id>\n")
 	fmt.Fprintf(os.Stderr, "  adapter.connections.list\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n")
-	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json> | --payload-file <path>]\n")
+	fmt.Fprintf(os.Stderr, "  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json> | --payload-file <path>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.status --session-id <id> [--connection <id>]\n")
 	fmt.Fprintf(os.Stderr, "  adapter.setup.cancel --session-id <id> [--connection <id>]\n")
-	fmt.Fprintf(os.Stderr, "  <adapter-native-method> [--connection <id>] [--payload-json <json>]\n")
+	fmt.Fprintf(os.Stderr, "  <adapter-native-method> [--connection <id>] [--payload-json <json> | --payload-file <path>]\n")
 	fmt.Fprintf(os.Stderr, "\nGlobal flags:\n")
 	fmt.Fprintf(os.Stderr, "  --verbose, -v                     Enable debug logging\n")
 }
@@ -187,6 +187,9 @@ func runInfo(adapter Adapter) error {
 	info, err := adapter.Operations.AdapterInfo(context.Background())
 	if err != nil {
 		return err
+	}
+	if info != nil {
+		info.SupportsPayloadFile = true
 	}
 	return writeJSON(info)
 }
@@ -328,6 +331,7 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 	connection := fs.String("connection", "", "Connection ID")
 	sessionID := fs.String("session-id", "", "Setup session ID")
 	payloadJSON := fs.String("payload-json", "", "JSON object payload")
+	payloadFile := fs.String("payload-file", "", "Path to a JSON object payload")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -344,14 +348,11 @@ func runSetup(adapter Adapter, args []string, operation AdapterOperation) error 
 		return fmt.Errorf("--session-id is required for %s", operation)
 	}
 
-	if raw := strings.TrimSpace(*payloadJSON); raw != "" {
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-			return fmt.Errorf("--payload-json must be a valid JSON object: %w", err)
-		}
-		if payload == nil {
-			return fmt.Errorf("--payload-json must decode to a JSON object")
-		}
+	payload, err := parsePayloadFlags(*payloadJSON, *payloadFile)
+	if err != nil {
+		return err
+	}
+	if payload != nil {
 		req.Payload = payload
 	}
 
@@ -412,6 +413,7 @@ func runMethod(adapter Adapter, methodName string, args []string) error {
 	fs := flag.NewFlagSet(methodName, flag.ContinueOnError)
 	connection := fs.String("connection", "", "Connection ID")
 	payloadJSON := fs.String("payload-json", "", "JSON object payload")
+	payloadFile := fs.String("payload-file", "", "Path to a JSON object payload")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -424,14 +426,11 @@ func runMethod(adapter Adapter, methodName string, args []string) error {
 		return fmt.Errorf("--connection is required for %s", methodName)
 	}
 
-	if raw := strings.TrimSpace(*payloadJSON); raw != "" {
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-			return fmt.Errorf("--payload-json must be a valid JSON object: %w", err)
-		}
-		if payload == nil {
-			return fmt.Errorf("--payload-json must decode to a JSON object")
-		}
+	payload, err := parsePayloadFlags(*payloadJSON, *payloadFile)
+	if err != nil {
+		return err
+	}
+	if payload != nil {
 		req.Payload = payload
 	} else {
 		req.Payload = map[string]any{}
@@ -445,6 +444,38 @@ func runMethod(adapter Adapter, methodName string, args []string) error {
 		result = map[string]any{}
 	}
 	return writeJSON(result)
+}
+
+func parsePayloadFlags(payloadJSON, payloadFile string) (map[string]any, error) {
+	rawJSON := strings.TrimSpace(payloadJSON)
+	filePath := strings.TrimSpace(payloadFile)
+	if rawJSON != "" && filePath != "" {
+		return nil, fmt.Errorf("--payload-json and --payload-file are mutually exclusive")
+	}
+
+	var raw []byte
+	source := "--payload-json"
+	if filePath != "" {
+		var err error
+		raw, err = os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("--payload-file could not be read: %w", err)
+		}
+		source = "--payload-file"
+	} else if rawJSON != "" {
+		raw = []byte(rawJSON)
+	} else {
+		return nil, nil
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("%s must be a valid JSON object: %w", source, err)
+	}
+	if payload == nil {
+		return nil, fmt.Errorf("%s must decode to a JSON object", source)
+	}
+	return payload, nil
 }
 
 func findDeclaredMethod(info *AdapterInfo, methodName string) (AdapterMethod, bool) {
