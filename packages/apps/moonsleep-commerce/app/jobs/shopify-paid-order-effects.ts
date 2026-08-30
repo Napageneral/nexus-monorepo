@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { JobScriptContext } from "../../../../../nex/src/api/server-work.js";
 
 type RuntimeRow = Record<string, unknown>;
 
@@ -29,17 +30,7 @@ type PaidOrderEffectsInput = Readonly<{
   record_ids: readonly string[];
 }>;
 
-type PaidOrderEffectsContext = Readonly<{
-  input: unknown;
-  run: Readonly<{ id: string; created_at: string }>;
-  nex: {
-    jobs: {
-      effects: {
-        perform(params: { request: RuntimeRow }): Promise<unknown>;
-      };
-    };
-  };
-}>;
+type PaidOrderEffectsContext = Pick<JobScriptContext, "input" | "run" | "runtime">;
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
@@ -166,7 +157,7 @@ export default async function shopifyPaidOrderEffectsJob(
     });
     const receipt = terminalReceipt(
       unwrapPayload(
-        await context.nex.jobs.effects.perform({
+        await context.runtime.callMethod("jobs.effects.perform", {
           request: {
             action: "reserve",
             transitionId: `shopify-paid-order:${rootDigest}:${provider}:reserve`,

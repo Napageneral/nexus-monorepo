@@ -781,6 +781,71 @@ jq -e --argjson before "${counts_before_restart}" '
   .customer_facets == $before.customer_facets and
   .accepted_observation_compatibility_receipts == 0
 ' <<<"${counts_after_restart}" >/dev/null
+
+echo "[cleanroom] invoke the paid-order Job and prove four reserve-only Effects"
+paid_order_effects_job_id="$(jq -er '
+  .jobs[]
+  | select(
+      .name == "moonsleep-commerce.shopify-paid-order-effects" and
+      .status == "active" and
+      .execution_profile_revision_id == "job_profile_bulk_compute_r1" and
+      .runtime_method_allowlist == "[\"jobs.effects.perform\"]"
+    )
+  | .id
+' <<<"${jobs_after}")"
+paid_order_effects_input="$(jq -nc \
+  --arg customer_record_id "${CUSTOMER_SOURCE_ID}" \
+  --arg order_record_id "${ORDER_SOURCE_ID}" \
+  --arg line_record_id "${LINE_SOURCE_ID}" \
+  '{contract_id:"moonsleep-commerce.shopify-paid-order-effects-input.v1",work_root_id:"shopify:orders-paid:cleanroom-webhook-receipt",shopify_order_id:"900719925474099312346",observation_receipt_id:("channelobs_" + ("1" * 32)),projection_work_id:("channelprojection_" + ("2" * 32)),source_run_id:"jobrun_cleanroom_source",projector_run_ids:["jobrun_cleanroom_projector"],record_ids:[$order_record_id,$line_record_id,$customer_record_id]}')"
+paid_order_invoke_params="$(jq -nc \
+  --arg job_id "${paid_order_effects_job_id}" \
+  --argjson input "${paid_order_effects_input}" \
+  '{job_id:$job_id,input:$input,trigger_source:"cleanroom.shopify.orders_paid",idempotency_key:"shopify:orders-paid:cleanroom-webhook-receipt",max_attempts:3}')"
+paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+paid_order_run_id="$(jq -er '.run.id' <<<"${paid_order_invocation}")"
+paid_order_run='{}'
+for _ in $(seq 1 90); do
+  paid_order_run="$(runtime_call jobs.runs.get "$(jq -nc --arg id "${paid_order_run_id}" '{id:$id}')")"
+  paid_order_run_status="$(jq -r '.run.status // ""' <<<"${paid_order_run}")"
+  if [[ "${paid_order_run_status}" == "completed" ]]; then
+    break
+  fi
+  if [[ "${paid_order_run_status}" == "failed" || "${paid_order_run_status}" == "cancelled" || "${paid_order_run_status}" == "quarantined" ]]; then
+    printf 'paid-order Effects Run failed: %s\n' "$(jq -c . <<<"${paid_order_run}")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+paid_order_output="$(jq -er '.run | select(.status == "completed") | .output_json | fromjson' <<<"${paid_order_run}")"
+jq -e '
+  .contract_id == "moonsleep-commerce.shopify-paid-order-effects-result.v1" and
+  .work_root_id == "shopify:orders-paid:cleanroom-webhook-receipt" and
+  .provider_write_authority == false and .provider_write_count == 0 and
+  (.effects | length) == 4 and
+  ([.effects[].provider] | sort) == ["google_ads","meta","pinterest","tiktok"] and
+  all(.effects[];
+    .status == "reserved" and
+    (.effect_id | test("^effect_shopify_paid_[0-9a-f]{32}$")) and
+    (.receipt_id | test("^effectreceipt_[0-9a-f]{32}$")) and
+    (.receipt_sha256 | test("^[0-9a-f]{64}$"))
+  )
+' <<<"${paid_order_output}" >/dev/null
+paid_order_effect_readback="$(postgres_json "
+  SELECT json_build_object(
+    'effects', (SELECT COUNT(*) FROM nex_runtime.job_effects WHERE job_run_id = '${paid_order_run_id}'),
+    'reserved', (SELECT COUNT(*) FROM nex_runtime.job_effects WHERE job_run_id = '${paid_order_run_id}' AND status = 'reserved'),
+    'receipts', (
+      SELECT COUNT(*)
+        FROM nex_runtime.job_effect_transition_receipts receipt
+        JOIN nex_runtime.job_effects effect ON effect.id = receipt.effect_id
+       WHERE effect.job_run_id = '${paid_order_run_id}'
+    )
+  )")"
+jq -e '.effects == 4 and .reserved == 4 and .receipts == 4' <<<"${paid_order_effect_readback}" >/dev/null
+paid_order_replay="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+jq -e --arg run_id "${paid_order_run_id}" '.run.id == $run_id and .run.status == "completed"' <<<"${paid_order_replay}" >/dev/null
+echo "[cleanroom] paid-order Effect reservations and replay verified"
 [[ -z "$(git -C "${UMBRELLA_ROOT}" status --porcelain=v1 --untracked-files=all)" ]] || {
   echo "cleanroom changed the source worktree" >&2
   exit 1
@@ -808,9 +873,11 @@ jq -n \
   --arg adapter_sha256 "${adapter_sha256}" \
   --arg app_sha256 "${app_sha256}" \
   --arg seed_contract_sha256 "${seed_contract_sha256}" \
+  --arg paid_order_run_id "${paid_order_run_id}" \
   --argjson initial_counts "${initial_counts}" \
   --argjson terminal_counts "${counts_after_restart}" \
   --argjson record_contract "${record_contract}" \
+  --argjson paid_order_effect_readback "${paid_order_effect_readback}" \
   '{
     ok:true,
     finished_at:$finished_at,
@@ -822,6 +889,7 @@ jq -n \
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",pre_restart_ingest_receipts:6,post_restart_ingest_receipts:9,record_contract:$record_contract},
     customer_projection:{path:"record.ingested event",orders:0,line_items:0,customer_facets:1,canonical_contact_link:true},
     commerce_projection:{path:"record.ingested event",orders:1,line_items:1,canonical_customer_link:true,address_snapshots_sha256_bound:true},
+    paid_order_effects:{run_id:$paid_order_run_id,status:"completed",providers:["google_ads","meta","pinterest","tiktok"],mode:"reserve_only",replay_same_run:true,durable_readback:$paid_order_effect_readback,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
     work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",paid_order_effects_job_count:1,paid_order_effects_mode:"reserve_only",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:3,active_queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,

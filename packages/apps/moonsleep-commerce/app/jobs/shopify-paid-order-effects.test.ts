@@ -13,32 +13,34 @@ const INPUT = {
 } as const;
 
 function fixture() {
-  const perform = vi.fn(async ({ request }: { request: Record<string, unknown> }) => ({
-    ok: true,
-    payload: {
-      receipt: {
-        action: "reserve",
-        effectId: (request.effect as Record<string, unknown>).effectId,
-        receiptId: `effectreceipt_${"4".repeat(32)}`,
-        readbackSha256: "5".repeat(64),
-        resultingEffect: {
-          ...(request.effect as Record<string, unknown>),
-          revision: 1,
-          status: "reserved",
+  const callMethod = vi.fn(
+    async (method: string, { request }: { request: Record<string, unknown> }) => ({
+      ok: true,
+      payload: {
+        receipt: {
+          action: "reserve",
+          effectId: (request.effect as Record<string, unknown>).effectId,
+          receiptId: `effectreceipt_${"4".repeat(32)}`,
+          readbackSha256: "5".repeat(64),
+          resultingEffect: {
+            ...(request.effect as Record<string, unknown>),
+            revision: 1,
+            status: "reserved",
+          },
         },
+        provider_write_authorized: false,
       },
-      provider_write_authorized: false,
-    },
-  }));
+    }),
+  );
   return {
-    perform,
+    callMethod,
     context: {
       input: INPUT,
       run: {
         id: "jobrun_effects_1",
         created_at: "2026-08-29T17:00:00.000Z",
       },
-      nex: { jobs: { effects: { perform } } },
+      runtime: { callMethod },
     },
   };
 }
@@ -65,15 +67,21 @@ describe("Shopify paid-order Effects Job", () => {
       provider_write_count: 0,
     });
 
-    expect(test.perform).toHaveBeenCalledTimes(4);
-    expect(test.perform.mock.calls.map((call) => call[0].request.action)).toEqual([
+    expect(test.callMethod).toHaveBeenCalledTimes(4);
+    expect(test.callMethod.mock.calls.map((call) => call[0])).toEqual([
+      "jobs.effects.perform",
+      "jobs.effects.perform",
+      "jobs.effects.perform",
+      "jobs.effects.perform",
+    ]);
+    expect(test.callMethod.mock.calls.map((call) => call[1].request.action)).toEqual([
       "reserve",
       "reserve",
       "reserve",
       "reserve",
     ]);
-    for (const call of test.perform.mock.calls) {
-      expect(call[0].request).toMatchObject({
+    for (const call of test.callMethod.mock.calls) {
+      expect(call[1].request).toMatchObject({
         action: "reserve",
         requestedAt: "2026-08-29T17:00:00.000Z",
         maxDispatches: 1,
@@ -92,7 +100,7 @@ describe("Shopify paid-order Effects Job", () => {
     await shopifyPaidOrderEffectsJob(first.context);
     await shopifyPaidOrderEffectsJob(second.context);
 
-    expect(second.perform.mock.calls).toEqual(first.perform.mock.calls);
+    expect(second.callMethod.mock.calls).toEqual(first.callMethod.mock.calls);
   });
 
   it("fails closed before reserving Effects when the work-root contract is malformed", async () => {
@@ -104,12 +112,12 @@ describe("Shopify paid-order Effects Job", () => {
         input: { ...INPUT, work_root_id: "order-99001" },
       }),
     ).rejects.toThrow("shopify_paid_order_effects_input_invalid");
-    expect(test.perform).not.toHaveBeenCalled();
+    expect(test.callMethod).not.toHaveBeenCalled();
   });
 
   it("fails closed when reservation readback lacks durable receipt evidence", async () => {
     const test = fixture();
-    test.perform.mockImplementationOnce(async ({ request }) => {
+    test.callMethod.mockImplementationOnce(async (_method, { request }) => {
       const effectId = (request.effect as Record<string, unknown>).effectId;
       return {
         ok: true,
