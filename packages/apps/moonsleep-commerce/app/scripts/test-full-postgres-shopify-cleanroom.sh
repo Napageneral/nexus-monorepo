@@ -944,6 +944,7 @@ jq -n \
   --arg app_sha256 "${app_sha256}" \
   --arg seed_contract_sha256 "${seed_contract_sha256}" \
   --arg paid_order_run_id "${paid_order_run_id}" \
+  --argjson paid_order_output "${paid_order_output}" \
   --argjson initial_counts "${initial_counts}" \
   --argjson terminal_counts "${counts_after_restart}" \
   --argjson record_contract "${record_contract}" \
@@ -959,7 +960,7 @@ jq -n \
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",pre_restart_ingest_receipts:6,post_restart_ingest_receipts:9,record_contract:$record_contract},
     customer_projection:{path:"record.ingested event",orders:0,line_items:0,customer_facets:1,canonical_contact_link:true},
     commerce_projection:{path:"record.ingested event",orders:1,line_items:1,canonical_customer_link:true,address_snapshots_sha256_bound:true},
-    paid_order_effects:{run_id:$paid_order_run_id,status:"completed",script_release_sha256:$app_sha256,providers:["google_ads","meta","pinterest","tiktok"],mode:"reserve_only",replay_same_run:true,durable_readback:$paid_order_effect_readback,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
+    paid_order_effects:{run_id:$paid_order_run_id,status:"completed",script_release_sha256:$app_sha256,work_root_id:$paid_order_output.work_root_id,accepted_order_receipt_id:$paid_order_output.accepted_order_receipt_id,accepted_order_revision_id:$paid_order_output.accepted_order_revision_id,accepted_order_revision_sha256:$paid_order_output.accepted_order_revision_sha256,providers:["google_ads","meta","pinterest","tiktok"],mode:"reserve_only",replay_same_run:true,durable_readback:$paid_order_effect_readback,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
     work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",paid_order_effects_job_count:1,paid_order_effects_mode:"reserve_only",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:3,active_queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,
