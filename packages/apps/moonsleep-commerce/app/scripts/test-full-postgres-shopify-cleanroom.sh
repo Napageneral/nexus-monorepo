@@ -448,7 +448,7 @@ jq -e '
   ([.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce")] | length) == 2 and
   all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "inactive") and
   ([.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source."))] | length) == 12 and
-  ([.jobs[] | select(.name == "moonsleep-commerce.shopify-paid-order-effects" and .status == "active" and .lane_id == "adapter_io" and .execution_profile_revision_id == "job_profile_provider_effect_r1")] | length) == 1 and
+  ([.jobs[] | select(.name == "moonsleep-commerce.shopify-paid-order-effects" and .status == "active" and .lane_id == "adapter_io" and .execution_profile_revision_id == "job_profile_bulk_compute_r1")] | length) == 1 and
   all(.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source.")); .status == "active" and (.config_json | fromjson | has("connection_id") | not))
 ' <<<"${jobs_before}" >/dev/null
 jq -e '
