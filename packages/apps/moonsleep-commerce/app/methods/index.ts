@@ -76,11 +76,7 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function requireExactObservationString(
-  row: RuntimeRow,
-  field: string,
-  maximum = 512,
-): string {
+function requireExactObservationString(row: RuntimeRow, field: string, maximum = 512): string {
   const value = asString(row[field]);
   if (!value || row[field] !== value || Buffer.byteLength(value, "utf8") > maximum) {
     throw new Error(`observation.${field} must be a trimmed non-empty string`);
@@ -94,11 +90,7 @@ function requireShopifyObservation(value: unknown, family: string): RuntimeRow |
   if (Object.keys(observation).length === 0) {
     throw new Error("observation must be an object");
   }
-  const projectionWorkId = requireExactObservationString(
-    observation,
-    "projection_work_id",
-    50,
-  );
+  const projectionWorkId = requireExactObservationString(observation, "projection_work_id", 50);
   const observationReceiptId = requireExactObservationString(
     observation,
     "observation_receipt_id",
@@ -121,34 +113,49 @@ function requireShopifyObservation(value: unknown, family: string): RuntimeRow |
   }
   const sourceStream = requireExactObservationString(observation, "source_stream", 64);
   if (
-    OBSERVATION_STREAM_FAMILIES[
-      sourceStream as keyof typeof OBSERVATION_STREAM_FAMILIES
-    ] !== family
+    OBSERVATION_STREAM_FAMILIES[sourceStream as keyof typeof OBSERVATION_STREAM_FAMILIES] !== family
   ) {
     throw new Error("observation.source_stream does not match family");
   }
-  requireExactObservationString(observation, "external_receipt_id");
-  requireExactObservationString(observation, "semantic_revision_id");
-  if (
-    requireExactObservationString(observation, "verification_issuer", 64) !==
-    "shopify-hmac-sha256"
-  ) {
+  const externalReceiptId = requireExactObservationString(observation, "external_receipt_id");
+  const semanticRevisionId = requireExactObservationString(observation, "semantic_revision_id");
+  const verificationIssuer = requireExactObservationString(observation, "verification_issuer", 64);
+  if (verificationIssuer !== "shopify-hmac-sha256") {
     throw new Error("observation.verification_issuer must be shopify-hmac-sha256");
   }
+  const digests: RuntimeRow = {};
   for (const field of [
     "raw_body_sha256",
     "verification_receipt_sha256",
     "observation_sha256",
     "immutable_facts_sha256",
   ]) {
-    if (!SHA256_RE.test(requireExactObservationString(observation, field, 64))) {
+    const digest = requireExactObservationString(observation, field, 64);
+    if (!SHA256_RE.test(digest)) {
       throw new Error(`observation.${field} must be a lowercase SHA-256 digest`);
     }
+    digests[field] = digest;
   }
-  if (Object.keys(asRecord(observation.immutable_facts)).length === 0) {
+  const immutableFacts = asRecord(observation.immutable_facts);
+  if (Object.keys(immutableFacts).length === 0) {
     throw new Error("observation.immutable_facts must be a non-empty object");
   }
-  return observation;
+  return {
+    projection_work_id: projectionWorkId,
+    observation_receipt_id: observationReceiptId,
+    projection_target: "nex",
+    source_system: "shopify",
+    source_account_ref: "moonsleep",
+    source_stream: sourceStream,
+    external_receipt_id: externalReceiptId,
+    semantic_revision_id: semanticRevisionId,
+    raw_body_sha256: digests.raw_body_sha256,
+    verification_issuer: verificationIssuer,
+    verification_receipt_sha256: digests.verification_receipt_sha256,
+    observation_sha256: digests.observation_sha256,
+    immutable_facts_sha256: digests.immutable_facts_sha256,
+    immutable_facts: immutableFacts,
+  };
 }
 
 function unwrapPayload(value: unknown): RuntimeRow {
@@ -446,9 +453,7 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
     throw new Error("connection_id is malformed");
   }
   const observation = requireShopifyObservation(ctx.params.observation, family);
-  const projectionWorkId = observation
-    ? asString(observation.projection_work_id)
-    : "";
+  const projectionWorkId = observation ? asString(observation.projection_work_id) : "";
   const requestId = asString(ctx.params.request_id) || projectionWorkId;
   if (!SOURCE_REQUEST_ID_RE.test(requestId)) {
     throw new Error("request_id is malformed");
@@ -863,7 +868,9 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
     return { id, record };
   });
 
-  const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentities>[0];
+  const identityClient = ctx.nex as unknown as Parameters<
+    typeof projectShopifyCustomerIdentities
+  >[0];
   const projected = await projectShopifyCustomerIdentities(
     identityClient,
     records.map(({ record }) => record),

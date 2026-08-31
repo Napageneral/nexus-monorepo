@@ -51,6 +51,7 @@ runtime_container="${network}-runtime"
 postgres_volume="${network}-postgres"
 state_volume="${network}-state"
 credential_volume="${network}-credentials"
+migrator_credential_volume="${network}-migrator-credentials"
 runtime_role="nex_moonsleep_runtime"
 migrator_role="nex_moonsleep_migrator"
 runner_temp="$(mktemp -d /private/tmp/nex-shopify-full-postgres.XXXXXX)"
@@ -58,7 +59,7 @@ chmod 0700 "${runner_temp}"
 
 cleanup_resources() {
   docker rm -f "${runtime_container}" "${postgres_container}" >/dev/null 2>&1 || true
-  docker volume rm -f "${postgres_volume}" "${state_volume}" "${credential_volume}" >/dev/null 2>&1 || true
+  docker volume rm -f "${postgres_volume}" "${state_volume}" "${credential_volume}" "${migrator_credential_volume}" >/dev/null 2>&1 || true
   docker network rm "${network}" >/dev/null 2>&1 || true
 }
 
@@ -171,7 +172,24 @@ wait_for_postgres() {
 }
 
 wait_for_runtime() {
-  local attempt
+  local attempt ready_marker=0 started_at
+  started_at="$(docker inspect --format '{{.State.StartedAt}}' "${runtime_container}")"
+  for attempt in $(seq 1 90); do
+    if docker logs --since "${started_at}" "${runtime_container}" 2>&1 \
+      | grep -F 'runtime started (no adapter monitors started)' >/dev/null; then
+      ready_marker=1
+      break
+    fi
+    if [[ "$(docker inspect --format '{{.State.Running}}' "${runtime_container}")" != "true" ]]; then
+      docker logs "${runtime_container}" >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+  if [[ "${ready_marker}" != "1" ]]; then
+    docker logs "${runtime_container}" >&2 || true
+    return 1
+  fi
   for attempt in $(seq 1 90); do
     if docker exec "${runtime_container}" sh -c '
       token=$(cat /run/moonsleep-load-credentials/runtime-token)
@@ -198,12 +216,13 @@ runtime_counts() {
       'ingest_receipts', (SELECT COUNT(*) FROM nex_runtime_immutable_records_v1.record_ingest_receipts),
       'legacy_records', (SELECT COUNT(*) FROM nex_runtime.records),
       'legacy_receipts', (SELECT COUNT(*) FROM nex_runtime.record_ingest_receipts),
-      'legacy_events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
+      'events', (SELECT COUNT(*) FROM nex_runtime.durable_events),
       'entities', (SELECT COUNT(*) FROM nex_runtime.entities),
       'contacts', (SELECT COUNT(*) FROM nex_runtime.contacts),
       'observations', (SELECT COUNT(*) FROM nex_runtime.contact_observations),
       'tags', (SELECT COUNT(*) FROM nex_runtime.entity_tags),
-      'queue', (SELECT COUNT(*) FROM nex_runtime.job_queue),
+      'queue_rows', (SELECT COUNT(*) FROM nex_runtime.job_queue),
+      'active_queue_rows', (SELECT COUNT(*) FROM nex_runtime.job_queue WHERE queue_status IN ('queued', 'leased')),
       'dispatch_receipts', (SELECT COUNT(*) FROM nex_runtime.event_dispatch_receipts),
       'adapter_instances', (SELECT COUNT(*) FROM nex_runtime.adapter_instances),
       'commerce_orders', (SELECT COUNT(*) FROM nex_runtime.commerce_orders),
@@ -269,9 +288,11 @@ docker network create --internal "${network}" >/dev/null
 docker volume create "${postgres_volume}" >/dev/null
 docker volume create "${state_volume}" >/dev/null
 docker volume create "${credential_volume}" >/dev/null
+docker volume create "${migrator_credential_volume}" >/dev/null
 
 runtime_token="nex_rt_$(openssl rand -hex 24)"
 postgres_dsn="postgresql://${runtime_role}@postgres:5432/moonsleep_nex"
+migrator_postgres_dsn="postgresql://${migrator_role}@postgres:5432/moonsleep_nex"
 
 docker run --rm \
   --platform linux/amd64 \
@@ -319,6 +340,22 @@ docker run --rm \
       chown root:root /target/postgres-dsn /target/runtime-token /target/bootstrap-seed.yaml
       chmod 0400 /target/postgres-dsn /target/runtime-token /target/bootstrap-seed.yaml'
 
+docker run --rm \
+  --platform linux/amd64 \
+  --network none \
+  --read-only \
+  --user 0:0 \
+  --env "MIGRATOR_POSTGRES_DSN=${migrator_postgres_dsn}" \
+  --mount "type=volume,src=${migrator_credential_volume},dst=/target" \
+  --entrypoint sh \
+  "${NEX_IMAGE}" \
+  -c 'set -eu
+      umask 077
+      chmod 0700 /target
+      printf "%s\n" "$MIGRATOR_POSTGRES_DSN" > /target/postgres-migrator-dsn
+      chown root:root /target/postgres-migrator-dsn
+      chmod 0400 /target/postgres-migrator-dsn'
+
 docker run -d \
   --name "${postgres_container}" \
   --platform linux/amd64 \
@@ -349,11 +386,12 @@ migration_receipt="$(docker run --rm \
   --network "${network}" \
   --read-only \
   --security-opt no-new-privileges \
+  --env NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=0 \
   --env NEXUS_RUNTIME_STORAGE_PROFILE=moonsleep-postgres-v1 \
-  --env NEXUS_POSTGRES_MIGRATOR_CONNECTION_ENV=CLEANROOM_MIGRATOR_DATABASE_URL \
-  --env "CLEANROOM_MIGRATOR_DATABASE_URL=postgresql://${migrator_role}@postgres/moonsleep_nex" \
+  --env NEXUS_POSTGRES_CONNECTION_FILE=/run/nex-credentials/postgres-migrator-dsn \
   --env "NEXUS_POSTGRES_RECORDS_RUNTIME_ROLE=${runtime_role}" \
   --env NEXUS_POSTGRES_RECORDS_SCHEMA=nex_runtime \
+  --mount "type=volume,src=${migrator_credential_volume},dst=/run/nex-credentials,readonly" \
   --entrypoint node \
   "${NEX_IMAGE}" \
   /opt/nex/dist/postgres-record-store-migrate.js)"
@@ -363,12 +401,12 @@ docker run -d \
   --name "${runtime_container}" \
   --platform linux/amd64 \
   --network "${network}" \
+  --privileged \
+  --cgroupns=private \
   --read-only \
   --security-opt no-new-privileges \
-  --cap-drop ALL \
-  --cap-add CHOWN \
-  --cap-add SETUID \
-  --cap-add SETGID \
+  --env NEXUS_WORKER_PROCESSES=1 \
+  --env NEXUS_WORKER_CGROUP_ROOT=/sys/fs/cgroup/nex-job-attempts \
   --mount "type=volume,src=${state_volume},dst=/var/lib/nex" \
   --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
   --mount "type=bind,src=$(dirname "${adapter_artifact}"),dst=/artifacts/adapter,readonly" \
@@ -414,18 +452,27 @@ health_before="$(runtime_call moonsleep-commerce.healthcheck '{}')"
 jq -e '
   .status == "ok" and
   .projectors.shopify_customer_identity == "dormant_ready_full_postgres_activation_gates" and
-  .projectors.shopify_order_commerce == "dormant_bounded_checkpointed_batches" and
+  .projectors.shopify_order_commerce == "available_event_projector" and
   .provider_write_authority == false
 ' <<<"${health_before}" >/dev/null
 
 jobs_before="$(runtime_call jobs.list '{}')"
 subscriptions_before="$(runtime_call events.subscriptions.list '{}')"
 schedules_before="$(runtime_call schedules.list '{}')"
-jq -e '
-  (.jobs | length) == 14 and
+jq -e --arg app_sha256 "${app_sha256}" '
+  (.jobs | length) == 15 and
   ([.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce")] | length) == 2 and
-  all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "active") and
+  all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "inactive") and
   ([.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source."))] | length) == 12 and
+  ([.jobs[] | select(
+    .name == "moonsleep-commerce.shopify-paid-order-effects" and
+    .status == "active" and
+    .lane_id == "adapter_io" and
+    .execution_profile_revision_id == "job_profile_bulk_compute_r1" and
+    .runtime_method_allowlist == "[\"jobs.effects.perform\"]" and
+    .timeout_ms == 300000 and
+    .script_path == ("/var/lib/nex/state/packages/installed/app/moonsleep-commerce/releases/.immutable/" + $app_sha256 + "/jobs/shopify-paid-order-effects.ts")
+  )] | length) == 1 and
   all(.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source.")); .status == "active" and (.config_json | fromjson | has("connection_id") | not))
 ' <<<"${jobs_before}" >/dev/null
 jq -e '
@@ -504,9 +551,10 @@ jq -e '.definition.id == "moonsleep.customer.v1" and .definition.definition_vers
 initial_counts="$(runtime_counts)"
 jq -e '
   .records == 0 and .ingest_receipts == 0 and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == 0 and
   .entities == 4 and .contacts == 0 and .observations == 0 and
-  .queue == 0 and .dispatch_receipts == 0 and .adapter_instances == 0 and
+  .queue_rows == 0 and .active_queue_rows == 0 and
+  .dispatch_receipts == 0 and .adapter_instances == 0 and
   .commerce_orders == 0 and .commerce_order_revisions == 0 and
   .commerce_line_items == 0 and .commerce_line_item_revisions == 0 and
   .customer_facets == 0 and .accepted_observation_compatibility_receipts == 0
@@ -522,7 +570,11 @@ seed_contract_sha256="$(jq -r '.source_identity_contract_sha256' <<<"${seed_firs
 
 echo "[cleanroom] enable the two native event projectors"
 projection_plan="$(runtime_call moonsleep-commerce.shopify-projections.configure '{"mode":"plan","enabled_projections":["customer_identity","order_commerce"]}')"
-projection_plan_sha256="$(jq -er '.state == "planned" and .enabled_projections == ["customer_identity","order_commerce"] and .plan_sha256' <<<"${projection_plan}")"
+projection_plan_sha256="$(jq -er '
+  select(.state == "planned" and .enabled_projections == ["customer_identity","order_commerce"])
+  | .plan_sha256
+  | select(test("^[0-9a-f]{64}$"))
+' <<<"${projection_plan}")"
 projection_apply_params="$(jq -nc \
   --arg plan_sha256 "${projection_plan_sha256}" \
   '{mode:"apply",enabled_projections:["customer_identity","order_commerce"],expected_plan_sha256:$plan_sha256,confirmation:"CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS"}')"
@@ -544,7 +596,7 @@ jq -e '.ok == true and .status == "completed"' <<<"${customer_ingest_first}" >/d
 jq -e '.ok == true and .status == "completed"' <<<"${order_ingest_first}" >/dev/null
 jq -e '.ok == true and .status == "completed"' <<<"${line_ingest_first}" >/dev/null
 
-echo "[cleanroom] native event projectors completed with record.ingest"
+echo "[cleanroom] immutable Records committed; wait for native event projectors"
 CUSTOMER_SOURCE_ID="$(postgres_json "SELECT id FROM nex_runtime_immutable_records_v1.records WHERE source_record_type = 'shopify.customer' LIMIT 1")"
 ORDER_SOURCE_ID="$(postgres_json "SELECT id FROM nex_runtime_immutable_records_v1.records WHERE source_record_type = 'shopify.order' LIMIT 1")"
 LINE_SOURCE_ID="$(postgres_json "SELECT id FROM nex_runtime_immutable_records_v1.records WHERE source_record_type = 'shopify.line_item' LIMIT 1")"
@@ -553,8 +605,16 @@ cohort_params="$(jq -nc --arg id "${CUSTOMER_SOURCE_ID}" '{record_ids:[$id]}')"
 order_gid="gid://shopify/Order/900719925474099312346"
 billing_sha256="$(printf '%s' '{"address1":"1 Synthetic Way","city":"Austin","zip":"78701"}' | shasum -a 256 | awk '{print $1}')"
 shipping_sha256="$(printf '%s' '{"address1":"2 Replay Road","city":"Austin","zip":"78702"}' | shasum -a 256 | awk '{print $1}')"
-commerce_order_read="$(runtime_call commerce.orders.get "$(jq -nc --arg shop "${SHOP_DOMAIN}" --arg order "${order_gid}" '{platform:"shopify",space_id:$shop,order_id:$order}')")"
-jq -e \
+commerce_order_params="$(jq -nc --arg shop "${SHOP_DOMAIN}" --arg order "${order_gid}" '{platform:"shopify",space_id:$shop,order_id:$order}')"
+commerce_order_read='{"found":false,"order":null,"revision":null,"line_items":[]}'
+for _ in $(seq 1 60); do
+  commerce_order_read="$(runtime_call commerce.orders.get "${commerce_order_params}")"
+  if jq -e '.found == true and (.line_items | length) == 1' <<<"${commerce_order_read}" >/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! jq -e \
   --arg order "${order_gid}" \
   --arg billing_sha256 "${billing_sha256}" \
   --arg shipping_sha256 "${shipping_sha256}" '
@@ -568,7 +628,10 @@ jq -e \
   .line_items[0].revision.sku == "SYNTHETIC-SKU" and
   .line_items[0].revision.price == "199.00" and
   .line_items[0].revision.currency == "USD"
-' <<<"${commerce_order_read}" >/dev/null
+' <<<"${commerce_order_read}" >/dev/null; then
+  printf 'canonical Commerce Order read failed: %s\n' "$(jq -c . <<<"${commerce_order_read}")" >&2
+  exit 1
+fi
 echo "[cleanroom] canonical Commerce Order read verified"
 
 customer_entity_id="$(jq -r '.revision.customer_entity_id' <<<"${commerce_order_read}")"
@@ -640,9 +703,10 @@ counts_before_restart="$(runtime_counts)"
 echo "[cleanroom] pre-restart counts $(jq -c . <<<"${counts_before_restart}")"
 jq -e '
   .records == 3 and .ingest_receipts == 6 and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == 3 and
   .entities == 7 and .contacts == 4 and .observations == 4 and .tags == 11 and
-  .queue == 0 and .dispatch_receipts == 3 and .adapter_instances == 0 and
+  .queue_rows == 3 and .active_queue_rows == 0 and
+  .dispatch_receipts == 3 and .adapter_instances == 0 and
   .commerce_orders == 1 and .commerce_order_revisions == 1 and
   .commerce_line_items == 1 and .commerce_line_item_revisions == 1 and
   .customer_facets == 1 and .accepted_observation_compatibility_receipts == 0
@@ -700,7 +764,7 @@ jq -e --arg version "${ADAPTER_VERSION}" '.status == "active" and .active_versio
 jq -e --arg version "${APP_VERSION}" '.status == "active" and .active_version == $version' <<<"${app_state_after}" >/dev/null
 jq -e '.status == "ok" and .provider_write_authority == false' <<<"${health_after}" >/dev/null
 jq -e '
-  (.jobs | length) == 14 and
+  (.jobs | length) == 15 and
   all(.jobs[] | select(.name == "moonsleep-commerce.shopify-customer-identity" or .name == "moonsleep-commerce.shopify-order-commerce"); .status == "active") and
   all(.jobs[] | select(.name | startswith("moonsleep-commerce.shopify-source.")); .status == "active")
 ' <<<"${jobs_after}" >/dev/null
@@ -728,10 +792,11 @@ counts_after_restart="$(runtime_counts)"
 jq -e --argjson before "${counts_before_restart}" '
   .records == $before.records and
   .ingest_receipts == ($before.ingest_receipts + 3) and
-  .legacy_records == 0 and .legacy_receipts == 0 and .legacy_events == 0 and
+  .legacy_records == 0 and .legacy_receipts == 0 and .events == $before.events and
   .entities == $before.entities and .contacts == $before.contacts and
   .observations == $before.observations and .tags == $before.tags and
-  .queue == $before.queue and .dispatch_receipts == $before.dispatch_receipts and
+  .queue_rows == $before.queue_rows and .active_queue_rows == 0 and
+  .dispatch_receipts == $before.dispatch_receipts and
   .adapter_instances == $before.adapter_instances and
   .commerce_orders == $before.commerce_orders and
   .commerce_order_revisions == $before.commerce_order_revisions and
@@ -740,6 +805,117 @@ jq -e --argjson before "${counts_before_restart}" '
   .customer_facets == $before.customer_facets and
   .accepted_observation_compatibility_receipts == 0
 ' <<<"${counts_after_restart}" >/dev/null
+
+echo "[cleanroom] invoke the paid-order Job and prove four reserve-only Effects"
+paid_order_effects_job_id="$(jq -er --arg app_sha256 "${app_sha256}" '
+  .jobs[]
+  | select(
+      .name == "moonsleep-commerce.shopify-paid-order-effects" and
+      .status == "active" and
+      .execution_profile_revision_id == "job_profile_bulk_compute_r1" and
+      .runtime_method_allowlist == "[\"jobs.effects.perform\"]" and
+      .timeout_ms == 300000 and
+      .script_path == ("/var/lib/nex/state/packages/installed/app/moonsleep-commerce/releases/.immutable/" + $app_sha256 + "/jobs/shopify-paid-order-effects.ts")
+    )
+  | .id
+' <<<"${jobs_after}")"
+paid_order_effects_input="$(jq -nc \
+  --arg customer_record_id "${CUSTOMER_SOURCE_ID}" \
+  --arg order_record_id "${ORDER_SOURCE_ID}" \
+  --arg line_record_id "${LINE_SOURCE_ID}" \
+  '{contract_id:"moonsleep-commerce.shopify-paid-order-effects-input.v1",work_root_id:("shopify:accepted-order-receipt:acceptance_" + ("a" * 32)),shopify_order_id:"900719925474099312346",accepted_order_receipt_id:("acceptance_" + ("a" * 32)),accepted_order_revision_id:"900719925474099312346:2026-08-30T00:00:00Z",accepted_order_revision_sha256:("b" * 64),observation_receipt_id:("channelobs_" + ("1" * 32)),projection_work_id:("channelprojection_" + ("2" * 32)),source_run_id:"jobrun_cleanroom_source",projector_run_ids:["jobrun_cleanroom_projector"],record_ids:[$order_record_id,$line_record_id,$customer_record_id]}')"
+paid_order_invoke_params="$(jq -nc \
+  --arg job_id "${paid_order_effects_job_id}" \
+  --argjson input "${paid_order_effects_input}" \
+  '{job_id:$job_id,input:$input,trigger_source:"cleanroom.shopify.orders_paid",idempotency_key:("shopify:accepted-order-receipt:acceptance_" + ("a" * 32)),max_attempts:3}')"
+paid_order_prior_idempotency_readback="$(postgres_json "
+  SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
+  FROM (
+    SELECT reservation.idempotency_key, reservation.job_definition_id,
+           reservation.request_fingerprint, reservation.status,
+           reservation.first_run_id, reservation.active_run_id, reservation.latest_run_id,
+           run.trigger_source, run.status AS run_status, run.input_json
+    FROM nex_runtime.job_idempotency AS reservation
+    LEFT JOIN nex_runtime.job_runs AS run ON run.id = reservation.latest_run_id
+    WHERE reservation.idempotency_key = 'shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  ) AS candidate
+")"
+if [[ "${paid_order_prior_idempotency_readback}" != "[]" ]]; then
+  printf 'paid-order idempotency key was claimed before explicit invocation: %s\n' \
+    "${paid_order_prior_idempotency_readback}" >&2
+fi
+paid_order_invoke_status=0
+set +e
+paid_order_invocation="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+paid_order_invoke_status=$?
+set -e
+if [[ "${paid_order_invoke_status}" -ne 0 ]] || \
+  ! jq -e '.run.id | type == "string" and length > 0' <<<"${paid_order_invocation}" >/dev/null 2>&1; then
+  paid_order_idempotency_readback="$(postgres_json "
+    SELECT COALESCE(json_agg(row_to_json(candidate)), '[]'::JSON)
+    FROM (
+      SELECT reservation.idempotency_key, reservation.job_definition_id,
+             reservation.request_fingerprint, reservation.status,
+             reservation.first_run_id, reservation.active_run_id, reservation.latest_run_id,
+             run.trigger_source, run.status AS run_status, run.input_json
+      FROM nex_runtime.job_idempotency AS reservation
+      LEFT JOIN nex_runtime.job_runs AS run ON run.id = reservation.latest_run_id
+      WHERE reservation.idempotency_key = 'shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    ) AS candidate
+  ")"
+  printf 'paid-order idempotency readback: %s\n' "${paid_order_idempotency_readback}" >&2
+  exit 1
+fi
+paid_order_run_id="$(jq -er '.run.id' <<<"${paid_order_invocation}")"
+paid_order_run='{}'
+for _ in $(seq 1 90); do
+  paid_order_run="$(runtime_call jobs.runs.get "$(jq -nc --arg id "${paid_order_run_id}" '{id:$id}')")"
+  paid_order_run_status="$(jq -r '.run.status // ""' <<<"${paid_order_run}")"
+  if [[ "${paid_order_run_status}" == "completed" ]]; then
+    break
+  fi
+  if [[ "${paid_order_run_status}" == "failed" || "${paid_order_run_status}" == "cancelled" || "${paid_order_run_status}" == "quarantined" ]]; then
+    printf 'paid-order Effects Run failed: %s\n' "$(jq -c . <<<"${paid_order_run}")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ "$(jq -r '.run.status // ""' <<<"${paid_order_run}")" != "completed" ]]; then
+  printf 'paid-order Effects Run did not complete: %s\n' "$(jq -c . <<<"${paid_order_run}")" >&2
+  docker logs "${runtime_container}" >&2 || true
+  exit 1
+fi
+paid_order_output="$(jq -er '.run | select(.status == "completed") | .output_json | fromjson' <<<"${paid_order_run}")"
+jq -e '
+  .contract_id == "moonsleep-commerce.shopify-paid-order-effects-result.v1" and
+  .work_root_id == "shopify:accepted-order-receipt:acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  .accepted_order_receipt_id == "acceptance_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and
+  .accepted_order_revision_sha256 == ("b" * 64) and
+  .provider_write_authority == false and .provider_write_count == 0 and
+  (.effects | length) == 4 and
+  ([.effects[].provider] | sort) == ["google_ads","meta","pinterest","tiktok"] and
+  all(.effects[];
+    .status == "reserved" and
+    (.effect_id | test("^effect_shopify_paid_[0-9a-f]{32}$")) and
+    (.receipt_id | test("^effectreceipt_[0-9a-f]{32}$")) and
+    (.receipt_sha256 | test("^[0-9a-f]{64}$"))
+  )
+' <<<"${paid_order_output}" >/dev/null
+paid_order_effect_readback="$(postgres_json "
+  SELECT json_build_object(
+    'effects', (SELECT COUNT(*) FROM nex_runtime.job_effects WHERE job_run_id = '${paid_order_run_id}'),
+    'reserved', (SELECT COUNT(*) FROM nex_runtime.job_effects WHERE job_run_id = '${paid_order_run_id}' AND status = 'reserved'),
+    'receipts', (
+      SELECT COUNT(*)
+        FROM nex_runtime.job_effect_transition_receipts receipt
+        JOIN nex_runtime.job_effects effect ON effect.id = receipt.effect_id
+       WHERE effect.job_run_id = '${paid_order_run_id}'
+    )
+  )")"
+jq -e '.effects == 4 and .reserved == 4 and .receipts == 4' <<<"${paid_order_effect_readback}" >/dev/null
+paid_order_replay="$(runtime_call jobs.invoke "${paid_order_invoke_params}")"
+jq -e --arg run_id "${paid_order_run_id}" '.run.id == $run_id and .run.status == "completed"' <<<"${paid_order_replay}" >/dev/null
+echo "[cleanroom] paid-order Effect reservations and replay verified"
 [[ -z "$(git -C "${UMBRELLA_ROOT}" status --porcelain=v1 --untracked-files=all)" ]] || {
   echo "cleanroom changed the source worktree" >&2
   exit 1
@@ -767,9 +943,12 @@ jq -n \
   --arg adapter_sha256 "${adapter_sha256}" \
   --arg app_sha256 "${app_sha256}" \
   --arg seed_contract_sha256 "${seed_contract_sha256}" \
+  --arg paid_order_run_id "${paid_order_run_id}" \
+  --argjson paid_order_output "${paid_order_output}" \
   --argjson initial_counts "${initial_counts}" \
   --argjson terminal_counts "${counts_after_restart}" \
   --argjson record_contract "${record_contract}" \
+  --argjson paid_order_effect_readback "${paid_order_effect_readback}" \
   '{
     ok:true,
     finished_at:$finished_at,
@@ -781,7 +960,8 @@ jq -n \
     synthetic_ingest:{families:["customer","line_item","order"],exact_payload_sha256_verified:true,first_commit_count:3,replay_status:"skipped",pre_restart_ingest_receipts:6,post_restart_ingest_receipts:9,record_contract:$record_contract},
     customer_projection:{path:"record.ingested event",orders:0,line_items:0,customer_facets:1,canonical_contact_link:true},
     commerce_projection:{path:"record.ingested event",orders:1,line_items:1,canonical_customer_link:true,address_snapshots_sha256_bound:true},
-    work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
+    paid_order_effects:{run_id:$paid_order_run_id,status:"completed",script_release_sha256:$app_sha256,work_root_id:$paid_order_output.work_root_id,accepted_order_receipt_id:$paid_order_output.accepted_order_receipt_id,accepted_order_revision_id:$paid_order_output.accepted_order_revision_id,accepted_order_revision_sha256:$paid_order_output.accepted_order_revision_sha256,providers:["google_ads","meta","pinterest","tiktok"],mode:"reserve_only",replay_same_run:true,durable_readback:$paid_order_effect_readback,provider_credentials_mounted:false,provider_calls:0,provider_write_authority:false},
+    work_boundary:{projector_job_count:2,projector_job_status:"active",source_job_count:12,source_job_status:"active_for_explicit_invocation",paid_order_effects_job_count:1,paid_order_effects_mode:"reserve_only",source_schedule_count:12,source_schedules_enabled:0,source_schedule_plan_only:true,subscription_count:3,subscription_scope:"exact_record_family",subscription_enabled:true,queue_rows:3,active_queue_rows:0,dispatch_receipts:3,provider_credentials_mounted:false,provider_calls:0,provider_read_authority:false,provider_write_authority:false},
     restart:{app_rehydrated:true,adapter_active:true,record_replay_idempotent:true,identity_replay_idempotent:true,commerce_replay_idempotent:true},
     initial_counts:$initial_counts,
     terminal_counts:$terminal_counts,

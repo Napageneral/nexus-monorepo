@@ -21,9 +21,50 @@ const COMMERCE_JOB_SCRIPT_PATH = fileURLToPath(
 const SOURCE_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-source-observation.ts", import.meta.url),
 );
+const PAID_ORDER_EFFECTS_JOB_NAME = "moonsleep-commerce.shopify-paid-order-effects";
+const PAID_ORDER_EFFECTS_JOB_SPEC = Object.freeze({
+  name: PAID_ORDER_EFFECTS_JOB_NAME,
+  description:
+    "Reserve provider-write-disabled effect intents for one paid Shopify order work group",
+  scriptPath: fileURLToPath(new URL("../jobs/shopify-paid-order-effects.ts", import.meta.url)),
+  status: "active",
+});
 const PROJECTOR_JOB_LANE_ID = "automation";
 const SOURCE_JOB_LANE_ID = "adapter_io";
 const SOURCE_JOB_TIMEOUT_MS = 15 * 60 * 1000;
+const SOURCE_JOB_PROFILE_REVISION_ID = "job_profile_adapter_capture_r1";
+const PROJECTOR_JOB_PROFILE_REVISION_ID = "job_profile_adapter_projection_r1";
+const PAID_ORDER_EFFECTS_TIMEOUT_MS = 5 * 60 * 1000;
+const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_bulk_compute_r1";
+const SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "record.ingest",
+  "record.ingest_many",
+  "shopify.source.abort",
+  "shopify.source.capture",
+  "shopify.source.commit",
+]);
+const CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "contacts.observe",
+  "facets.attachments.get",
+  "memory.evidence.profiles.list",
+  "memory.evidence.profiles.register",
+  "records.get",
+  "records.get_many",
+  "semantics.apply",
+]);
+const COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "commerce.line-items.observe",
+  "commerce.line-items.observe_many",
+  "commerce.orders.get",
+  "commerce.orders.observe",
+  "commerce.orders.observe_many",
+  "contacts.observe",
+  "contacts.resolve",
+  "entities.resolve",
+  "records.get",
+  "records.get_many",
+]);
+const PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST = JSON.stringify(["jobs.effects.perform"]);
 const JOB_SPECS = Object.freeze([
   {
     name: CUSTOMER_JOB_NAME,
@@ -44,8 +85,7 @@ const JOB_SPECS = Object.freeze([
   },
   {
     name: "moonsleep-commerce.shopify-source.orders-delta",
-    description:
-      "Drain bounded Shopify order delta pages and durably ingest their exact records",
+    description: "Drain bounded Shopify order delta pages and durably ingest their exact records",
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "orders.delta" },
@@ -191,6 +231,11 @@ const JOB_SPECS = Object.freeze([
 ]);
 const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
 const SOURCE_CONNECTION_ID_RE = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
+type OwnedJobSpec = (typeof JOB_SPECS)[number] | typeof PAID_ORDER_EFFECTS_JOB_SPEC;
+
+function ownedJobSpecs(): readonly OwnedJobSpec[] {
+  return [JOB_SPECS[0]!, JOB_SPECS[1]!, PAID_ORDER_EFFECTS_JOB_SPEC, ...JOB_SPECS.slice(2)];
+}
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
@@ -218,10 +263,7 @@ function unwrapPayload(value: unknown): RuntimeRow {
   return Object.keys(payload).length > 0 ? payload : row;
 }
 
-function sourceJobHasConfiguredConnection(
-  existing: RuntimeRow,
-  expectedFamily: string,
-): boolean {
+function sourceJobHasConfiguredConnection(existing: RuntimeRow, expectedFamily: string): boolean {
   let config: RuntimeRow;
   try {
     config = asRecord(JSON.parse(asString(existing.config_json)));
@@ -268,20 +310,33 @@ async function listSchedules(runtime: NexClient): Promise<RuntimeRow[]> {
   return asArray(unwrapPayload(await runtime.schedules.list({})).schedules);
 }
 
-async function ensureJob(
-  runtime: NexClient,
-  appId: string,
-  spec: (typeof JOB_SPECS)[number],
-): Promise<string> {
+async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec): Promise<string> {
   const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
-  const laneId = "config" in spec ? SOURCE_JOB_LANE_ID : PROJECTOR_JOB_LANE_ID;
-  const timeoutMs = "config" in spec ? SOURCE_JOB_TIMEOUT_MS : null;
+  const isPaidOrderEffects = spec.name === PAID_ORDER_EFFECTS_JOB_NAME;
+  const laneId =
+    "config" in spec || isPaidOrderEffects ? SOURCE_JOB_LANE_ID : PROJECTOR_JOB_LANE_ID;
+  const timeoutMs = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_TIMEOUT_MS
+    : "config" in spec
+      ? SOURCE_JOB_TIMEOUT_MS
+      : null;
+  const executionProfileRevisionId = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_PROFILE_REVISION_ID
+    : "config" in spec
+      ? SOURCE_JOB_PROFILE_REVISION_ID
+      : PROJECTOR_JOB_PROFILE_REVISION_ID;
+  const runtimeMethodAllowlist = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST
+    : "config" in spec
+      ? SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST
+      : spec.name === CUSTOMER_JOB_NAME
+        ? CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST
+        : COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST;
   if (existing) {
     const id = asString(existing.id);
-    const status = !("config" in spec) && asString(existing.status) === "active"
-      ? "active"
-      : spec.status;
+    const status =
+      !("config" in spec) && asString(existing.status) === "active" ? "active" : spec.status;
     let configNeedsUpdate = false;
     if (configJson !== "") {
       if ("schedule" in spec) {
@@ -296,6 +351,8 @@ async function ensureJob(
       configNeedsUpdate ||
       asString(existing.lane_id) !== laneId ||
       (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
+      asString(existing.execution_profile_revision_id) !== executionProfileRevisionId ||
+      asString(existing.runtime_method_allowlist) !== runtimeMethodAllowlist ||
       asString(existing.status) !== status;
     if (!needsUpdate) {
       return id;
@@ -308,6 +365,8 @@ async function ensureJob(
         ...(configNeedsUpdate ? { config_json: configJson } : {}),
         ...(laneId ? { lane_id: laneId } : {}),
         ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
+        execution_profile_revision_id: executionProfileRevisionId,
+        runtime_method_allowlist: runtimeMethodAllowlist,
         status,
         created_by: appId,
       }),
@@ -323,6 +382,8 @@ async function ensureJob(
       ...(configJson ? { config_json: configJson } : {}),
       ...(laneId ? { lane_id: laneId } : {}),
       ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
+      execution_profile_revision_id: executionProfileRevisionId,
+      runtime_method_allowlist: runtimeMethodAllowlist,
       status: spec.status,
       created_by: appId,
     }),
@@ -457,6 +518,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   subscriptionIds: string[];
   commerceJobDefinitionId: string;
   commerceSubscriptionIds: string[];
+  paidOrderEffectsJobDefinitionId: string;
   sourceJobDefinitionIds: string[];
   sourceScheduleIds: string[];
 }> {
@@ -471,6 +533,11 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
     params.runtime,
     commerceJobDefinitionId,
     JOB_SPECS[1]!.matches,
+  );
+  const paidOrderEffectsJobDefinitionId = await ensureJob(
+    params.runtime,
+    params.appId,
+    PAID_ORDER_EFFECTS_JOB_SPEC,
   );
   const sourceJobDefinitionIds: string[] = [];
   const sourceScheduleIds: string[] = [];
@@ -494,6 +561,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
     subscriptionIds,
     commerceJobDefinitionId,
     commerceSubscriptionIds,
+    paidOrderEffectsJobDefinitionId,
     sourceJobDefinitionIds,
     sourceScheduleIds,
   };
@@ -502,7 +570,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
 export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
   const schedules = await listSchedules(runtime);
-  for (const spec of JOB_SPECS) {
+  for (const spec of ownedJobSpecs()) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
@@ -530,7 +598,7 @@ export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): P
 export async function removeMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
   const schedules = await listSchedules(runtime);
-  for (const spec of JOB_SPECS) {
+  for (const spec of ownedJobSpecs()) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
