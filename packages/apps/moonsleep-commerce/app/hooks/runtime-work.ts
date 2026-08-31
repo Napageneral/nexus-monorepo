@@ -569,18 +569,12 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
 
 export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
-  const schedules = await listSchedules(runtime);
   for (const spec of ownedJobSpecs()) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
     }
     const jobId = asString(job.id);
-    for (const schedule of schedules) {
-      if (asString(schedule.job_definition_id) === jobId && asInteger(schedule.enabled) !== 0) {
-        await runtime.schedules.update({ id: asString(schedule.id), enabled: false });
-      }
-    }
     for (const subscription of await listSubscriptions(runtime, jobId)) {
       if (asInteger(subscription.enabled) !== 0) {
         await runtime.events.subscriptions.update({

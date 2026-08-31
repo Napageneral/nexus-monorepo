@@ -716,6 +716,41 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.events.subscriptions.delete).not.toHaveBeenCalled();
   });
 
+  it("preserves operator-enabled source schedules across package upgrade lifecycle hooks", async () => {
+    const expectedSourceScript = new URL("../jobs/shopify-source-observation.ts", import.meta.url)
+      .pathname;
+    const fixture = runtimeFixture({
+      jobs: SOURCE_FIXTURES.map(([suffix, family, description], index) => ({
+        id: `job-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        description,
+        script_path: expectedSourceScript,
+        config_json: JSON.stringify({ family, connection_id: "shopify-production" }),
+        status: "active",
+        lane_id: "adapter_io",
+        timeout_ms: 900_000,
+        execution_profile_revision_id: "job_profile_adapter_capture_r1",
+        runtime_method_allowlist: SOURCE_RUNTIME_METHOD_ALLOWLIST,
+      })),
+      schedules: SOURCE_FIXTURES.map(([suffix, , , expression], index) => ({
+        id: `schedule-${index + 1}`,
+        name: `moonsleep-commerce.shopify-source.${suffix}`,
+        job_definition_id: `job-${index + 1}`,
+        expression,
+        timezone: "UTC",
+        enabled: index < 2 ? 1 : 0,
+      })),
+    });
+
+    await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.schedules.slice(0, 2).map((schedule) => schedule.enabled)).toEqual([1, 1]);
+  });
+
   it("disables and removes only the exact owned work", async () => {
     const fixture = runtimeFixture({
       jobs: [
@@ -751,10 +786,8 @@ describe("MoonSleep commerce runtime work", () => {
       enabled: false,
     });
     expect(fixture.runtime.jobs.update).toHaveBeenCalledWith({ id: "job-1", status: "inactive" });
-    expect(fixture.runtime.schedules.update).toHaveBeenCalledWith({
-      id: "schedule-1",
-      enabled: false,
-    });
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+    expect(fixture.schedules[0]?.enabled).toBe(1);
 
     await removeMoonSleepCommerceRuntimeWork(fixture.runtime);
     expect(fixture.runtime.events.subscriptions.delete).toHaveBeenCalledWith({
