@@ -1,7 +1,7 @@
 {
   "$schema": "./registry.schema.json",
   "registry_id": "nex.canonical_objects",
-  "schema_version": "4.1.0",
+  "schema_version": "4.2.0",
   "entries": [
     {
       "object_type_id": "moonsleep.product",
@@ -3124,6 +3124,87 @@
       "search_terms": [
         "invoice line",
         "AP invoice line"
+      ],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.carrier_incident",
+      "names": {
+        "singular": "Carrier Incident",
+        "plural": "Carrier Incidents"
+      },
+      "owner_domain": "moonsleep.claims",
+      "identity_contract_id": "moonsleep.carrier_incident.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^incident_[0-9a-f]{24}$"
+          }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": [
+        "carrier_incident"
+      ],
+      "search_terms": [
+        "carrier incident",
+        "carrier loss",
+        "carrier damage"
+      ],
+      "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.carrier_case",
+      "names": {
+        "singular": "Carrier Case",
+        "plural": "Carrier Cases"
+      },
+      "owner_domain": "moonsleep.claims",
+      "identity_contract_id": "moonsleep.carrier_case.existing_identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^carrier_case_[0-9a-f]{24}$"
+          }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "relationship_slots": [],
+      "accepted_input_terms": [
+        "carrier_case",
+        "provider_case",
+        "provider_support_ticket",
+        "provider_intervention",
+        "provider_investigation",
+        "provider_retrieval_case",
+        "provider_claim",
+        "carrier_trace"
+      ],
+      "search_terms": [
+        "carrier case",
+        "carrier claim",
+        "provider case"
       ],
       "resolution_binding": "nex.core-graph.subject-resolver.v1"
     },
