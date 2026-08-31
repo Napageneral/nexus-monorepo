@@ -1,9 +1,9 @@
 {
   "compiler_contract_id": "nex.canonical-object-registry-compiler.v1",
-  "registry_digest": "6ab9037181bb9ddbf8d46a756b0fccac0922e18ec0b933ef00604ef977e093c2",
+  "registry_digest": "85005fd8b0ee7db147bc78adf001da4cc9d6db9820fdc9d7a85f4372e1458f63",
   "registry": {
     "registry_id": "nex.canonical_objects",
-    "schema_version": "4.1.0",
+    "schema_version": "4.2.0",
     "entries": [
       {
         "object_type_id": "moonsleep.product",
@@ -3130,6 +3130,87 @@
         "resolution_binding": "nex.core-graph.subject-resolver.v1"
       },
       {
+        "object_type_id": "moonsleep.carrier_incident",
+        "names": {
+          "singular": "Carrier Incident",
+          "plural": "Carrier Incidents"
+        },
+        "owner_domain": "moonsleep.claims",
+        "identity_contract_id": "moonsleep.carrier_incident.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^incident_[0-9a-f]{24}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "carrier_incident"
+        ],
+        "search_terms": [
+          "carrier incident",
+          "carrier loss",
+          "carrier damage"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
+      },
+      {
+        "object_type_id": "moonsleep.carrier_case",
+        "names": {
+          "singular": "Carrier Case",
+          "plural": "Carrier Cases"
+        },
+        "owner_domain": "moonsleep.claims",
+        "identity_contract_id": "moonsleep.carrier_case.existing_identity.v1",
+        "identity_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^carrier_case_[0-9a-f]{24}$"
+            }
+          }
+        },
+        "attributes_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "relationship_slots": [],
+        "accepted_input_terms": [
+          "carrier_case",
+          "provider_case",
+          "provider_support_ticket",
+          "provider_intervention",
+          "provider_investigation",
+          "provider_retrieval_case",
+          "provider_claim",
+          "carrier_trace"
+        ],
+        "search_terms": [
+          "carrier case",
+          "carrier claim",
+          "provider case"
+        ],
+        "resolution_binding": "nex.core-graph.subject-resolver.v1"
+      },
+      {
         "object_type_id": "nex.entity",
         "names": {
           "singular": "Entity",
@@ -3488,6 +3569,14 @@
     {
       "object_type_id": "moonsleep.bill_of_materials_line",
       "declaration_sha256": "67512920f4c8cced5f16a252c068295ef41d8d51ed7870e63c56fdca7399dad4"
+    },
+    {
+      "object_type_id": "moonsleep.carrier_case",
+      "declaration_sha256": "086a897f4249355202f3f006ea402b65ae73fb6faf4eeb8afd72f6312f2cdd23"
+    },
+    {
+      "object_type_id": "moonsleep.carrier_incident",
+      "declaration_sha256": "5559c25b541bce5940b96977479f8d1db1d117301a514fe049d265fc6ad313ca"
     },
     {
       "object_type_id": "moonsleep.cash_card_account",
