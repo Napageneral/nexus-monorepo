@@ -605,6 +605,37 @@ test("capture-level provenance cannot change immutable message identity or paylo
   assert.deepEqual(refreshed.payload.metadata, original.payload.metadata);
 });
 
+test("capture-level provenance cannot change immutable attachment identity or payload", () => {
+  const { root } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  const original = __test__.buildAttachmentRecord(
+    attachment,
+    snapshot,
+    config(root),
+    "conn-alibaba",
+  );
+  const refreshed = __test__.buildAttachmentRecord(
+    attachment,
+    {
+      ...snapshot,
+      ref: {
+        ...snapshot.ref,
+        id: "new-browser-capture",
+        complete_sha256: "f".repeat(64),
+        captured_at: snapshot.ref.captured_at + 1_000,
+      },
+    },
+    config(root),
+    "conn-alibaba",
+  );
+  assert.equal(refreshed.payload.external_record_id, original.payload.external_record_id);
+  assert.equal(refreshed.payload.timestamp, original.payload.timestamp);
+  assert.deepEqual(refreshed.payload.payload, original.payload.payload);
+  assert.deepEqual(refreshed.payload.metadata, original.payload.metadata);
+  assert.deepEqual(refreshed.payload.attachments, original.payload.attachments);
+});
+
 test("capture-local attachment paths cannot change immutable message identity or payload", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));

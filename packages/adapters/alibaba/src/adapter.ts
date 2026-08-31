@@ -1498,7 +1498,7 @@ export const __test__ = {
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.4.1",
+  version: "0.4.2",
   multi_account: true,
   auth: {
     methods: [
