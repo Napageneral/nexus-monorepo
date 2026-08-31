@@ -1,7 +1,7 @@
 {
   "$schema": "./registry.schema.json",
   "registry_id": "nex.canonical_objects",
-  "schema_version": "4.2.0",
+  "schema_version": "4.3.0",
   "entries": [
     {
       "object_type_id": "moonsleep.product",
@@ -2972,6 +2972,121 @@
         "posted charge"
       ],
       "resolution_binding": "nex.core-graph.subject-resolver.v1"
+    },
+    {
+      "object_type_id": "moonsleep.commerce_payment_dispute",
+      "names": {
+        "singular": "Commerce Payment Dispute",
+        "plural": "Commerce Payment Disputes"
+      },
+      "owner_domain": "moonsleep.commerce",
+      "identity_contract_id": "moonsleep.commerce_payment_dispute.identity.v1",
+      "identity_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "payment_dispute_id"
+        ],
+        "properties": {
+          "payment_dispute_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "attributes_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "provider_dispute_id",
+          "disputed_amount_minor_units",
+          "currency",
+          "dispute_state"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "minLength": 1
+          },
+          "provider_dispute_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disputed_amount_minor_units": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
+          },
+          "fee_minor_units": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submission_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decision_state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dispute_state": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "relationship_slots": [
+        {
+          "relationship_id": "concerns_commerce_order",
+          "cardinality": "required_one",
+          "target_object_type_ids": [
+            "moonsleep.commerce_order"
+          ]
+        },
+        {
+          "relationship_id": "disputes_financial_transaction",
+          "cardinality": "optional_one",
+          "target_object_type_ids": [
+            "moonsleep.financial_transaction"
+          ]
+        }
+      ],
+      "accepted_input_terms": [
+        "commerce_payment_dispute",
+        "payment_dispute",
+        "chargeback"
+      ],
+      "search_terms": [
+        "commerce payment dispute",
+        "payment dispute",
+        "chargeback",
+        "representment"
+      ],
+      "resolution_binding": "nex.canonical-object-kernel.v1"
     },
     {
       "object_type_id": "moonsleep.payment_allocation",
