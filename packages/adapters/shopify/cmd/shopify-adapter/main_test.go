@@ -89,6 +89,28 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	}
 }
 
+func TestBuildOrderRecordUsesUpdatedAtForRevisionFreshness(t *testing.T) {
+	record := buildOrderRecord(
+		&shopifyState{
+			ConnectionID: "shopify-primary",
+			ShopDomain:   "moonsleepco.myshopify.com",
+		},
+		shopifyOrder{
+			ID:          101,
+			Name:        "#101",
+			CreatedAt:   "2026-07-30T21:30:49-05:00",
+			ProcessedAt: "2026-07-30T21:30:44-05:00",
+			UpdatedAt:   "2026-09-01T13:04:08-05:00",
+		},
+		shopifySourceRequest{},
+	)
+
+	want := time.Date(2026, time.September, 1, 18, 4, 8, 0, time.UTC).UnixMilli()
+	if record.Payload.Timestamp != want {
+		t.Fatalf("order timestamp=%d want updated_at=%d", record.Payload.Timestamp, want)
+	}
+}
+
 func TestShopifySnapshotFingerprintStoreRoundTrip(t *testing.T) {
 	t.Setenv(shopifyAdapterStateDirEnv, t.TempDir())
 	store, err := openShopifySnapshotFingerprintStore("shopify-primary")

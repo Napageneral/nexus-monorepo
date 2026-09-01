@@ -1629,7 +1629,7 @@ func parseOrderUpdatedAt(order shopifyOrder) time.Time {
 }
 
 func orderTimestamp(order shopifyOrder) time.Time {
-	if ts := firstParsedTime(order.ProcessedAt, order.CreatedAt, order.UpdatedAt); !ts.IsZero() {
+	if ts := firstParsedTime(order.UpdatedAt, order.ProcessedAt, order.CreatedAt); !ts.IsZero() {
 		return ts
 	}
 	return time.Now().UTC()
