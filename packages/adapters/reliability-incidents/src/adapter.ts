@@ -142,6 +142,8 @@ export type CaptureResult = {
   external_record_id: string;
   deduped: boolean;
   revision: boolean;
+  /** The adapter's own dedupe would have suppressed this exact replay; `replay: true` emitted it anyway. */
+  replayed: boolean;
 };
 
 export type CaptureBatchResult = {
@@ -150,7 +152,17 @@ export type CaptureBatchResult = {
   emitted: number;
   deduped: number;
   revised: number;
+  replayed: number;
   results: CaptureResult[];
+};
+
+export type CaptureOptions = {
+  /**
+   * Bypass the adapter-side exact-replay suppression for every event in the batch. The runtime's
+   * immutable Record store still dedupes by identity, so re-delivering retained source history is
+   * safe; the adapter records the acceptance as usual. Identity-drift rejection is unaffected.
+   */
+  replay?: boolean;
 };
 
 type RuntimeContextLike = {
@@ -627,14 +639,20 @@ function readIncidentInput(payload: UnknownRecord): unknown {
   return event;
 }
 
-function readIncidentBatch(payload: UnknownRecord): unknown[] {
+export function readIncidentBatch(payload: UnknownRecord): {
+  events: unknown[];
+  options: CaptureOptions;
+} {
   if (!Array.isArray(payload.incident_events)) {
     throw new Error("payload.incident_events is required");
   }
   if (payload.incident_events.length > MAX_BATCH_SIZE) {
     throw new Error(`payload.incident_events exceeds ${MAX_BATCH_SIZE} entries`);
   }
-  return payload.incident_events;
+  if (payload.replay !== undefined && typeof payload.replay !== "boolean") {
+    throw new Error("payload.replay must be a boolean");
+  }
+  return { events: payload.incident_events, options: { replay: payload.replay === true } };
 }
 
 export async function captureNormalizedEvent(
@@ -642,32 +660,25 @@ export async function captureNormalizedEvent(
   config: ReliabilityRuntimeConfig,
   event: IncidentTransition,
   emit: (record: AdapterInboundRecord) => Promise<void>,
+  options: CaptureOptions = {},
 ): Promise<CaptureResult> {
   const connectionId = ctx.runtime?.connection_id?.trim() ?? config.source_id;
   const envelope = buildRecordIngestEnvelope(ctx, config, event);
   const db = openStateDatabase();
   try {
     const decision = readDedupeDecision(db, connectionId, event);
-    if (decision.deduped) {
-      return {
-        ok: true,
-        event_id: event.event_id,
-        incident_id: event.incident_id,
-        external_record_id: envelope.payload.external_record_id,
-        deduped: true,
-        revision: false,
-      };
-    }
-    await emit(envelope);
-    markAccepted(db, connectionId, event, envelope.payload.external_record_id);
-    return {
-      ok: true,
+    const result = {
+      ok: true as const,
       event_id: event.event_id,
       incident_id: event.incident_id,
       external_record_id: envelope.payload.external_record_id,
-      deduped: false,
-      revision: decision.revision,
     };
+    if (decision.deduped && options.replay !== true) {
+      return { ...result, deduped: true, revision: false, replayed: false };
+    }
+    await emit(envelope);
+    markAccepted(db, connectionId, event, envelope.payload.external_record_id);
+    return { ...result, deduped: false, revision: decision.revision, replayed: decision.deduped };
   } finally {
     db.close();
   }
@@ -678,11 +689,12 @@ export async function captureBatch(
   config: ReliabilityRuntimeConfig,
   values: unknown[],
   emit: (record: AdapterInboundRecord) => Promise<void>,
+  options: CaptureOptions = {},
 ): Promise<CaptureBatchResult> {
   const events = values.map((value) => normalizeIncidentTransition(value, config.source_id));
   const results: CaptureResult[] = [];
   for (const event of events) {
-    results.push(await captureNormalizedEvent(ctx, config, event, emit));
+    results.push(await captureNormalizedEvent(ctx, config, event, emit, options));
   }
   return {
     ok: true,
@@ -690,6 +702,7 @@ export async function captureBatch(
     emitted: results.filter((result) => !result.deduped).length,
     deduped: results.filter((result) => result.deduped).length,
     revised: results.filter((result) => result.revision).length,
+    replayed: results.filter((result) => result.replayed).length,
     results,
   };
 }
@@ -697,7 +710,7 @@ export async function captureBatch(
 export const reliabilityIncidentsAdapter = defineAdapter({
   platform: RELIABILITY_INCIDENTS_PLATFORM,
   name: "reliability-incidents-adapter",
-  version: "0.1.0",
+  version: "0.1.1",
   multi_account: true,
   auth: {
     methods: [
@@ -802,11 +815,13 @@ export const reliabilityIncidentsAdapter = defineAdapter({
             return { ok: true, payload: result };
           }
           if (frame.command === INCIDENT_CAPTURE_BATCH_COMMAND) {
+            const batch = readIncidentBatch(payload);
             const result = await captureBatch(
               ctx,
               config,
-              readIncidentBatch(payload),
+              batch.events,
               async (record) => session.emitRecordIngest(record),
+              batch.options,
             );
             return { ok: true, payload: result };
           }

@@ -10,7 +10,7 @@ This adapter turns durable operational incident transitions into canonical Nex r
 Use it to:
 
 1. ingest a detected, updated, mitigated, recovered, or closed incident transition
-2. replay a bounded source-owned incident export through `incident.capture.batch`
+2. replay a bounded source-owned incident export through `incident.capture.batch` (`replay: true` when the adapter has already seen those event ids; the immutable store dedupes by identity)
 3. search incident titles, summaries, affected components, customer impact, remediation, and validation evidence in Nex
 4. retrieve the full lifecycle by incident thread
 5. measure detector precision and incident duration from durable source events

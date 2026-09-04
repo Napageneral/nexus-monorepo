@@ -11,6 +11,7 @@ import {
   captureBatch,
   captureNormalizedEvent,
   normalizeIncidentTransition,
+  readIncidentBatch,
   readRuntimeConfig,
   reliabilityIncidentsAdapter,
 } from "./adapter.ts";
@@ -127,6 +128,54 @@ test("suppresses an exact replay after the first accepted emission", async () =>
     assert.equal(second.deduped, true);
     assert.equal(emitted.length, 1);
   });
+});
+
+test("replay re-emits an exact duplicate the adapter would suppress and keeps the dedupe state", async () => {
+  await withStateDir(async () => {
+    const ctx = context();
+    const config = readRuntimeConfig(ctx);
+    const emitted: AdapterInboundRecord[] = [];
+    const emit = async (record: AdapterInboundRecord) => {
+      emitted.push(record);
+    };
+    await captureBatch(ctx, config, [fixture()], emit);
+
+    const replayed = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit, {
+      replay: true,
+    });
+    const afterwards = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit);
+
+    assert.deepEqual(
+      { emitted: replayed.emitted, deduped: replayed.deduped, revised: replayed.revised, replayed: replayed.replayed },
+      { emitted: 2, deduped: 0, revised: 0, replayed: 1 },
+    );
+    assert.equal(replayed.results[0]?.replayed, true);
+    assert.equal(replayed.results[1]?.replayed, false);
+    assert.equal(afterwards.deduped, 2);
+    assert.equal(afterwards.replayed, 0);
+    assert.equal(emitted.length, 3);
+    assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
+  });
+});
+
+test("replay still rejects an event id reused for a different incident", async () => {
+  await withStateDir(async () => {
+    const ctx = context();
+    const config = readRuntimeConfig(ctx);
+    const emit = async () => undefined;
+    await captureBatch(ctx, config, [fixture()], emit);
+    await assert.rejects(
+      captureBatch(ctx, config, [fixture({ incident_id: "inc-different-999" })], emit, { replay: true }),
+      /event_id identity drift detected/u,
+    );
+  });
+});
+
+test("batch payload carries replay only as a boolean", () => {
+  assert.deepEqual(readIncidentBatch({ incident_events: [] }).options, { replay: false });
+  assert.deepEqual(readIncidentBatch({ incident_events: [], replay: true }).options, { replay: true });
+  assert.throws(() => readIncidentBatch({ incident_events: [], replay: "yes" }), /payload.replay must be a boolean/u);
+  assert.throws(() => readIncidentBatch({}), /incident_events is required/u);
 });
 
 test("emits a corrected event as a revision with the same external record id", async () => {

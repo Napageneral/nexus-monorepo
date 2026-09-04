@@ -9,6 +9,8 @@ The adapter is push-based and exposes two source-owned commands through `adapter
 - `incident.capture`
 - `incident.capture.batch`
 
+`incident.capture.batch` accepts `replay: true` next to `incident_events`. It bypasses the adapter's own exact-replay suppression for that batch so retained source history (an outbox the source never deletes) can be re-delivered after the adapter state has already seen it; the runtime's immutable Record store still dedupes by identity, the adapter still records each acceptance, and an event id reused for a different incident is still rejected. The batch result reports `replayed` (events the suppression would have dropped) next to `emitted`, `deduped`, and `revised`.
+
 Runtime connection configuration requires:
 
 ```json
