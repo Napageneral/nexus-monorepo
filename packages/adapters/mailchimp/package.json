@@ -1,6 +1,6 @@
 {
   "name": "@nexus-project/mailchimp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "Read-only Mailchimp Marketing and Transactional evidence adapter for Nex",

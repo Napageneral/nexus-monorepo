@@ -1,12 +1,20 @@
 {
   "id": "mailchimp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "Mailchimp",
   "description": "Read-only Mailchimp Marketing and Transactional history ingestion for Nex.",
   "platform": "mailchimp",
   "command": "./dist/index.js",
   "skill": "./SKILL.md",
   "methods": {
+    "mailchimp.backfill.plan": {
+      "description": "Plan an explicit backfill window without pulling records: sent campaigns, record and read-call estimates, and whether Transactional history would come from the recent search or the activity export.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
     "mailchimp.marketing.campaigns.list": {
       "description": "List sent Mailchimp Marketing campaigns without mutating provider state.",
       "action": "read",
