@@ -1,6 +1,6 @@
 {
   "id": "reliability-incidents",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Reliability Incidents",
   "description": "Portable first-party reliability incident source adapter for Nex.",
   "platform": "reliability-incidents",
