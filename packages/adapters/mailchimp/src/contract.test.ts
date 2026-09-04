@@ -11,7 +11,7 @@ describe("Mailchimp method contract", () => {
       stdout: process.stdout,
       stderr: process.stderr,
     });
-    expect(info.methods?.length).toBe(8);
+    expect(info.methods?.length).toBe(9);
     for (const declaration of info.methods ?? []) {
       expect(declaration.action).toBe("read");
       expect(declaration.mutates_remote).toBe(false);

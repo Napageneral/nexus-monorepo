@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
@@ -49,6 +50,11 @@ const DEFAULT_EXPORT_POLL_MS = 5_000;
 const DEFAULT_EXPORT_WAIT_MS = 15 * 60 * 1000;
 const MAX_EXPORT_BYTES = 512 * 1024 * 1024;
 const TRANSACTIONAL_SEARCH_LIMIT = 1000;
+// Mailchimp documents messages/search as a recent-message read (its default window is the
+// last seven days). Older windows must come from the activity export; the horizon is
+// configurable per connection (transactional_search_horizon_days) and deliberately short.
+const DEFAULT_TRANSACTIONAL_SEARCH_HORIZON_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RETRIES = 5;
 
 function asRecord(value: unknown): UnknownRecord {
@@ -173,16 +179,20 @@ function buildClient(ctx: AdapterContext, connectionId?: string): MailchimpClien
   };
 }
 
-async function responseJson(response: Response): Promise<unknown> {
-  const body = await response.text();
-  const parsed = body ? JSON.parse(body) as unknown : null;
-  if (!response.ok) {
-    const detail = textValue(asRecord(parsed).detail)
-      ?? textValue(asRecord(parsed).message)
-      ?? `HTTP ${response.status}`;
-    throw new Error(`Mailchimp read failed: ${detail}`);
-  }
-  return parsed;
+// Mailchimp Transactional answers every application error (unknown export, invalid
+// key, validation) with HTTP 500 and {status: "error", name, message}; those are not
+// transient and must not be retried.
+function providerErrorName(parsed: unknown): string | undefined {
+  const record = asRecord(parsed);
+  return record.status === "error" ? textValue(record.name) : undefined;
+}
+
+function providerReadError(status: number, parsed: unknown): Error {
+  const record = asRecord(parsed);
+  const message = textValue(record.detail) ?? textValue(record.message);
+  const name = providerErrorName(parsed);
+  const detail = name && message ? `${name}: ${message}` : (name ?? message ?? `HTTP ${status}`);
+  return new Error(`Mailchimp read failed: ${detail}`);
 }
 
 async function providerFetchJson(
@@ -200,15 +210,19 @@ async function providerFetchJson(
     const timer = setTimeout(() => controller.abort(), configuredTimeout);
     try {
       const response = await client.fetchFn(url, { ...init, signal: controller.signal });
-      if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
-        const delay = retryDelay(attempt, response.headers.get("retry-after"));
-        await response.arrayBuffer();
-        await sleep(delay);
+      const body = await response.text();
+      const parsed = body ? JSON.parse(body) as unknown : null;
+      if (response.ok) return parsed;
+      const transient = response.status === 429 || (response.status >= 500 && !providerErrorName(parsed));
+      if (transient && attempt < MAX_RETRIES) {
+        await sleep(retryDelay(attempt, response.headers.get("retry-after")));
         continue;
       }
-      return await responseJson(response);
+      throw providerReadError(response.status, parsed);
     } catch (error) {
-      if (attempt >= MAX_RETRIES) throw error;
+      if (attempt >= MAX_RETRIES || (error instanceof Error && error.message.startsWith("Mailchimp read failed"))) {
+        throw error;
+      }
       await sleep(retryDelay(attempt, null));
     } finally {
       clearTimeout(timer);
@@ -403,11 +417,15 @@ function marketingDeliveryState(activity: UnknownRecord, campaign: UnknownRecord
     : "uncertain";
 }
 
+function transactionalMessageId(message: UnknownRecord): string {
+  return textValue(message._id) ?? sha256(stableJson(message));
+}
+
 function transactionalRecord(
   client: MailchimpClient,
   message: UnknownRecord,
 ): AdapterInboundRecord {
-  const messageId = textValue(message._id) ?? sha256(stableJson(message));
+  const messageId = transactionalMessageId(message);
   const recipientHash = normalizedEmailHash(message.email);
   const subject = textValue(message.subject) ?? "Mailchimp Transactional message";
   const state = transactionalDeliveryState(message.state);
@@ -469,22 +487,34 @@ function exportTimestamp(row: UnknownRecord): number {
   return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
+function exportRowRecipientHash(row: UnknownRecord): string | undefined {
+  return normalizedEmailHash(row["Email Address"] ?? row.email);
+}
+
+function exportRowSubject(row: UnknownRecord): string | undefined {
+  return textValue(row.Subject) ?? textValue(row.subject);
+}
+
+// A search message and an export row describe the same provider message, but the export
+// CSV carries no provider id. Correlate them the way the activity view does: the send
+// second, the recipient, and the subject.
+function transactionalCorrelationKey(
+  timestampMs: number,
+  recipientHash: string | undefined,
+  subject: string | undefined,
+): string {
+  return stableJson([Math.floor(timestampMs / 1000), recipientHash ?? null, subject ?? null]);
+}
+
 function transactionalExportRecord(
   client: MailchimpClient,
   row: UnknownRecord,
   exportId: string,
-  duplicateOrdinal: number,
+  providerMessageRef: string,
 ): AdapterInboundRecord {
-  const email = textValue(row["Email Address"]) ?? textValue(row.email);
-  const recipientHash = normalizedEmailHash(email);
+  const recipientHash = exportRowRecipientHash(row);
   const sanitized = withoutFields(row, ["Email Address", "email"]);
-  const stableIdentity = transactionalExportStableIdentity(
-    row,
-    recipientHash,
-    duplicateOrdinal,
-  );
-  const subject = textValue(row.Subject) ?? textValue(row.subject) ?? "Mailchimp Transactional message";
-  const providerMessageRef = `export:${stableIdentity}`;
+  const subject = exportRowSubject(row) ?? "Mailchimp Transactional message";
   return {
     operation: "record.ingest",
     routing: {
@@ -527,7 +557,10 @@ function transactionalExportRecord(
   };
 }
 
-function transactionalExportStableIdentity(
+// The provider message ref an export row lands under. A row that carries the provider
+// message id shares its identity with the search path (transactional:<id>), so the two
+// reads dedupe by provider record id; rows without one get a stable export identity.
+function transactionalExportMessageRef(
   row: UnknownRecord,
   recipientHash: string | undefined,
   duplicateOrdinal: number,
@@ -535,9 +568,7 @@ function transactionalExportStableIdentity(
   const providerMessageId = [
     row["Message ID"], row["Message Id"], row.message_id, row._id, row.id,
   ].map(textValue).find(Boolean);
-  if (providerMessageId) {
-    return sha256(stableJson({ providerMessageId }));
-  }
+  if (providerMessageId) return providerMessageId;
   const metadata = asRecord(row.Metadata ?? row.metadata ?? row["Custom Metadata"]);
   const moonSleepMessageRef = [
     metadata.moonsleep_message_ref,
@@ -545,20 +576,20 @@ function transactionalExportStableIdentity(
     metadata.message_ref,
   ].map(textValue).find(Boolean);
   if (moonSleepMessageRef) {
-    return sha256(stableJson({ moonSleepMessageRef }));
+    return `export:${sha256(stableJson({ moonSleepMessageRef }))}`;
   }
   // Historical exports may not carry a provider id. Exclude mutable delivery
   // fields so sent/delivered/bounced revisions converge on one record identity.
   const identity = {
     timestamp: textValue(row.Date) ?? textValue(row.date) ?? null,
     recipientHash: recipientHash ?? null,
-    subject: textValue(row.Subject) ?? textValue(row.subject) ?? null,
+    subject: exportRowSubject(row) ?? null,
     sender: textValue(row.Sender) ?? textValue(row.sender) ?? textValue(row.From) ?? null,
     template: textValue(row.Template) ?? textValue(row.template) ?? null,
     tags: row.Tags ?? row.tags ?? null,
     duplicateOrdinal,
   };
-  return sha256(stableJson(identity));
+  return `export:${sha256(stableJson(identity))}`;
 }
 
 async function listAllCampaigns(
@@ -606,9 +637,20 @@ type ExportCheckpoint = {
   to: string;
 };
 
-function exportCheckpointPath(client: MailchimpClient, since: Date, to: Date): string {
+type ExportDateBounds = { date_from: string; date_to: string };
+
+// The export takes second-precision UTC bounds; align them to the whole days the
+// day-granular search covers so both reads describe one provider window.
+function exportDateBounds(since: Date, to: Date): ExportDateBounds {
+  return {
+    date_from: `${since.toISOString().slice(0, 10)} 00:00:00`,
+    date_to: `${to.toISOString().slice(0, 10)} 23:59:59`,
+  };
+}
+
+function exportCheckpointPath(client: MailchimpClient, bounds: ExportDateBounds): string {
   const stateDir = requiredAdapterStateDir();
-  const name = sha256(`${client.connectionId}\n${since.toISOString()}\n${to.toISOString()}`);
+  const name = sha256(`${client.connectionId}\n${bounds.date_from}\n${bounds.date_to}`);
   return join(stateDir, `transactional-export-${name}.json`);
 }
 
@@ -635,7 +677,10 @@ function writeExportCheckpoint(path: string | undefined, checkpoint: ExportCheck
 
 async function fetchBoundedBytes(client: MailchimpClient, rawUrl: string): Promise<Uint8Array> {
   const url = new URL(rawUrl);
-  if (url.protocol !== "https:") throw new Error("Mailchimp export URL must use HTTPS");
+  const loopback = ["127.0.0.1", "[::1]", "localhost"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("Mailchimp export URL must use HTTPS");
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120_000);
   try {
@@ -653,24 +698,50 @@ async function fetchBoundedBytes(client: MailchimpClient, rawUrl: string): Promi
   }
 }
 
+type TransactionalExportStats = {
+  exportId: string;
+  rowCount: number;
+  emittedCount: number;
+  deduplicatedCount: number;
+  searchMatchedCount: number;
+  oldestRowAt: string | null;
+  newestRowAt: string | null;
+};
+
+// Pull the provider's activity export for the window and emit one record per row.
+// `searchIds` maps correlation keys to the provider message ids a search of the same
+// window returned, so rows the search also saw land under the search identity; every
+// emitted provider record id is added to `emittedIds` and never emitted twice.
 async function exportTransactionalHistory(
   client: MailchimpClient,
   since: Date,
   to: Date,
   emit: (record: AdapterInboundRecord) => void,
-): Promise<{ exportId: string; candidateCount: number; emittedCount: number; deduplicatedCount: number }> {
-  const checkpointPath = exportCheckpointPath(client, since, to);
-  let checkpoint = readExportCheckpoint(checkpointPath);
-  if (!checkpoint) {
-    const started = asRecord(await transactionalPost(client, "/exports/activity.json", {
-      date_from: since.toISOString().replace("T", " ").replace(/\.\d{3}Z$/u, ""),
-      date_to: to.toISOString().replace("T", " ").replace(/\.\d{3}Z$/u, ""),
-    }));
+  options: { searchIds?: Map<string, string[]>; emittedIds?: Set<string>; coverage?: { minimumRows: number; reason: string } } = {},
+): Promise<TransactionalExportStats> {
+  const bounds = exportDateBounds(since, to);
+  const checkpointPath = exportCheckpointPath(client, bounds);
+  const startExport = async (): Promise<ExportCheckpoint> => {
+    const started = asRecord(await transactionalPost(client, "/exports/activity.json", bounds));
     const exportId = textValue(started.id);
     if (!exportId) throw new Error("Mailchimp Transactional export did not return an id");
-    checkpoint = { export_id: exportId, since: since.toISOString(), to: to.toISOString() };
+    const checkpoint = { export_id: exportId, since: bounds.date_from, to: bounds.date_to };
     writeExportCheckpoint(checkpointPath, checkpoint);
+    return checkpoint;
+  };
+  let checkpoint = readExportCheckpoint(checkpointPath);
+  if (checkpoint) {
+    // A checkpointed export the provider no longer knows (expired or purged) would
+    // otherwise block this window forever; start one fresh export in its place.
+    try {
+      await transactionalPost(client, "/exports/info.json", { id: checkpoint.export_id });
+    } catch (error) {
+      if (!(error instanceof Error && error.message.includes("Unknown_Export"))) throw error;
+      unlinkSync(checkpointPath);
+      checkpoint = undefined;
+    }
   }
+  checkpoint ??= await startExport();
 
   const waitMs = positiveNumber(
     runtimeConfigFromClient(client).transactional_export_wait_ms,
@@ -706,60 +777,71 @@ async function exportTransactionalHistory(
     relax_column_count: true,
     skip_empty_lines: true,
   }) as UnknownRecord[];
+  if (options.coverage && rows.length < options.coverage.minimumRows) {
+    throw new Error(
+      `Mailchimp Transactional export does not cover the window (${options.coverage.reason}): the export returned ${rows.length} rows but the search found ${options.coverage.minimumRows} messages, so the provider's export retention no longer reaches this window`,
+    );
+  }
+  const searchIds = new Map([...(options.searchIds ?? [])].map(([key, ids]) => [key, [...ids]]));
+  const emittedIds = options.emittedIds ?? new Set<string>();
   const duplicateCounts = new Map<string, number>();
-  const emittedRevisions = new Set<string>();
+  const timestamps: number[] = [];
   let emittedCount = 0;
   let deduplicatedCount = 0;
-  for (const row of rows) {
-    const sanitized = withoutFields(asRecord(row), ["Email Address", "email"]);
-    const identity = stableJson({ sanitized, recipientHash: normalizedEmailHash(row["Email Address"] ?? row.email) });
+  let searchMatchedCount = 0;
+  for (const raw of rows) {
+    const row = asRecord(raw);
+    const recipientHash = exportRowRecipientHash(row);
+    const timestamp = exportTimestamp(row);
+    timestamps.push(timestamp);
+    const correlated = searchIds
+      .get(transactionalCorrelationKey(timestamp, recipientHash, exportRowSubject(row)))
+      ?.shift();
+    if (correlated) searchMatchedCount += 1;
+    const identity = stableJson({ sanitized: withoutFields(row, ["Email Address", "email"]), recipientHash });
     const ordinal = duplicateCounts.get(identity) ?? 0;
     duplicateCounts.set(identity, ordinal + 1);
     const record = transactionalExportRecord(
       client,
-      asRecord(row),
+      row,
       checkpoint.export_id,
-      ordinal,
+      correlated ?? transactionalExportMessageRef(row, recipientHash, ordinal),
     );
-    const revisionKey = stableJson([
-      record.payload.external_record_id,
-      record.payload.metadata?.revision_hash ?? null,
-    ]);
-    if (emittedRevisions.has(revisionKey)) {
+    if (emittedIds.has(record.payload.external_record_id)) {
       deduplicatedCount += 1;
       continue;
     }
-    emittedRevisions.add(revisionKey);
+    emittedIds.add(record.payload.external_record_id);
     emit(record);
     emittedCount += 1;
   }
   return {
     exportId: checkpoint.export_id,
-    candidateCount: rows.length,
+    rowCount: rows.length,
     emittedCount,
     deduplicatedCount,
+    searchMatchedCount,
+    oldestRowAt: timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null,
+    newestRowAt: timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null,
   };
 }
 
-type TransactionalSearchStats = {
-  capObserved: boolean;
-  continuityProven: boolean;
-  historicalGapDetected: boolean;
+type TransactionalSearch = {
+  records: Map<string, AdapterInboundRecord>;
+  correlationIds: Map<string, string[]>;
   candidateCount: number;
-  emittedCount: number;
-  deduplicatedCount: number;
+  capObserved: boolean;
   oldestMessageAt: string | null;
   newestMessageAt: string | null;
 };
 
-async function searchTransactionalTail(
+// One capped, day-granular read of messages/search. Records are keyed by provider
+// record id; `correlationIds` lets an export of the same window reuse these identities.
+async function searchTransactional(
   client: MailchimpClient,
   since: Date,
   to: Date,
-  emit: (record: AdapterInboundRecord) => void,
-  continuityFloor?: Date,
-  allowIncompleteBootstrap = false,
-): Promise<TransactionalSearchStats> {
+): Promise<TransactionalSearch> {
   if (to.getTime() <= since.getTime()) {
     throw new Error("Mailchimp Transactional search window must have positive duration");
   }
@@ -772,48 +854,143 @@ async function searchTransactionalTail(
     limit: TRANSACTIONAL_SEARCH_LIMIT,
   })).map(asRecord);
   const records = new Map<string, AdapterInboundRecord>();
+  const correlationIds = new Map<string, string[]>();
   const timestamps: number[] = [];
   for (const message of messages) {
     const record = transactionalRecord(client, message);
     timestamps.push(record.payload.timestamp);
-    const identity = stableJson([
-      record.payload.external_record_id,
-      record.payload.metadata?.revision_hash ?? null,
-    ]);
-    records.set(identity, record);
+    records.set(record.payload.external_record_id, record);
+    const key = transactionalCorrelationKey(
+      record.payload.timestamp,
+      normalizedEmailHash(message.email),
+      textValue(message.subject),
+    );
+    correlationIds.set(key, [...(correlationIds.get(key) ?? []), transactionalMessageId(message)]);
   }
-  const capObserved = messages.length >= TRANSACTIONAL_SEARCH_LIMIT;
-  const oldestTimestamp = timestamps.length > 0 ? Math.min(...timestamps) : null;
-  const newestTimestamp = timestamps.length > 0 ? Math.max(...timestamps) : null;
-  let continuityProven = !capObserved;
-  let historicalGapDetected = false;
-  if (capObserved) {
-    if (continuityFloor) {
-      continuityProven = oldestTimestamp !== null
-        && oldestTimestamp <= continuityFloor.getTime();
-      if (!continuityProven) {
-        throw new Error("Mailchimp Transactional capped tail no longer overlaps the durable cursor");
-      }
-    } else if (allowIncompleteBootstrap) {
-      // Establish a current high-water without misrepresenting the inaccessible
-      // portion of the seven-day provider window as complete. A later export
-      // or webhook-backed replay can close this explicitly recorded debt.
-      historicalGapDetected = true;
-    } else {
-      throw new Error("Mailchimp Transactional backfill reached its 1000-message completeness cap");
-    }
-  }
-
-  for (const record of records.values()) emit(record);
   return {
-    capObserved,
-    continuityProven,
-    historicalGapDetected,
+    records,
+    correlationIds,
     candidateCount: messages.length,
-    emittedCount: records.size,
-    deduplicatedCount: messages.length - records.size,
-    oldestMessageAt: oldestTimestamp === null ? null : new Date(oldestTimestamp).toISOString(),
-    newestMessageAt: newestTimestamp === null ? null : new Date(newestTimestamp).toISOString(),
+    capObserved: messages.length >= TRANSACTIONAL_SEARCH_LIMIT,
+    oldestMessageAt: timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null,
+    newestMessageAt: timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null,
+  };
+}
+
+type TransactionalIngestStats = {
+  source: "search" | "export";
+  exportReason: "search_cap" | "beyond_search_horizon" | null;
+  exportId: string | null;
+  capObserved: boolean;
+  continuityProven: boolean;
+  historicalGapDetected: boolean;
+  searchCandidateCount: number;
+  exportRowCount: number;
+  exportSearchMatchedCount: number;
+  emittedCount: number;
+  deduplicatedCount: number;
+  oldestMessageAt: string | null;
+  newestMessageAt: string | null;
+};
+
+function searchIngestStats(
+  search: TransactionalSearch,
+  flags: { continuityProven: boolean; historicalGapDetected: boolean },
+): TransactionalIngestStats {
+  return {
+    source: "search",
+    exportReason: null,
+    exportId: null,
+    capObserved: search.capObserved,
+    ...flags,
+    searchCandidateCount: search.candidateCount,
+    exportRowCount: 0,
+    exportSearchMatchedCount: 0,
+    emittedCount: search.records.size,
+    deduplicatedCount: search.candidateCount - search.records.size,
+    oldestMessageAt: search.oldestMessageAt,
+    newestMessageAt: search.newestMessageAt,
+  };
+}
+
+// The monitor's current tail. A capped read is admitted only when it still overlaps
+// the durable cursor; a first run without a cursor records the inaccessible portion
+// of the provider window as historical debt instead of claiming completeness.
+async function searchTransactionalTail(
+  client: MailchimpClient,
+  since: Date,
+  to: Date,
+  emit: (record: AdapterInboundRecord) => void,
+  continuityFloor?: Date,
+): Promise<TransactionalIngestStats> {
+  const search = await searchTransactional(client, since, to);
+  const oldest = search.oldestMessageAt === null ? null : Date.parse(search.oldestMessageAt);
+  let continuityProven = !search.capObserved;
+  let historicalGapDetected = false;
+  if (search.capObserved && continuityFloor) {
+    continuityProven = oldest !== null && oldest <= continuityFloor.getTime();
+    if (!continuityProven) {
+      throw new Error("Mailchimp Transactional capped tail no longer overlaps the durable cursor");
+    }
+  } else if (search.capObserved) {
+    historicalGapDetected = true;
+  }
+  for (const record of search.records.values()) emit(record);
+  return searchIngestStats(search, { continuityProven, historicalGapDetected });
+}
+
+function transactionalSearchHorizonDays(client: MailchimpClient): number {
+  return positiveNumber(
+    runtimeConfigFromClient(client).transactional_search_horizon_days,
+    DEFAULT_TRANSACTIONAL_SEARCH_HORIZON_DAYS,
+    90,
+  );
+}
+
+function withinTransactionalSearchHorizon(client: MailchimpClient, since: Date): boolean {
+  return since.getTime() >= Date.now() - transactionalSearchHorizonDays(client) * DAY_MS;
+}
+
+// An explicit backfill promises historical coverage. The search vouches for a window
+// only when it is uncapped and inside the search horizon; otherwise the activity export
+// is the authority, and a window the export cannot cover fails closed before any
+// export row is emitted.
+async function ingestTransactionalHistory(
+  client: MailchimpClient,
+  since: Date,
+  to: Date,
+  emit: (record: AdapterInboundRecord) => void,
+  emittedIds: Set<string>,
+): Promise<TransactionalIngestStats> {
+  const search = await searchTransactional(client, since, to);
+  if (!search.capObserved && withinTransactionalSearchHorizon(client, since)) {
+    for (const record of search.records.values()) {
+      emittedIds.add(record.payload.external_record_id);
+      emit(record);
+    }
+    return searchIngestStats(search, { continuityProven: true, historicalGapDetected: false });
+  }
+  const exportReason = search.capObserved ? "search_cap" : "beyond_search_horizon";
+  // Nothing from the export is emitted unless it covers at least what the search saw.
+  const exported = await exportTransactionalHistory(client, since, to, emit, {
+    searchIds: search.correlationIds,
+    emittedIds,
+    coverage: { minimumRows: search.candidateCount, reason: exportReason },
+  });
+  return {
+    source: "export",
+    exportReason,
+    exportId: exported.exportId,
+    capObserved: search.capObserved,
+    continuityProven: true,
+    historicalGapDetected: false,
+    searchCandidateCount: search.candidateCount,
+    exportRowCount: exported.rowCount,
+    exportSearchMatchedCount: exported.searchMatchedCount,
+    emittedCount: exported.emittedCount,
+    deduplicatedCount: exported.deduplicatedCount,
+    oldestMessageAt: exported.oldestRowAt,
+    newestMessageAt: exported.newestRowAt,
   };
 }
 
@@ -870,11 +1047,35 @@ function writeMonitorCursor(client: MailchimpClient, completedThrough: Date): vo
   chmodSync(path, 0o600);
 }
 
+type IngestMode = { kind: "backfill" } | { kind: "monitor"; continuityFloor?: Date };
+
+function transactionalReceiptFields(
+  client: MailchimpClient,
+  stats: TransactionalIngestStats | undefined,
+): UnknownRecord {
+  return {
+    transactional_source: stats?.source ?? null,
+    transactional_export_reason: stats?.exportReason ?? null,
+    transactional_export_id: stats?.exportId ?? null,
+    transactional_search_horizon_days: transactionalSearchHorizonDays(client),
+    transactional_search_cap_observed: stats?.capObserved ?? false,
+    transactional_tail_continuity_proven: stats?.continuityProven ?? false,
+    transactional_historical_gap_detected: stats?.historicalGapDetected ?? false,
+    transactional_search_candidate_count: stats?.searchCandidateCount ?? 0,
+    transactional_export_row_count: stats?.exportRowCount ?? 0,
+    transactional_export_search_matched_count: stats?.exportSearchMatchedCount ?? 0,
+    transactional_oldest_message_at: stats?.oldestMessageAt ?? null,
+    transactional_newest_message_at: stats?.newestMessageAt ?? null,
+    transactional_emitted_count: stats?.emittedCount ?? 0,
+    transactional_deduplicated_count: stats?.deduplicatedCount ?? 0,
+  };
+}
+
 async function ingestWindow(
   client: MailchimpClient,
   args: Omit<AdapterBackfillWindow, "connection_id">,
   emit: (record: AdapterInboundRecord) => void,
-  options: { continuityFloor?: Date; allowIncompleteBootstrap?: boolean } = {},
+  mode: IngestMode,
 ): Promise<void> {
   // Establish durable state custody before contacting either provider API. A
   // run without checkpoint/cursor/receipt storage is not an admissible ingest.
@@ -882,80 +1083,110 @@ async function ingestWindow(
   const startedAt = new Date().toISOString();
   const to = args.to ?? new Date();
   const outputIdentities: string[] = [];
-  let emittedCount = 0;
-  let searchStats: TransactionalSearchStats | undefined;
+  const counts = { campaigns: 0, campaign_records: 0, recipient_records: 0, total: 0 };
+  let transactional: TransactionalIngestStats | undefined;
   const trackedEmit = (record: AdapterInboundRecord) => {
     outputIdentities.push(stableJson([
       record.payload.external_record_id,
       record.payload.metadata?.revision_hash ?? null,
     ]));
-    emittedCount += 1;
+    counts.total += 1;
     emit(record);
   };
+  const receipt = (result: "succeeded" | "failed", extra: UnknownRecord = {}) =>
+    writeSanitizedIngestReceipt(client, {
+      contract_version: "nexus_mailchimp_ingestion_run_v3",
+      result,
+      mode: mode.kind,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      window_since: args.since.toISOString(),
+      window_through: to.toISOString(),
+      campaign_count: counts.campaigns,
+      campaign_record_count: counts.campaign_records,
+      recipient_record_count: counts.recipient_records,
+      ...transactionalReceiptFields(client, transactional),
+      total_emitted_count: counts.total,
+      output_digest: sha256(stableJson(outputIdentities.sort())),
+      ...extra,
+    });
   try {
     const campaigns = await listAllCampaigns(client, args.since, to);
     for (const campaign of campaigns) {
       const campaignId = textValue(campaign.id);
       if (!campaignId) continue;
+      counts.campaigns += 1;
       const content = asRecord(await marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`));
       trackedEmit(marketingCampaignRecord(client, campaign, content));
+      counts.campaign_records += 1;
       await emitCampaignActivity(client, campaignId, (activity) => {
         trackedEmit(marketingRecipientRecord(client, campaign, activity));
+        counts.recipient_records += 1;
       });
     }
-    // Mailchimp's recent search is day-granular and capped. The monitor admits
-    // a capped tail only when it overlaps its prior durable cursor; explicit
-    // backfills remain fail-closed because they promise historical coverage.
-    searchStats = await searchTransactionalTail(
-      client,
-      args.since,
-      to,
-      trackedEmit,
-      options.continuityFloor,
-      options.allowIncompleteBootstrap,
-    );
-    writeSanitizedIngestReceipt(client, {
-      contract_version: "nexus_mailchimp_ingestion_run_v2",
-      result: "succeeded",
-      started_at: startedAt,
-      completed_at: new Date().toISOString(),
-      window_since: args.since.toISOString(),
-      window_through: to.toISOString(),
-      transactional_search_cap_observed: searchStats.capObserved,
-      transactional_tail_continuity_proven: searchStats.continuityProven,
-      transactional_historical_gap_detected: searchStats.historicalGapDetected,
-      transactional_oldest_message_at: searchStats.oldestMessageAt,
-      transactional_newest_message_at: searchStats.newestMessageAt,
-      transactional_candidate_count: searchStats.candidateCount,
-      transactional_emitted_count: searchStats.emittedCount,
-      transactional_deduplicated_count: searchStats.deduplicatedCount,
-      total_emitted_count: emittedCount,
-      recent_search_cap_hit: false,
-      output_digest: sha256(stableJson(outputIdentities.sort())),
-    });
+    transactional = mode.kind === "monitor"
+      ? await searchTransactionalTail(client, args.since, to, trackedEmit, mode.continuityFloor)
+      : await ingestTransactionalHistory(client, args.since, to, trackedEmit, new Set());
+    receipt("succeeded");
   } catch (error) {
-    writeSanitizedIngestReceipt(client, {
-      contract_version: "nexus_mailchimp_ingestion_run_v2",
-      result: "failed",
-      started_at: startedAt,
-      completed_at: new Date().toISOString(),
-      window_since: args.since.toISOString(),
-      window_through: to.toISOString(),
-      transactional_search_cap_observed: searchStats?.capObserved ?? false,
-      transactional_tail_continuity_proven: searchStats?.continuityProven ?? false,
-      transactional_historical_gap_detected: searchStats?.historicalGapDetected ?? false,
-      transactional_oldest_message_at: searchStats?.oldestMessageAt ?? null,
-      transactional_newest_message_at: searchStats?.newestMessageAt ?? null,
-      transactional_candidate_count: searchStats?.candidateCount ?? 0,
-      transactional_emitted_count: searchStats?.emittedCount ?? 0,
-      transactional_deduplicated_count: searchStats?.deduplicatedCount ?? 0,
-      total_emitted_count: emittedCount,
-      recent_search_cap_hit: true,
-      error_class: error instanceof Error ? error.name : "UnknownError",
-      output_digest: sha256(stableJson(outputIdentities.sort())),
-    });
+    receipt("failed", { error_class: error instanceof Error ? error.name : "UnknownError" });
     throw error;
   }
+}
+
+function parseIsoDate(value: unknown, name: string): Date {
+  const parsed = Date.parse(textValue(value) ?? "");
+  if (!Number.isFinite(parsed)) throw new Error(`${name} must be an ISO 8601 date`);
+  return new Date(parsed);
+}
+
+// Read-only plan for an explicit backfill window: the sent campaigns, the record and
+// read-call estimates, and the Transactional path the window would take. It never
+// creates an export and writes no state.
+async function planBackfillWindow(client: MailchimpClient, payload: UnknownRecord): Promise<UnknownRecord> {
+  const since = parseIsoDate(payload.since, "since");
+  const to = payload.to === undefined ? new Date() : parseIsoDate(payload.to, "to");
+  if (to.getTime() <= since.getTime()) throw new Error("to must be later than since");
+  const campaigns = (await listAllCampaigns(client, since, to)).map((campaign) => {
+    const emailsSent = Math.max(
+      0,
+      Math.floor(Number(campaign.emails_sent) || Number(asRecord(campaign.recipients).recipient_count) || 0),
+    );
+    return {
+      id: textValue(campaign.id) ?? "unknown-campaign",
+      send_time: textValue(campaign.send_time) ?? null,
+      subject: textValue(asRecord(campaign.settings).subject_line) ?? null,
+      emails_sent: emailsSent,
+      record_count: 1 + emailsSent,
+      read_calls: 1 + Math.max(1, Math.ceil(emailsSent / MAX_PAGE_SIZE)),
+    };
+  });
+  const search = await searchTransactional(client, since, to);
+  const withinHorizon = withinTransactionalSearchHorizon(client, since);
+  const useExport = search.capObserved || !withinHorizon;
+  const sum = (key: "record_count" | "read_calls") =>
+    campaigns.reduce((total, campaign) => total + campaign[key], 0);
+  return {
+    window: { since: since.toISOString(), to: to.toISOString() },
+    campaign_count: campaigns.length,
+    campaigns,
+    estimated_record_count: sum("record_count") + search.records.size,
+    estimated_read_calls:
+      Math.max(1, Math.ceil(campaigns.length / MAX_PAGE_SIZE)) + sum("read_calls") + 1 + (useExport ? 3 : 0),
+    transactional: {
+      path: useExport ? "export" : "search",
+      export_reason: useExport ? (search.capObserved ? "search_cap" : "beyond_search_horizon") : null,
+      search_candidate_count: search.candidateCount,
+      search_cap_observed: search.capObserved,
+      search_horizon_days: transactionalSearchHorizonDays(client),
+      within_search_horizon: withinHorizon,
+      oldest_message_at: search.oldestMessageAt,
+      newest_message_at: search.newestMessageAt,
+      export_window: useExport ? exportDateBounds(since, to) : null,
+      export_requested: false,
+    },
+    mutates_remote: false,
+  };
 }
 
 async function monitor(
@@ -973,8 +1204,8 @@ async function monitor(
       ? new Date(Math.min(closedHead.getTime(), cursor.getTime() + 24 * 60 * 60 * 1000))
       : closedHead;
     await ingestWindow(client, { since, to }, emit, {
-      continuityFloor: cursor ? since : undefined,
-      allowIncompleteBootstrap: !cursor,
+      kind: "monitor",
+      ...(cursor ? { continuityFloor: since } : {}),
     });
     writeMonitorCursor(client, to);
     if (to.getTime() < closedHead.getTime()) continue;
@@ -1018,9 +1249,14 @@ export const __test__ = {
   marketingDeliveryState,
   transactionalRecord,
   transactionalExportRecord,
-  transactionalExportStableIdentity,
+  transactionalExportMessageRef,
   transactionalDeliveryState,
+  searchTransactional,
   searchTransactionalTail,
+  exportTransactionalHistory,
+  exportDateBounds,
+  ingestWindow,
+  planBackfillWindow,
   connectionIdentity,
   health,
 };
@@ -1028,7 +1264,7 @@ export const __test__ = {
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   platform: PLATFORM,
   name: "nexus-mailchimp-readonly-adapter",
-  version: "0.2.1",
+  version: "0.2.2",
   multi_account: true,
   credential_service: "mailchimp",
   auth: {
@@ -1073,10 +1309,20 @@ export const mailchimpAdapter = defineAdapter<MailchimpClient>({
     health: async (ctx) => await health(requireClient(ctx)),
   },
   ingest: {
-    backfill: async (ctx, args, emit) => await ingestWindow(requireClient(ctx), args, emit),
+    backfill: async (ctx, args, emit) =>
+      await ingestWindow(requireClient(ctx), args, emit, { kind: "backfill" }),
     monitor,
   },
   methods: {
+    "mailchimp.backfill.plan": method({
+      description: "Plan an explicit backfill window without pulling records: the sent campaigns, the record and read-call estimates, and whether Transactional history would come from the recent search or the activity export.",
+      action: "read",
+      connection_required: true,
+      mutates_remote: false,
+      params: { since: "ISO lower bound (campaign send time)", to: "ISO upper bound; defaults to now" },
+      response: { campaigns: "Sent campaigns in the window", transactional: "Transactional path decision" },
+      handler: async (ctx, req) => await planBackfillWindow(requireClient(ctx), payloadRecord(req)),
+    }),
     "mailchimp.marketing.campaigns.list": method({
       description: "List sent Mailchimp Marketing campaigns without mutating provider state.",
       action: "read",

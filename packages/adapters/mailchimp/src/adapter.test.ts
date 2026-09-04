@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { __test__ } from "./adapter.js";
+import { startProviderStub, type ProviderStub, type StubFixture, type StubMessage } from "./provider-stub.js";
 
 const client = {
   connectionId: "moon-mailchimp",
@@ -11,6 +16,76 @@ const client = {
   fetchFn: fetch,
   runtimeConfig: {},
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS);
+
+function campaign(id: string, sendTime: Date, recipients: number) {
+  return {
+    id,
+    send_time: sendTime.toISOString(),
+    subject: `Update ${id}`,
+    recipients: Array.from({ length: recipients }, (_, index) => ({
+      email_id: `${id}-r${index}`,
+      email_address: `customer-${index}@example.com`,
+    })),
+  };
+}
+
+function message(index: number, sentAt: Date, extra: Partial<StubMessage> = {}): StubMessage {
+  return {
+    _id: `msg-${index}`,
+    ts: Math.floor(sentAt.getTime() / 1000),
+    email: `customer-${index}@example.com`,
+    subject: "An update on your MoonSleep order",
+    state: "sent",
+    ...extra,
+  };
+}
+
+const cleanups: Array<() => Promise<void> | void> = [];
+afterEach(async () => {
+  while (cleanups.length > 0) await cleanups.pop()!();
+});
+
+async function stubbedClient(fixture: StubFixture, runtimeConfig: Record<string, unknown> = {}) {
+  const stub = await startProviderStub(fixture);
+  const stateDir = mkdtempSync(join(tmpdir(), "mailchimp-adapter-"));
+  const previous = process.env.NEXUS_ADAPTER_STATE_DIR;
+  process.env.NEXUS_ADAPTER_STATE_DIR = stateDir;
+  cleanups.push(async () => {
+    await stub.close();
+    rmSync(stateDir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.NEXUS_ADAPTER_STATE_DIR;
+    else process.env.NEXUS_ADAPTER_STATE_DIR = previous;
+  });
+  return {
+    stub,
+    stateDir,
+    client: {
+      ...client,
+      marketingBaseUrl: stub.marketingBaseUrl,
+      transactionalBaseUrl: stub.transactionalBaseUrl,
+      runtimeConfig,
+    },
+  };
+}
+
+function receipts(stateDir: string): Record<string, unknown>[] {
+  const root = join(stateDir, "ingestion-run-history");
+  return readdirSync(root)
+    .sort()
+    .map((name) => JSON.parse(readFileSync(join(root, name), "utf8")) as Record<string, unknown>);
+}
+
+async function backfill(stubbed: Awaited<ReturnType<typeof stubbedClient>>, since: Date, to: Date) {
+  const emitted: Array<{ payload: { external_record_id: string; metadata?: Record<string, unknown> } }> = [];
+  await __test__.ingestWindow(stubbed.client, { since, to }, (record) => emitted.push(record), { kind: "backfill" });
+  return emitted;
+}
+
+const ids = (records: Array<{ payload: { external_record_id: string } }>) =>
+  records.map((record) => record.payload.external_record_id);
 
 describe("Mailchimp read-only evidence adapter", () => {
   it("grounds the connection in a stable local receiver contact", () => {
@@ -121,11 +196,12 @@ describe("Mailchimp read-only evidence adapter", () => {
       date_to: "2026-08-17",
       limit: 1000,
     });
-    expect(stats).toEqual({
+    expect(stats).toMatchObject({
+      source: "search",
       capObserved: true,
       continuityProven: true,
       historicalGapDetected: false,
-      candidateCount: 1000,
+      searchCandidateCount: 1000,
       emittedCount: 999,
       deduplicatedCount: 1,
       oldestMessageAt: "1970-01-01T00:01:40.000Z",
@@ -147,8 +223,6 @@ describe("Mailchimp read-only evidence adapter", () => {
       new Date("2026-08-17T00:00:00Z"),
       new Date("2026-08-17T04:00:00Z"),
       () => undefined,
-      undefined,
-      true,
     );
     expect(stats.capObserved).toBe(true);
     expect(stats.continuityProven).toBe(false);
@@ -178,8 +252,12 @@ describe("Mailchimp read-only evidence adapter", () => {
       Subject: "Order #1234 update",
       Status: "sent",
     };
-    const first = __test__.transactionalExportRecord(client, row, "export-1", 0);
-    const replay = __test__.transactionalExportRecord(client, row, "export-2", 0);
+    const hash = __test__.normalizedEmailHash(row["Email Address"]);
+    const ref = __test__.transactionalExportMessageRef(row, hash, 0);
+    const first = __test__.transactionalExportRecord(client, row, "export-1", ref);
+    const replay = __test__.transactionalExportRecord(client, row, "export-2", ref);
+    expect(ref).toMatch(/^export:[0-9a-f]{64}$/u);
+    expect(first.payload.external_record_id).toBe(`mailchimp:moon-mailchimp:transactional:${ref}`);
     expect(first.payload.external_record_id).toBe(replay.payload.external_record_id);
     expect(first.payload.metadata?.delivery_state).toBe("verified_delivered");
     expect(JSON.stringify(first)).not.toContain("customer@example.com");
@@ -193,30 +271,250 @@ describe("Mailchimp read-only evidence adapter", () => {
       Status: "sent",
     };
     const delivered = { ...sent, Status: "delivered" };
-    const first = __test__.transactionalExportRecord(client, sent, "export-1", 0);
-    const revision = __test__.transactionalExportRecord(
-      client,
-      delivered,
-      "export-2",
-      0,
+    const hash = __test__.normalizedEmailHash(sent["Email Address"]);
+    expect(__test__.transactionalExportMessageRef(sent, hash, 0)).toBe(
+      __test__.transactionalExportMessageRef(delivered, hash, 0),
     );
+    const first = __test__.transactionalExportRecord(client, sent, "export-1", "export:same");
+    const revision = __test__.transactionalExportRecord(client, delivered, "export-2", "export:same");
     expect(first.payload.external_record_id).toBe(revision.payload.external_record_id);
-    expect(first.payload.metadata?.revision_hash).not.toBe(
-      revision.payload.metadata?.revision_hash,
-    );
+    expect(first.payload.metadata?.revision_hash).not.toBe(revision.payload.metadata?.revision_hash);
   });
 
-  it("prefers provider message identity over mutable export fields", () => {
-    const first = __test__.transactionalExportStableIdentity(
-      { "Message ID": "provider-1", Status: "sent" },
-      "recipient-hash",
-      0,
+  it("lands an export row that carries the provider message id under the search identity", () => {
+    expect(__test__.transactionalExportMessageRef({ "Message ID": "provider-1", Status: "sent" }, "hash", 0))
+      .toBe("provider-1");
+    expect(__test__.transactionalExportMessageRef({ "Message ID": "provider-1", Status: "bounced" }, "hash", 3))
+      .toBe("provider-1");
+  });
+
+  it("aligns the export bounds to the whole days the search covers", () => {
+    expect(__test__.exportDateBounds(new Date("2026-08-12T06:30:00Z"), new Date("2026-08-17T21:53:00Z"))).toEqual({
+      date_from: "2026-08-12 00:00:00",
+      date_to: "2026-08-17 23:59:59",
+    });
+  });
+});
+
+describe("explicit backfill windows", () => {
+  it("uses the search inside the horizon and lands every record under its provider id", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [campaign("c1", daysAgo(3), 3), campaign("c2", daysAgo(2), 2), campaign("old", daysAgo(40), 5)],
+      messages: [message(1, daysAgo(2)), message(2, daysAgo(1)), message(3, daysAgo(60))],
+    });
+    const emitted = await backfill(stubbed, daysAgo(5), new Date());
+
+    expect(ids(emitted)).toEqual([
+      "mailchimp:moon-mailchimp:marketing-campaign:c1",
+      "mailchimp:moon-mailchimp:marketing:c1:c1-r0",
+      "mailchimp:moon-mailchimp:marketing:c1:c1-r1",
+      "mailchimp:moon-mailchimp:marketing:c1:c1-r2",
+      "mailchimp:moon-mailchimp:marketing-campaign:c2",
+      "mailchimp:moon-mailchimp:marketing:c2:c2-r0",
+      "mailchimp:moon-mailchimp:marketing:c2:c2-r1",
+      "mailchimp:moon-mailchimp:transactional:msg-2",
+      "mailchimp:moon-mailchimp:transactional:msg-1",
+    ]);
+    expect(stubbed.stub.calls.some((call) => call.includes("/exports/"))).toBe(false);
+    expect(JSON.stringify(emitted)).not.toContain("@example.com");
+    expect(receipts(stubbed.stateDir)).toEqual([
+      expect.objectContaining({
+        contract_version: "nexus_mailchimp_ingestion_run_v3",
+        result: "succeeded",
+        mode: "backfill",
+        campaign_count: 2,
+        campaign_record_count: 2,
+        recipient_record_count: 5,
+        transactional_source: "search",
+        transactional_export_reason: null,
+        transactional_search_candidate_count: 2,
+        transactional_emitted_count: 2,
+        total_emitted_count: 9,
+      }),
+    ]);
+  });
+
+  it("uses the activity export beyond the search horizon and reuses search identities for rows it saw", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [campaign("c1", daysAgo(45), 2)],
+      messages: [message(1, daysAgo(45)), message(2, daysAgo(44)), message(3, daysAgo(2)), message(4, daysAgo(1))],
+      search: { horizon_days: 7 },
+    });
+    const emitted = await backfill(stubbed, daysAgo(60), new Date());
+
+    const transactional = ids(emitted).filter((id) => id.includes(":transactional:"));
+    expect(transactional).toHaveLength(4);
+    expect(transactional.filter((id) => /:transactional:msg-[34]$/u.test(id))).toHaveLength(2);
+    expect(transactional.filter((id) => /:transactional:export:[0-9a-f]{64}$/u.test(id))).toHaveLength(2);
+    expect(new Set(transactional).size).toBe(4);
+    expect(stubbed.stub.calls).toContain("POST /api/1.0/exports/activity.json");
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({
+      result: "succeeded",
+      transactional_source: "export",
+      transactional_export_reason: "beyond_search_horizon",
+      transactional_export_id: "export-1",
+      transactional_search_candidate_count: 2,
+      transactional_export_row_count: 4,
+      transactional_export_search_matched_count: 2,
+      transactional_emitted_count: 4,
+      transactional_deduplicated_count: 0,
+      total_emitted_count: 7,
+    });
+  });
+
+  it("falls back to the export when the search cap would truncate the window", async () => {
+    const recent = Array.from({ length: 1000 }, (_, index) => message(index, new Date(Date.now() - index * 60_000)));
+    const older = Array.from({ length: 5 }, (_, index) => message(2000 + index, daysAgo(3)));
+    const stubbed = await stubbedClient({ campaigns: [], messages: [...recent, ...older] });
+    const emitted = await backfill(stubbed, daysAgo(5), new Date());
+
+    expect(emitted).toHaveLength(1005);
+    expect(new Set(ids(emitted)).size).toBe(1005);
+    expect(ids(emitted).filter((id) => id.includes(":transactional:export:"))).toHaveLength(5);
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({
+      transactional_source: "export",
+      transactional_export_reason: "search_cap",
+      transactional_search_cap_observed: true,
+      transactional_search_candidate_count: 1000,
+      transactional_export_row_count: 1005,
+      transactional_export_search_matched_count: 1000,
+    });
+  });
+
+  it("fails closed with the reason when the export no longer covers a window the search still sees", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [campaign("c1", daysAgo(20), 1)],
+      messages: [message(1, daysAgo(20)), message(2, daysAgo(19))],
+      export: { retained_rows: 1 },
+    });
+    await expect(backfill(stubbed, daysAgo(30), new Date())).rejects.toThrow(
+      "export does not cover the window (beyond_search_horizon): the export returned 1 rows but the search found 2 messages",
     );
-    const second = __test__.transactionalExportStableIdentity(
-      { "Message ID": "provider-1", Status: "bounced" },
-      "recipient-hash",
-      0,
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({
+      result: "failed",
+      error_class: "Error",
+      campaign_record_count: 1,
+      recipient_record_count: 1,
+      transactional_source: null,
+      total_emitted_count: 2,
+    });
+  });
+
+  it("uses a provider message id column when the export carries one", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [],
+      messages: [message(1, daysAgo(20)), message(2, daysAgo(19))],
+      search: { horizon_days: 7 },
+      export: { message_id_column: true },
+    });
+    const emitted = await backfill(stubbed, daysAgo(30), new Date());
+    expect(ids(emitted).sort()).toEqual([
+      "mailchimp:moon-mailchimp:transactional:msg-1",
+      "mailchimp:moon-mailchimp:transactional:msg-2",
+    ]);
+    expect(emitted[0]!.payload.metadata?.provider_export_id).toBe("export-1");
+  });
+
+  it("replays a window identically and reuses the export checkpoint", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [campaign("c1", daysAgo(30), 2)],
+      messages: [message(1, daysAgo(30))],
+      export: { pending_polls: 1 },
+    }, { transactional_export_poll_ms: 10 });
+    const first = await backfill(stubbed, daysAgo(40), daysAgo(20));
+    const second = await backfill(stubbed, daysAgo(40), daysAgo(20));
+
+    expect(ids(second)).toEqual(ids(first));
+    expect(stubbed.stub.calls.filter((call) => call === "POST /api/1.0/exports/activity.json")).toHaveLength(1);
+    const [one, two] = receipts(stubbed.stateDir);
+    expect(one?.output_digest).toBe(two?.output_digest);
+    expect(two).toMatchObject({ transactional_export_id: "export-1", transactional_emitted_count: 1 });
+  });
+
+  it("replaces a checkpointed export the provider no longer knows", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [],
+      messages: [message(1, daysAgo(30))],
+    });
+    const bounds = __test__.exportDateBounds(daysAgo(40), daysAgo(20));
+    const checkpointPath = join(
+      stubbed.stateDir,
+      `transactional-export-${createHash("sha256").update(`${client.connectionId}\n${bounds.date_from}\n${bounds.date_to}`).digest("hex")}.json`,
     );
-    expect(first).toBe(second);
+    writeFileSync(checkpointPath, JSON.stringify({ export_id: "expired-export", since: bounds.date_from, to: bounds.date_to }));
+
+    const emitted = await backfill(stubbed, daysAgo(40), daysAgo(20));
+
+    expect(emitted).toHaveLength(1);
+    expect(stubbed.stub.calls.filter((call) => call === "POST /api/1.0/exports/activity.json")).toHaveLength(1);
+    expect(JSON.parse(readFileSync(checkpointPath, "utf8"))).toMatchObject({ export_id: "export-1" });
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({ result: "succeeded", transactional_export_id: "export-1" });
+  });
+
+  it("honours a longer configured search horizon", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [],
+      messages: [message(1, daysAgo(20))],
+    }, { transactional_search_horizon_days: 30 });
+    await backfill(stubbed, daysAgo(25), new Date());
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({
+      transactional_source: "search",
+      transactional_search_horizon_days: 30,
+    });
+  });
+});
+
+describe("mailchimp.backfill.plan", () => {
+  it("reports the campaigns, the estimates, and the transactional path without creating an export", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [campaign("big", daysAgo(100), 2500), campaign("small", daysAgo(50), 15), campaign("later", daysAgo(1), 3)],
+      messages: [message(1, daysAgo(2))],
+    });
+    const plan = await __test__.planBackfillWindow(stubbed.client, {
+      since: daysAgo(120).toISOString(),
+      to: daysAgo(10).toISOString(),
+    });
+
+    expect(plan).toMatchObject({
+      campaign_count: 2,
+      campaigns: [
+        expect.objectContaining({ id: "big", emails_sent: 2500, record_count: 2501, read_calls: 4 }),
+        expect.objectContaining({ id: "small", emails_sent: 15, record_count: 16, read_calls: 2 }),
+      ],
+      estimated_record_count: 2517,
+      estimated_read_calls: 1 + 6 + 1 + 3,
+      transactional: {
+        path: "export",
+        export_reason: "beyond_search_horizon",
+        search_candidate_count: 0,
+        search_cap_observed: false,
+        search_horizon_days: 7,
+        within_search_horizon: false,
+        export_window: __test__.exportDateBounds(daysAgo(120), daysAgo(10)),
+        export_requested: false,
+      },
+      mutates_remote: false,
+    });
+    expect(stubbed.stub.calls.some((call) => call.includes("/exports/"))).toBe(false);
+    expect(readdirSync(stubbed.stateDir)).toEqual([]);
+  });
+
+  it("plans a recent uncapped window on the search path", async () => {
+    const stubbed = await stubbedClient({ campaigns: [], messages: [message(1, daysAgo(1))] });
+    const plan = await __test__.planBackfillWindow(stubbed.client, { since: daysAgo(3).toISOString() });
+    expect(plan.transactional).toMatchObject({ path: "search", export_reason: null, search_candidate_count: 1 });
+    expect(plan.estimated_record_count).toBe(1);
+  });
+
+  it("rejects an unusable window before reading anything", async () => {
+    const stubbed = await stubbedClient({ campaigns: [], messages: [] });
+    await expect(__test__.planBackfillWindow(stubbed.client, { since: "yesterday" })).rejects.toThrow(
+      "since must be an ISO 8601 date",
+    );
+    await expect(__test__.planBackfillWindow(stubbed.client, {
+      since: daysAgo(1).toISOString(),
+      to: daysAgo(2).toISOString(),
+    })).rejects.toThrow("to must be later than since");
+    expect(stubbed.stub.calls).toEqual([]);
   });
 });

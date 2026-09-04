@@ -13,13 +13,16 @@ addresses are removed before record ingestion.
 Marketing emits one campaign-content record and one lightweight recipient
 delivery record per campaign recipient. Transactional live sync bootstraps a
 48-hour closed window, then advances a durable cursor with a five-minute replay
-overlap. Every Transactional ingestion window uses the provider's activity
-export; its checkpoint is persisted before polling and reused after restart.
-The capped recent-search method remains read-only and operator-invoked, but is
-never completeness authority. Every source identity remains replay-stable and
-Nex owns canonical revision deduplication. Each run also retains an immutable,
-sanitized receipt containing its window, export id, counts, result class, and
-output digest.
+overlap over the capped recent search. An explicit backfill window uses the
+recent search only when it is uncapped and starts inside the search horizon;
+every other window uses the provider's activity export, whose checkpoint is
+persisted before polling and reused after restart, and fails closed when the
+export cannot cover what the search saw. The capped recent search is never
+completeness authority for history. Every source identity remains replay-stable
+(export rows reuse the search identity when the search also returned the
+message) and Nex owns canonical revision deduplication. Each run also retains
+an immutable, sanitized receipt containing its window, mode, source, export id,
+counts, result class, and output digest.
 
 The adapter never converts provider evidence directly into a customer-contact
 clock. A separate MoonSleep projector reads accepted Nex records and creates

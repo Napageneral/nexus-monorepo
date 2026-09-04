@@ -29,10 +29,29 @@ high-water, but the receipt explicitly records the inaccessible historical
 portion as backfill debt instead of claiming it complete. Stable provider
 message and revision identity deduplicates the overlapping reads.
 
-Every ingestion attempt writes an immutable sanitized history receipt with its
-exact window, cap/continuity/debt/candidate/emitted/deduplicated counts, result class,
-and output digest. Receipts never include recipient addresses, message bodies,
-credentials, or raw provider error text.
+Explicit backfills (`records.backfill`) promise historical coverage, so the
+recent search vouches for a window only when it is uncapped and the window
+starts inside the search horizon (`transactional_search_horizon_days`, default
+7). Otherwise the adapter pulls the provider's activity export for the same
+whole days, checkpoints the export id before polling, and emits one record per
+row. Rows the search also returned reuse the search identity
+(`transactional:<message id>`, correlated on send second, recipient hash, and
+subject); rows only the export knows land under a stable export identity
+(`transactional:export:<sha256>`), because Mailchimp's activity export carries
+no message id. An export that returns fewer rows than the search saw fails the
+run closed with that reason instead of truncating silently. Every emitted
+provider record id is emitted once per run.
+
+`mailchimp.backfill.plan` is a read that reports, for a window, the sent
+campaigns, the record and read-call estimates, and which Transactional path
+the window would take; it never creates an export and writes no state.
+
+Every ingestion attempt writes an immutable sanitized history receipt
+(`nexus_mailchimp_ingestion_run_v3`) with its exact window and mode, the
+campaign and recipient counts, the Transactional source (search or export),
+export id and reason, cap/continuity/debt/candidate/row/matched/emitted/
+deduplicated counts, result class, and output digest. Receipts never include
+recipient addresses, message bodies, credentials, or raw provider error text.
 
 Provider responses are retried only for throttling and transient server/network
 failures, with bounded exponential backoff and request timeouts. Raw recipient
