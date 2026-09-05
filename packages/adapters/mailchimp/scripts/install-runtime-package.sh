@@ -49,7 +49,7 @@ curl --silent --show-error --fail-with-body \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/octet-stream" \
   --data-binary "@$ARTIFACT" \
-  "$RUNTIME_URL/api/operator/packages/upload?operation_id=$OPERATION_ID&filename=mailchimp-0.2.2.tar.gz" \
+  "$RUNTIME_URL/api/operator/packages/upload?operation_id=$OPERATION_ID&filename=mailchimp-0.2.3.tar.gz" \
   > "$UPLOAD_RECEIPT"
 chmod 0600 "$UPLOAD_RECEIPT"
 
@@ -65,7 +65,7 @@ REQUEST="$(jq -cn \
   --arg release_id "nexus-main-$SOURCE_REVISION" \
   --arg operation_id "$OPERATION_ID" \
   --argjson size_bytes "$UPLOADED_SIZE" \
-  '{kind:"adapter",package_id:"mailchimp",version:"0.2.2",release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
+  '{kind:"adapter",package_id:"mailchimp",version:"0.2.3",release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
 
 curl --silent --show-error --fail-with-body \
   -H "Authorization: Bearer $TOKEN" \
@@ -75,5 +75,5 @@ curl --silent --show-error --fail-with-body \
   > "$INSTALL_RECEIPT"
 chmod 0600 "$INSTALL_RECEIPT"
 
-jq -e '.ok == true and .package_id == "mailchimp" and .version == "0.2.2" and .status == "active"' "$INSTALL_RECEIPT" >/dev/null
+jq -e '.ok == true and .package_id == "mailchimp" and .version == "0.2.3" and .status == "active"' "$INSTALL_RECEIPT" >/dev/null
 jq '{ok,package_id,version,status,active_release_path}' "$INSTALL_RECEIPT"
