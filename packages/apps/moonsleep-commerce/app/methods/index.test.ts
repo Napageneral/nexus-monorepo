@@ -476,6 +476,29 @@ describe("Shopify source manual trigger", () => {
       max_attempts: 3,
       idempotency_key: `shopify-observation:${observation.projection_work_id}`,
     });
+
+    // Re-issue of an abandoned lineage: the dead Run's id joins the key so the
+    // runtime mints a new Run instead of replaying the refused envelope.
+    const deadRun = "jobrun_aff093b9-b3a0-46af-9754-14a5936ef356";
+    ctx.params.reissue_of = deadRun;
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      run_id: "run-observation-1",
+      reissue_of: deadRun,
+    });
+    expect(invoke).toHaveBeenLastCalledWith({
+      job_id: "job-orders",
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}:reissue:${deadRun}`,
+    });
+    ctx.params.reissue_of = "not a run id";
+    await expect(triggerShopifySource(ctx as never)).rejects.toThrow("reissue_of is malformed");
+    delete ctx.params.reissue_of;
   });
 
   it("rejects an observation whose source stream disagrees with the source family", async () => {

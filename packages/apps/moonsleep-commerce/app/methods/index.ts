@@ -44,6 +44,11 @@ const PROJECTION_SPECS = Object.freeze({
   },
 });
 const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
+// A quarantined observation Run whose lineage the intake worker abandoned
+// (its copied execution envelope is refused by the current runtime). The
+// re-issue folds that run id into the idempotency key so jobs.invoke mints a
+// new Run with a fresh envelope instead of replaying the dead one.
+const SOURCE_REISSUE_OF_RE = /^jobrun_[a-zA-Z0-9-]{1,80}$/;
 const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
 const PROJECTION_WORK_ID_RE = /^channelprojection_[0-9a-f]{32}$/;
 const OBSERVATION_RECEIPT_ID_RE = /^channelobs_[0-9a-f]{32}$/;
@@ -458,6 +463,13 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   if (!SOURCE_REQUEST_ID_RE.test(requestId)) {
     throw new Error("request_id is malformed");
   }
+  const reissueOf = asString(ctx.params.reissue_of);
+  if (reissueOf && !SOURCE_REISSUE_OF_RE.test(reissueOf)) {
+    throw new Error("reissue_of is malformed");
+  }
+  if (reissueOf && !observation) {
+    throw new Error("reissue_of requires an observation");
+  }
   const listed = unwrapPayload(await ctx.nex.jobs.list({}));
   const jobs = Array.isArray(listed.jobs) ? listed.jobs.map(asRecord) : [];
   const matches = jobs.filter((job) => asString(job.name) === jobName);
@@ -485,7 +497,7 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
         : "moonsleep-commerce-manual",
       max_attempts: 3,
       idempotency_key: observation
-        ? `shopify-observation:${projectionWorkId}`
+        ? `shopify-observation:${projectionWorkId}${reissueOf ? `:reissue:${reissueOf}` : ""}`
         : `shopify-source:${family}:${requestId}`,
     }),
   );
@@ -499,6 +511,7 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
     family,
     connection_id: connectionId,
     request_id: requestId,
+    ...(reissueOf ? { reissue_of: reissueOf } : {}),
     ...(observation
       ? {
           projection_work_id: projectionWorkId,
