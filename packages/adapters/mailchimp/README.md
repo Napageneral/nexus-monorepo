@@ -40,7 +40,9 @@ subject); rows only the export knows land under a stable export identity
 (`transactional:export:<sha256>`), because Mailchimp's activity export carries
 no message id. An export that returns fewer rows than the search saw fails the
 run closed with that reason instead of truncating silently. Every emitted
-provider record id is emitted once per run.
+provider record id is emitted once per run, and an export row is byte-identical
+whichever export served it (the export id lives in the receipt, not the record),
+so rows re-read through a later export dedupe in Nex.
 
 `mailchimp.backfill.plan` is a read that reports, for a window, the sent
 campaigns, the record and read-call estimates, and which Transactional path

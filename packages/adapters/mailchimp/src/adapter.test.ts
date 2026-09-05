@@ -271,8 +271,8 @@ describe("Mailchimp read-only evidence adapter", () => {
     };
     const hash = __test__.normalizedEmailHash(row["Email Address"]);
     const ref = __test__.transactionalExportMessageRef(row, hash, 0);
-    const first = __test__.transactionalExportRecord(client, row, "export-1", ref);
-    const replay = __test__.transactionalExportRecord(client, row, "export-2", ref);
+    const first = __test__.transactionalExportRecord(client, row, ref);
+    const replay = __test__.transactionalExportRecord(client, row, ref);
     expect(ref).toMatch(/^export:[0-9a-f]{64}$/u);
     expect(first.payload.external_record_id).toBe(`mailchimp:moon-mailchimp:transactional:${ref}`);
     expect(first.payload.external_record_id).toBe(replay.payload.external_record_id);
@@ -292,8 +292,8 @@ describe("Mailchimp read-only evidence adapter", () => {
     expect(__test__.transactionalExportMessageRef(sent, hash, 0)).toBe(
       __test__.transactionalExportMessageRef(delivered, hash, 0),
     );
-    const first = __test__.transactionalExportRecord(client, sent, "export-1", "export:same");
-    const revision = __test__.transactionalExportRecord(client, delivered, "export-2", "export:same");
+    const first = __test__.transactionalExportRecord(client, sent, "export:same");
+    const revision = __test__.transactionalExportRecord(client, delivered, "export:same");
     expect(first.payload.external_record_id).toBe(revision.payload.external_record_id);
     expect(first.payload.metadata?.revision_hash).not.toBe(revision.payload.metadata?.revision_hash);
   });
@@ -453,7 +453,22 @@ describe("explicit backfill windows", () => {
       "mailchimp:moon-mailchimp:transactional:msg-1",
       "mailchimp:moon-mailchimp:transactional:msg-2",
     ]);
-    expect(emitted[0]!.payload.metadata?.provider_export_id).toBe("export-1");
+    expect(emitted[0]!.payload.metadata?.provider_export_id).toBeUndefined();
+    expect(receipts(stubbed.stateDir)[0]).toMatchObject({ transactional_export_id: "export-1" });
+  });
+
+  it("emits an export row identically whichever export served it", async () => {
+    const stubbed = await stubbedClient({
+      campaigns: [],
+      messages: [message(1, daysAgo(30)), message(2, daysAgo(25))],
+    });
+    const wide = await backfill(stubbed, daysAgo(40), daysAgo(20));
+    const narrow = await backfill(stubbed, daysAgo(28), daysAgo(20));
+
+    expect(stubbed.stub.calls.filter((call) => call === "POST /api/1.0/exports/activity.json")).toHaveLength(2);
+    expect(receipts(stubbed.stateDir).map((receipt) => receipt.transactional_export_id)).toEqual(["export-1", "export-2"]);
+    expect(narrow).toHaveLength(1);
+    expect(narrow[0]).toEqual(wide.find((record) => record.payload.external_record_id === narrow[0]!.payload.external_record_id));
   });
 
   it("replays a window identically and reuses the export checkpoint", async () => {

@@ -21,6 +21,11 @@
   a campaign sent in that second is read again and dedupes by identity). As a
   consequence a window the export cannot cover now fails closed before any
   record is emitted.
+- Transactional export rows no longer carry the export id in their metadata
+  (the receipt's `transactional_export_id` keeps that provenance): the immutable
+  store hashes record metadata into the row identity, so a row served by a
+  second export (a resumed run, a window with other bounds) now dedupes instead
+  of landing as a second revision under the same provider id.
 - Receipts (`nexus_mailchimp_ingestion_run_v3`, additive) carry `transport`
   (`stream` or `staged`) and, for staged runs, `stage_chunk_records` and
   `stage_chunk_count`.

@@ -515,10 +515,12 @@ function transactionalCorrelationKey(
   return stableJson([Math.floor(timestampMs / 1000), recipientHash ?? null, subject ?? null]);
 }
 
+// The export id that served a row is receipt provenance (transactional_export_id), not
+// record content: the immutable store hashes the record's metadata into its identity,
+// and the same row must dedupe whichever export (a rerun's, a resumed run's) served it.
 function transactionalExportRecord(
   client: MailchimpClient,
   row: UnknownRecord,
-  exportId: string,
   providerMessageRef: string,
 ): AdapterInboundRecord {
   const recipientHash = exportRowRecipientHash(row);
@@ -555,7 +557,6 @@ function transactionalExportRecord(
       metadata: {
         source_channel: "mailchimp_transactional",
         provider_message_id: providerMessageRef,
-        provider_export_id: exportId,
         recipient_email_sha256: recipientHash ?? null,
         delivery_state: transactionalDeliveryState(row.Status ?? row.status),
         direction: "moonsleep_to_customer",
@@ -822,7 +823,6 @@ async function exportTransactionalHistory(
     const record = transactionalExportRecord(
       client,
       row,
-      checkpoint.export_id,
       correlated ?? transactionalExportMessageRef(row, recipientHash, ordinal),
     );
     if (emittedIds.has(record.payload.external_record_id)) {
