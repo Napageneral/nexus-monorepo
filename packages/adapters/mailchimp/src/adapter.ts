@@ -1,13 +1,19 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
   readFileSync,
   renameSync,
   unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse as parseCsv } from "csv-parse/sync";
 import { unzipSync } from "fflate";
@@ -56,6 +62,9 @@ const TRANSACTIONAL_SEARCH_LIMIT = 1000;
 const DEFAULT_TRANSACTIONAL_SEARCH_HORIZON_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RETRIES = 5;
+// records.backfill.stage writes this many records per JSONL chunk file (backfill_stage_chunk_records).
+const DEFAULT_STAGE_CHUNK_RECORDS = 1000;
+const MAX_STAGE_CHUNK_RECORDS = 5000;
 
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -592,6 +601,15 @@ function transactionalExportMessageRef(
   return `export:${sha256(stableJson(identity))}`;
 }
 
+function compareCampaigns(left: UnknownRecord, right: UnknownRecord): number {
+  return campaignTimestamp(left) - campaignTimestamp(right)
+    || (textValue(left.id) ?? "").localeCompare(textValue(right.id) ?? "");
+}
+
+// Sent campaigns in the window, oldest first. The listing starts one second early:
+// Mailchimp send times are second-precise and a resumed run passes the last imported
+// record's timestamp as `since`, so a campaign whose send second equals it is read
+// again (its records dedupe by identity) instead of being lost to an exclusive bound.
 async function listAllCampaigns(
   client: MailchimpClient,
   since: Date,
@@ -602,7 +620,7 @@ async function listAllCampaigns(
     const page = asRecord(await marketingGet(client, "/campaigns", {
       count: MAX_PAGE_SIZE,
       offset,
-      since_send_time: since.toISOString(),
+      since_send_time: new Date(since.getTime() - 1000).toISOString(),
       before_send_time: to?.toISOString(),
       status: "sent",
       fields: "campaigns.id,campaigns.type,campaigns.create_time,campaigns.send_time,campaigns.status,campaigns.emails_sent,campaigns.recipients.list_id,campaigns.recipients.recipient_count,campaigns.settings.subject_line,campaigns.settings.preview_text,campaigns.settings.title,campaigns.settings.from_name,campaigns.settings.reply_to,campaigns.delivery_status,total_items",
@@ -611,7 +629,7 @@ async function listAllCampaigns(
     rows.push(...campaigns);
     if (campaigns.length < MAX_PAGE_SIZE) break;
   }
-  return rows;
+  return rows.sort(compareCampaigns);
 }
 
 async function emitCampaignActivity(
@@ -1047,7 +1065,9 @@ function writeMonitorCursor(client: MailchimpClient, completedThrough: Date): vo
   chmodSync(path, 0o600);
 }
 
-type IngestMode = { kind: "backfill" } | { kind: "monitor"; continuityFloor?: Date };
+type IngestMode =
+  | { kind: "backfill"; transport?: "stream" | "staged"; receiptFields?: () => UnknownRecord }
+  | { kind: "monitor"; continuityFloor?: Date };
 
 function transactionalReceiptFields(
   client: MailchimpClient,
@@ -1098,6 +1118,7 @@ async function ingestWindow(
       contract_version: "nexus_mailchimp_ingestion_run_v3",
       result,
       mode: mode.kind,
+      transport: mode.kind === "backfill" && mode.transport === "staged" ? "staged" : "stream",
       started_at: startedAt,
       completed_at: new Date().toISOString(),
       window_since: args.since.toISOString(),
@@ -1108,13 +1129,37 @@ async function ingestWindow(
       ...transactionalReceiptFields(client, transactional),
       total_emitted_count: counts.total,
       output_digest: sha256(stableJson(outputIdentities.sort())),
+      ...(mode.kind === "backfill" ? mode.receiptFields?.() ?? {} : {}),
       ...extra,
     });
   try {
+    // Records leave in non-decreasing timestamp order: the Transactional history is read
+    // first (it fails closed before anything is emitted when the export cannot cover the
+    // window) and merged into the campaigns, oldest first, so a run the runtime resumes
+    // from the last imported record's timestamp continues exactly where it stopped.
+    const transactionalRecords: AdapterInboundRecord[] = [];
+    const collect = (record: AdapterInboundRecord) => {
+      transactionalRecords.push(record);
+    };
+    transactional = mode.kind === "monitor"
+      ? await searchTransactionalTail(client, args.since, to, collect, mode.continuityFloor)
+      : await ingestTransactionalHistory(client, args.since, to, collect, new Set());
+    transactionalRecords.sort((left, right) => left.payload.timestamp - right.payload.timestamp);
+    let nextTransactional = 0;
+    const emitTransactionalThrough = (timestamp: number) => {
+      while (
+        nextTransactional < transactionalRecords.length
+        && transactionalRecords[nextTransactional]!.payload.timestamp <= timestamp
+      ) {
+        trackedEmit(transactionalRecords[nextTransactional]!);
+        nextTransactional += 1;
+      }
+    };
     const campaigns = await listAllCampaigns(client, args.since, to);
     for (const campaign of campaigns) {
       const campaignId = textValue(campaign.id);
       if (!campaignId) continue;
+      emitTransactionalThrough(campaignTimestamp(campaign));
       counts.campaigns += 1;
       const content = asRecord(await marketingGet(client, `/campaigns/${encodeURIComponent(campaignId)}/content`));
       trackedEmit(marketingCampaignRecord(client, campaign, content));
@@ -1124,14 +1169,173 @@ async function ingestWindow(
         counts.recipient_records += 1;
       });
     }
-    transactional = mode.kind === "monitor"
-      ? await searchTransactionalTail(client, args.since, to, trackedEmit, mode.continuityFloor)
-      : await ingestTransactionalHistory(client, args.since, to, trackedEmit, new Set());
+    emitTransactionalThrough(Number.POSITIVE_INFINITY);
     receipt("succeeded");
   } catch (error) {
     receipt("failed", { error_class: error instanceof Error ? error.name : "UnknownError" });
     throw error;
   }
+}
+
+type StagedChunk = {
+  path: string;
+  records: number;
+  first_record_id: string | null;
+  last_record_id: string | null;
+  first_timestamp_ms: number | null;
+  last_timestamp_ms: number | null;
+};
+
+// The runtime's staged backfill manifest (version 1, `jsonl_files`): chunk files of the
+// JSON lines records.backfill streams, imported chunk by chunk by the runtime's worker.
+// `mailchimp` is this adapter's progress cursor for operators and is ignored by the runtime.
+type StagedManifest = {
+  version: 1;
+  format: "jsonl_files";
+  stage_dir: string;
+  manifest_path: string;
+  chunks: StagedChunk[];
+  totals: { records: number };
+  mailchimp: {
+    window: { since: string; to: string };
+    chunk_records: number;
+    complete: boolean;
+    cursor: { last_record_id: string | null; last_timestamp_ms: number | null; campaign_id: string | null };
+  };
+};
+
+// Writes a window's records as JSONL chunk files under the stage directory and keeps
+// manifest.json current. A chunk is listed only once it is closed, so the runtime can
+// import chunks while the rest of the window is still being staged; every manifest
+// write is atomic (temporary file, rename).
+class StagedChunkWriter {
+  private readonly manifest: StagedManifest;
+  private descriptor: number | null = null;
+  private openChunk: StagedChunk | null = null;
+  private chunkIndex = 0;
+
+  constructor(stageDir: string, window: { since: Date; to: Date }, private readonly chunkRecords: number) {
+    this.manifest = {
+      version: 1,
+      format: "jsonl_files",
+      stage_dir: stageDir,
+      manifest_path: join(stageDir, "manifest.json"),
+      chunks: [],
+      totals: { records: 0 },
+      mailchimp: {
+        window: { since: window.since.toISOString(), to: window.to.toISOString() },
+        chunk_records: chunkRecords,
+        complete: false,
+        cursor: { last_record_id: null, last_timestamp_ms: null, campaign_id: null },
+      },
+    };
+  }
+
+  readonly write = (record: AdapterInboundRecord): void => {
+    if (this.descriptor === null) {
+      const path = join(this.manifest.stage_dir, `chunk-${String(this.chunkIndex).padStart(5, "0")}.jsonl`);
+      this.chunkIndex += 1;
+      this.descriptor = openSync(path, "wx", 0o600);
+      this.openChunk = {
+        path,
+        records: 0,
+        first_record_id: null,
+        last_record_id: null,
+        first_timestamp_ms: null,
+        last_timestamp_ms: null,
+      };
+    }
+    writeSync(this.descriptor, `${JSON.stringify(record)}\n`);
+    const chunk = this.openChunk!;
+    const recordId = record.payload.external_record_id;
+    const timestamp = record.payload.timestamp;
+    chunk.records += 1;
+    chunk.first_record_id ??= recordId;
+    chunk.last_record_id = recordId;
+    chunk.first_timestamp_ms = chunk.first_timestamp_ms === null ? timestamp : Math.min(chunk.first_timestamp_ms, timestamp);
+    chunk.last_timestamp_ms = chunk.last_timestamp_ms === null ? timestamp : Math.max(chunk.last_timestamp_ms, timestamp);
+    this.manifest.mailchimp.cursor = {
+      last_record_id: recordId,
+      last_timestamp_ms: timestamp,
+      campaign_id: textValue(record.payload.metadata?.provider_campaign_id) ?? null,
+    };
+    if (chunk.records >= this.chunkRecords) this.closeChunk();
+  };
+
+  chunkCount(): number {
+    return this.manifest.chunks.length + (this.openChunk ? 1 : 0);
+  }
+
+  // Closes the open chunk and writes the final manifest.
+  finish(): StagedManifest {
+    this.closeChunk();
+    this.manifest.mailchimp.complete = true;
+    this.writeManifest();
+    return this.manifest;
+  }
+
+  // A failed window keeps the manifest truthful: the chunks it closed stay listed (the
+  // runtime may have imported them already; a rerun dedupes by identity) and the partial
+  // chunk is closed but never listed.
+  abandon(): void {
+    if (this.descriptor !== null) {
+      closeSync(this.descriptor);
+      this.descriptor = null;
+      this.openChunk = null;
+    }
+    this.writeManifest();
+  }
+
+  private closeChunk(): void {
+    if (this.descriptor === null || !this.openChunk) return;
+    closeSync(this.descriptor);
+    this.descriptor = null;
+    this.manifest.chunks.push(this.openChunk);
+    this.openChunk = null;
+    this.writeManifest();
+  }
+
+  private writeManifest(): void {
+    this.manifest.totals.records = this.manifest.chunks.reduce((total, chunk) => total + chunk.records, 0);
+    const temporary = `${this.manifest.manifest_path}.${process.pid}.tmp`;
+    writeFileSync(temporary, `${JSON.stringify(this.manifest, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    renameSync(temporary, this.manifest.manifest_path);
+  }
+}
+
+function resolveStageDir(value: unknown): string {
+  const configured = textValue(value);
+  if (!configured) return mkdtempSync(join(tmpdir(), "mailchimp-backfill-stage-"));
+  const stageDir = resolve(configured);
+  mkdirSync(stageDir, { recursive: true, mode: 0o700 });
+  if (readdirSync(stageDir).length > 0) throw new Error("stage_dir must be an empty directory");
+  return stageDir;
+}
+
+// records.backfill.stage: the records an explicit backfill window would stream, written
+// as chunk files with a manifest for the runtime's worker-side historical import. Same
+// reads, identities, order and receipt as records.backfill; the manifest is the result.
+async function stageBackfillWindow(client: MailchimpClient, payload: UnknownRecord): Promise<StagedManifest> {
+  const since = parseIsoDate(payload.since, "since");
+  const to = payload.to === undefined ? new Date() : parseIsoDate(payload.to, "to");
+  if (to.getTime() <= since.getTime()) throw new Error("to must be later than since");
+  const chunkRecords = positiveNumber(
+    runtimeConfigFromClient(client).backfill_stage_chunk_records,
+    DEFAULT_STAGE_CHUNK_RECORDS,
+    MAX_STAGE_CHUNK_RECORDS,
+  );
+  const writer = new StagedChunkWriter(resolveStageDir(payload.stage_dir), { since, to }, chunkRecords);
+  try {
+    await ingestWindow(client, { since, to }, writer.write, {
+      kind: "backfill",
+      transport: "staged",
+      receiptFields: () => ({ stage_chunk_records: chunkRecords, stage_chunk_count: writer.chunkCount() }),
+    });
+  } catch (error) {
+    writer.abandon();
+    throw error;
+  }
+  return writer.finish();
 }
 
 function parseIsoDate(value: unknown, name: string): Date {
@@ -1257,6 +1461,7 @@ export const __test__ = {
   exportDateBounds,
   ingestWindow,
   planBackfillWindow,
+  stageBackfillWindow,
   connectionIdentity,
   health,
 };
@@ -1264,7 +1469,7 @@ export const __test__ = {
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   platform: PLATFORM,
   name: "nexus-mailchimp-readonly-adapter",
-  version: "0.2.2",
+  version: "0.2.3",
   multi_account: true,
   credential_service: "mailchimp",
   auth: {
@@ -1314,6 +1519,19 @@ export const mailchimpAdapter = defineAdapter<MailchimpClient>({
     monitor,
   },
   methods: {
+    "records.backfill.stage": method({
+      description: "Stage an explicit backfill window for the runtime's worker-side historical import: the records records.backfill would stream, written as JSONL chunk files with a manifest under stage_dir. Same reads, identities and receipt; creates the Transactional export when the window needs it.",
+      action: "read",
+      connection_required: true,
+      mutates_remote: false,
+      params: {
+        since: "ISO lower bound (campaign send time)",
+        to: "ISO upper bound; defaults to now",
+        stage_dir: "Empty directory for the chunk files and manifest.json; a temporary directory when omitted",
+      },
+      response: { manifest: "The staged backfill manifest (version 1, jsonl_files): chunks, totals, and the mailchimp progress cursor" },
+      handler: async (ctx, req) => await stageBackfillWindow(requireClient(ctx), payloadRecord(req)),
+    }),
     "mailchimp.backfill.plan": method({
       description: "Plan an explicit backfill window without pulling records: the sent campaigns, the record and read-call estimates, and whether Transactional history would come from the recent search or the activity export.",
       action: "read",

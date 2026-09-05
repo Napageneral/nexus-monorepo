@@ -46,8 +46,39 @@ provider record id is emitted once per run.
 campaigns, the record and read-call estimates, and which Transactional path
 the window would take; it never creates an export and writes no state.
 
+`records.backfill.stage` is the staged form of the same window, for the Nex
+runtime's worker-side historical import (the runtime's remote job worker runs
+only adapters that implement it). It performs the same reads and emits the same
+records, identities and receipt as `records.backfill`, but writes them as JSONL
+chunk files under `stage_dir` (`chunk-NNNNN.jsonl`, `backfill_stage_chunk_records`
+records each, default 1,000) with a `manifest.json` in the runtime's version-1
+`jsonl_files` shape. A chunk is listed only once it is closed and the manifest
+is replaced atomically, so the runtime imports chunks while the rest of the
+window is still being staged; the manifest is the method's result and its
+`mailchimp` block carries the window, the chunk size, `complete` and a cursor
+(last record id and timestamp, campaign id). `stage_dir` must be empty or
+absent (a temporary directory is created when it is omitted). A window that
+fails part way keeps its closed chunks listed and never lists the partial one.
+
+```bash
+./dist/index.js records.backfill.stage --connection <connection-id> \
+  --payload-json '{"since":"2026-02-01T00:00:00Z","to":"2026-08-23T21:53:00Z","stage_dir":"/path/to/empty/dir"}'
+```
+
+Every run emits its records in non-decreasing timestamp order: the
+Transactional history is read first and merged into the campaigns, which are
+emitted oldest first whatever order the provider lists them. The runtime resumes
+an interrupted backfill from the last imported record's timestamp, and that
+order makes the resume exact: everything before the resume point is already
+stored, and the records at the resume second are read again and dedupe by
+identity (the immutable store keys rows on platform, connection, account,
+provider record id, version ref and payload digest, so an identical replay
+creates no row and changed recipient activity creates a new row under the same
+provider id). Rerunning a whole window is therefore always safe.
+
 Every ingestion attempt writes an immutable sanitized history receipt
-(`nexus_mailchimp_ingestion_run_v3`) with its exact window and mode, the
+(`nexus_mailchimp_ingestion_run_v3`) with its exact window, mode and transport
+(`stream` or `staged`, with the chunk size and count), the
 campaign and recipient counts, the Transactional source (search or export),
 export id and reason, cap/continuity/debt/candidate/row/matched/emitted/
 deduplicated counts, result class, and output digest. Receipts never include

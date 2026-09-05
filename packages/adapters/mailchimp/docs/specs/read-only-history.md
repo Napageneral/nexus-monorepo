@@ -21,8 +21,17 @@ export cannot cover what the search saw. The capped recent search is never
 completeness authority for history. Every source identity remains replay-stable
 (export rows reuse the search identity when the search also returned the
 message) and Nex owns canonical revision deduplication. Each run also retains
-an immutable, sanitized receipt containing its window, mode, source, export id,
-counts, result class, and output digest.
+an immutable, sanitized receipt containing its window, mode, transport, source,
+export id, counts, result class, and output digest.
+
+A backfill window has two transports with one behaviour: `records.backfill`
+streams the records to stdout, `records.backfill.stage` writes them as JSONL
+chunk files with a version-1 `jsonl_files` manifest for the runtime's
+worker-side historical import. Both emit the records in non-decreasing
+timestamp order (Transactional history merged into the campaigns, oldest
+first), so a run the runtime resumes from the last imported record's timestamp
+continues exactly where it stopped, and both dedupe by provider identity on
+replay.
 
 The adapter never converts provider evidence directly into a customer-contact
 clock. A separate MoonSleep projector reads accepted Nex records and creates
