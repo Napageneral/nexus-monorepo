@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.5 (2026-09-08)
+
+- `adapter.info` reports the manifest version. 0.2.4 shipped with the constant still saying
+  0.2.3; the contract test now asserts `adapter.nexus.json`, `package.json` and `adapter.info`
+  agree. Code otherwise identical to 0.2.4; a new version because the runtime pins a version
+  to its first installed release identity and 0.2.4 is already in the production catalog.
+
 ## 0.2.4 (2026-09-07)
 
 - Runtime-owned monitor checkpoint (Nex P-9.2, runtime context version 2): when
