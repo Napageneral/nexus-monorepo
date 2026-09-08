@@ -12,7 +12,7 @@ Validated 2026-08-10 against a disposable Nex runtime built from
 ## Ingest contract
 
 - detected and recovered transitions produce two records in one source channel and one incident thread
-- stable event replay produces no duplicate record
+- stable event replay produces no duplicate record (absorbed by the immutable store)
 - corrected event content produces a record revision with the same external identity
 - event identity drift fails closed
 - batch validation fails before any record emission
@@ -33,7 +33,7 @@ Validated 2026-08-10 against a disposable Nex runtime built from
 - unit tests: 10 passed, zero failed/skipped
 - Nex records: 2 canonical event identities
 - Nex revisions: detected=2, recovered=1
-- exact replay: suppressed without a new record or revision
+- exact replay: emitted, absorbed by the store without a new record or revision
 - channel route: `incidents:moonsleep-cleanroom`
 - incident thread: `inc-checkout-001`
 - runtime health: healthy, no foreground queue or backpressure

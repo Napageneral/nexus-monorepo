@@ -2,7 +2,7 @@
 
 ## Phase 1 — package proof
 
-1. Validate normalization, source binding, routing, replay suppression, corrections, and identity drift.
+1. Validate normalization, source binding, routing, replay safety, and corrections.
 2. Build and package the adapter.
 3. Install it into a disposable Nex runtime and prove search/readback.
 
