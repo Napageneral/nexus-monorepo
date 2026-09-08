@@ -1,7 +1,3 @@
-import { createHash } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 import {
   type AdapterConnectionIdentity,
@@ -9,7 +5,6 @@ import {
   type AdapterHealth,
   type AdapterInboundRecord,
   defineAdapter,
-  requireAdapterStateDir,
 } from "@nexus-project/adapter-sdk-ts";
 
 type UnknownRecord = Record<string, unknown>;
@@ -47,22 +42,6 @@ const SEVERITIES = new Set(["info", "warning", "critical"]);
 const IMPACT_STATUSES = new Set(["none", "possible", "confirmed", "unknown"]);
 const SENSITIVE_METADATA_KEYS = /(^|[_-])(authorization|cookie|credential|password|secret|session|token)([_-]|$)/iu;
 
-const DEDUPE_SCHEMA = `
-CREATE TABLE IF NOT EXISTS reliability_incident_events (
-  connection_id TEXT NOT NULL,
-  event_id TEXT NOT NULL,
-  incident_id TEXT NOT NULL,
-  source_id TEXT NOT NULL,
-  external_record_id TEXT NOT NULL,
-  content_sha256 TEXT NOT NULL,
-  first_seen_at INTEGER NOT NULL,
-  last_seen_at INTEGER NOT NULL,
-  accepted_revisions INTEGER NOT NULL DEFAULT 1,
-  PRIMARY KEY (connection_id, event_id)
-);
-CREATE INDEX IF NOT EXISTS reliability_incident_events_last_seen_idx
-  ON reliability_incident_events (connection_id, last_seen_at DESC);
-`;
 
 export type ReliabilityRuntimeConfig = {
   source_id: string;
@@ -125,25 +104,20 @@ export type IncidentTransition = {
   metadata?: UnknownRecord;
 };
 
-type DedupeDecision = {
-  deduped: boolean;
-  revision: boolean;
-  previous?: {
-    incident_id: string;
-    source_id: string;
-    content_sha256: string;
-  };
-};
-
 export type CaptureResult = {
   ok: true;
   event_id: string;
   incident_id: string;
   external_record_id: string;
-  deduped: boolean;
-  revision: boolean;
-  /** The adapter's own dedupe would have suppressed this exact replay; `replay: true` emitted it anyway. */
-  replayed: boolean;
+  /**
+   * Since 0.1.2 the adapter keeps no ledger: every event is emitted and the runtime's immutable
+   * Record store dedupes by identity (an exact replay is a no-op there, changed content is a new
+   * record). These counters stay in the result shape for the producer and the replay operator
+   * and are always false.
+   */
+  deduped: false;
+  revision: false;
+  replayed: false;
 };
 
 export type CaptureBatchResult = {
@@ -158,9 +132,9 @@ export type CaptureBatchResult = {
 
 export type CaptureOptions = {
   /**
-   * Bypass the adapter-side exact-replay suppression for every event in the batch. The runtime's
-   * immutable Record store still dedupes by identity, so re-delivering retained source history is
-   * safe; the adapter records the acceptance as usual. Identity-drift rejection is unaffected.
+   * Accepted for compatibility with the 0.1.x producer and replay operator. Since 0.1.2 nothing is
+   * suppressed adapter-side, so re-delivering retained source history is always safe: the runtime's
+   * immutable Record store dedupes by identity.
    */
   replay?: boolean;
 };
@@ -431,125 +405,11 @@ function buildConnectionIdentity(
   };
 }
 
-function stateDatabasePath(): string {
-  const stateDir = requireAdapterStateDir();
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const dbPath = path.join(stateDir, "reliability-incidents.sqlite");
-  return dbPath;
-}
-
-function openStateDatabase(): DatabaseSync {
-  const dbPath = stateDatabasePath();
-  const db = new DatabaseSync(dbPath);
-  db.exec(DEDUPE_SCHEMA);
-  try {
-    fs.chmodSync(dbPath, 0o600);
-  } catch {
-    // The runtime-owned state directory may enforce permissions externally.
-  }
-  return db;
-}
-
-function contentDigest(event: IncidentTransition): string {
-  return createHash("sha256").update(stableStringify(event)).digest("hex");
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    const row = value as UnknownRecord;
-    return `{${Object.keys(row)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableStringify(row[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function readDedupeDecision(
-  db: DatabaseSync,
-  connectionId: string,
-  event: IncidentTransition,
-): DedupeDecision {
-  const row = db
-    .prepare(
-      `SELECT incident_id, source_id, content_sha256
-       FROM reliability_incident_events
-       WHERE connection_id = ? AND event_id = ?`,
-    )
-    .get(connectionId, event.event_id) as
-    | { incident_id: string; source_id: string; content_sha256: string }
-    | undefined;
-  if (!row) return { deduped: false, revision: false };
-  if (row.incident_id !== event.incident_id || row.source_id !== event.source_id) {
-    throw new Error(`event_id identity drift detected: ${event.event_id}`);
-  }
-  const digest = contentDigest(event);
-  return {
-    deduped: row.content_sha256 === digest,
-    revision: row.content_sha256 !== digest,
-    previous: row,
-  };
-}
-
-function markAccepted(
-  db: DatabaseSync,
-  connectionId: string,
-  event: IncidentTransition,
-  externalRecordId: string,
-): void {
-  const now = Date.now();
-  db.prepare(
-    `INSERT INTO reliability_incident_events (
-       connection_id, event_id, incident_id, source_id, external_record_id,
-       content_sha256, first_seen_at, last_seen_at, accepted_revisions
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-     ON CONFLICT (connection_id, event_id) DO UPDATE SET
-       content_sha256 = excluded.content_sha256,
-       external_record_id = excluded.external_record_id,
-       last_seen_at = excluded.last_seen_at,
-       accepted_revisions = reliability_incident_events.accepted_revisions + 1`,
-  ).run(
-    connectionId,
-    event.event_id,
-    event.incident_id,
-    event.source_id,
-    externalRecordId,
-    contentDigest(event),
-    now,
-    now,
-  );
-}
-
-function readLatestEventAt(connectionId: string): number | undefined {
-  try {
-    const db = openStateDatabase();
-    try {
-      const row = db
-        .prepare(
-          `SELECT max(last_seen_at) AS last_seen_at
-           FROM reliability_incident_events
-           WHERE connection_id = ?`,
-        )
-        .get(connectionId) as { last_seen_at: number | null } | undefined;
-      return row?.last_seen_at ?? undefined;
-    } finally {
-      db.close();
-    }
-  } catch {
-    return undefined;
-  }
-}
-
 function buildHealth(ctx: RuntimeContextLike, config: ReliabilityRuntimeConfig): AdapterHealth {
   const connectionId = ctx.runtime?.connection_id?.trim() ?? config.source_id;
-  const lastEventAt = readLatestEventAt(connectionId);
   return {
     connected: true,
     connection_id: connectionId,
-    ...(lastEventAt ? { last_event_at: lastEventAt } : {}),
     details: {
       adapter: RELIABILITY_INCIDENTS_PLATFORM,
       source_id: config.source_id,
@@ -660,28 +520,23 @@ export async function captureNormalizedEvent(
   config: ReliabilityRuntimeConfig,
   event: IncidentTransition,
   emit: (record: AdapterInboundRecord) => Promise<void>,
-  options: CaptureOptions = {},
+  _options: CaptureOptions = {},
 ): Promise<CaptureResult> {
-  const connectionId = ctx.runtime?.connection_id?.trim() ?? config.source_id;
+  // 0.1.2: no adapter-side ledger. The producer delivers each event once from its outbox and the
+  // runtime's immutable Record store keys records by identity (platform, connection, provider
+  // record id, payload digest): an exact replay of a delivered batch is a store-side no-op and a
+  // changed transition is a new record, so every event is emitted as it arrives.
   const envelope = buildRecordIngestEnvelope(ctx, config, event);
-  const db = openStateDatabase();
-  try {
-    const decision = readDedupeDecision(db, connectionId, event);
-    const result = {
-      ok: true as const,
-      event_id: event.event_id,
-      incident_id: event.incident_id,
-      external_record_id: envelope.payload.external_record_id,
-    };
-    if (decision.deduped && options.replay !== true) {
-      return { ...result, deduped: true, revision: false, replayed: false };
-    }
-    await emit(envelope);
-    markAccepted(db, connectionId, event, envelope.payload.external_record_id);
-    return { ...result, deduped: false, revision: decision.revision, replayed: decision.deduped };
-  } finally {
-    db.close();
-  }
+  await emit(envelope);
+  return {
+    ok: true,
+    event_id: event.event_id,
+    incident_id: event.incident_id,
+    external_record_id: envelope.payload.external_record_id,
+    deduped: false,
+    revision: false,
+    replayed: false,
+  };
 }
 
 export async function captureBatch(
@@ -699,10 +554,10 @@ export async function captureBatch(
   return {
     ok: true,
     count: results.length,
-    emitted: results.filter((result) => !result.deduped).length,
-    deduped: results.filter((result) => result.deduped).length,
-    revised: results.filter((result) => result.revision).length,
-    replayed: results.filter((result) => result.replayed).length,
+    emitted: results.length,
+    deduped: 0,
+    revised: 0,
+    replayed: 0,
     results,
   };
 }
@@ -710,7 +565,7 @@ export async function captureBatch(
 export const reliabilityIncidentsAdapter = defineAdapter({
   platform: RELIABILITY_INCIDENTS_PLATFORM,
   name: "reliability-incidents-adapter",
-  version: "0.1.1",
+  version: "0.1.2",
   multi_account: true,
   auth: {
     methods: [

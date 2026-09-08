@@ -9,7 +9,7 @@ The adapter is push-based and exposes two source-owned commands through `adapter
 - `incident.capture`
 - `incident.capture.batch`
 
-`incident.capture.batch` accepts `replay: true` next to `incident_events`. It bypasses the adapter's own exact-replay suppression for that batch so retained source history (an outbox the source never deletes) can be re-delivered after the adapter state has already seen it; the runtime's immutable Record store still dedupes by identity, the adapter still records each acceptance, and an event id reused for a different incident is still rejected. The batch result reports `replayed` (events the suppression would have dropped) next to `emitted`, `deduped`, and `revised`.
+`incident.capture.batch` accepts `replay: true` next to `incident_events` for compatibility with the 0.1.x producer and replay operator. Since 0.1.2 the adapter keeps no ledger of its own: every event is emitted, and the runtime's immutable Record store dedupes by identity (platform, connection, provider record id, payload digest), so re-delivering retained source history (an outbox the source never deletes) is always safe: an exact replay is a store-side no-op, changed content for the same event id is a new record. The batch result still reports `emitted`, `deduped`, `revised`, and `replayed`; the last three are always 0.
 
 Runtime connection configuration requires:
 

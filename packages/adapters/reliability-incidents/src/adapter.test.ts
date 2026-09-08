@@ -73,19 +73,6 @@ function context(): AdapterContext {
   } as AdapterContext;
 }
 
-async function withStateDir<T>(work: () => Promise<T>): Promise<T> {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "reliability-incidents-test-"));
-  const previous = process.env.NEXUS_ADAPTER_STATE_DIR;
-  process.env.NEXUS_ADAPTER_STATE_DIR = directory;
-  try {
-    return await work();
-  } finally {
-    if (previous === undefined) delete process.env.NEXUS_ADAPTER_STATE_DIR;
-    else process.env.NEXUS_ADAPTER_STATE_DIR = previous;
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-}
-
 test("normalizes a complete incident transition and binds it to the configured source", () => {
   const normalized = normalizeIncidentTransition(fixture(), "moonsleep-production");
   assert.equal(normalized.event_id, "evt-checkout-001-detected");
@@ -111,64 +98,81 @@ test("projects source, channel, incident thread, and immutable event identity in
   assert.equal((envelope.payload.metadata?.incident_event as Record<string, unknown>).transition, "detected");
 });
 
-test("suppresses an exact replay after the first accepted emission", async () => {
-  await withStateDir(async () => {
-    const ctx = context();
-    const config = readRuntimeConfig(ctx);
-    const event = normalizeIncidentTransition(fixture(), config.source_id);
-    const emitted: AdapterInboundRecord[] = [];
-    const emit = async (record: AdapterInboundRecord) => {
-      emitted.push(record);
-    };
+test("emits every event; an exact replay is the immutable store's no-op, not the adapter's", async () => {
+  const ctx = context();
+  const config = readRuntimeConfig(ctx);
+  const event = normalizeIncidentTransition(fixture(), config.source_id);
+  const emitted: AdapterInboundRecord[] = [];
+  const emit = async (record: AdapterInboundRecord) => {
+    emitted.push(record);
+  };
 
-    const first = await captureNormalizedEvent(ctx, config, event, emit);
-    const second = await captureNormalizedEvent(ctx, config, event, emit);
+  const first = await captureNormalizedEvent(ctx, config, event, emit);
+  const second = await captureNormalizedEvent(ctx, config, event, emit);
 
-    assert.equal(first.deduped, false);
-    assert.equal(second.deduped, true);
-    assert.equal(emitted.length, 1);
-  });
+  assert.equal(first.deduped, false);
+  assert.equal(second.deduped, false);
+  assert.equal(emitted.length, 2);
+  assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
+  assert.deepEqual(emitted[0], emitted[1]);
 });
 
-test("replay re-emits an exact duplicate the adapter would suppress and keeps the dedupe state", async () => {
-  await withStateDir(async () => {
+test("needs no adapter state directory and creates no ledger", async () => {
+  const previous = process.env.NEXUS_ADAPTER_STATE_DIR;
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "reliability-incidents-test-"));
+  process.env.NEXUS_ADAPTER_STATE_DIR = directory;
+  try {
     const ctx = context();
     const config = readRuntimeConfig(ctx);
-    const emitted: AdapterInboundRecord[] = [];
-    const emit = async (record: AdapterInboundRecord) => {
-      emitted.push(record);
-    };
-    await captureBatch(ctx, config, [fixture()], emit);
-
-    const replayed = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit, {
-      replay: true,
-    });
-    const afterwards = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit);
-
-    assert.deepEqual(
-      { emitted: replayed.emitted, deduped: replayed.deduped, revised: replayed.revised, replayed: replayed.replayed },
-      { emitted: 2, deduped: 0, revised: 0, replayed: 1 },
-    );
-    assert.equal(replayed.results[0]?.replayed, true);
-    assert.equal(replayed.results[1]?.replayed, false);
-    assert.equal(afterwards.deduped, 2);
-    assert.equal(afterwards.replayed, 0);
-    assert.equal(emitted.length, 3);
-    assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
-  });
+    await captureBatch(ctx, config, [fixture()], async () => undefined);
+    assert.deepEqual(fs.readdirSync(directory), []);
+    delete process.env.NEXUS_ADAPTER_STATE_DIR;
+    const withoutStateDir = await captureBatch(ctx, config, [fixture()], async () => undefined);
+    assert.equal(withoutStateDir.emitted, 1);
+  } finally {
+    if (previous === undefined) delete process.env.NEXUS_ADAPTER_STATE_DIR;
+    else process.env.NEXUS_ADAPTER_STATE_DIR = previous;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
-test("replay still rejects an event id reused for a different incident", async () => {
-  await withStateDir(async () => {
-    const ctx = context();
-    const config = readRuntimeConfig(ctx);
-    const emit = async () => undefined;
-    await captureBatch(ctx, config, [fixture()], emit);
-    await assert.rejects(
-      captureBatch(ctx, config, [fixture({ incident_id: "inc-different-999" })], emit, { replay: true }),
-      /event_id identity drift detected/u,
-    );
+test("replay: true is accepted and changes nothing; the counters the operator reads stay zero", async () => {
+  const ctx = context();
+  const config = readRuntimeConfig(ctx);
+  const emitted: AdapterInboundRecord[] = [];
+  const emit = async (record: AdapterInboundRecord) => {
+    emitted.push(record);
+  };
+  await captureBatch(ctx, config, [fixture()], emit);
+
+  const replayed = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit, {
+    replay: true,
   });
+  const afterwards = await captureBatch(ctx, config, [fixture(), fixture({ event_id: "evt-new" })], emit);
+
+  assert.deepEqual(
+    { count: replayed.count, emitted: replayed.emitted, deduped: replayed.deduped, revised: replayed.revised, replayed: replayed.replayed },
+    { count: 2, emitted: 2, deduped: 0, revised: 0, replayed: 0 },
+  );
+  assert.deepEqual(
+    { emitted: afterwards.emitted, deduped: afterwards.deduped, replayed: afterwards.replayed },
+    { emitted: 2, deduped: 0, replayed: 0 },
+  );
+  assert.equal(emitted.length, 5);
+});
+
+test("an event id reused for another incident is emitted as its own record (the producer owns event-id uniqueness)", async () => {
+  const ctx = context();
+  const config = readRuntimeConfig(ctx);
+  const emitted: AdapterInboundRecord[] = [];
+  const emit = async (record: AdapterInboundRecord) => {
+    emitted.push(record);
+  };
+  await captureBatch(ctx, config, [fixture()], emit);
+  const drifted = await captureBatch(ctx, config, [fixture({ incident_id: "inc-different-999" })], emit);
+  assert.equal(drifted.emitted, 1);
+  assert.equal(emitted[1]?.routing.thread_id, "inc-different-999");
+  assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
 });
 
 test("batch payload carries replay only as a boolean", () => {
@@ -178,75 +182,44 @@ test("batch payload carries replay only as a boolean", () => {
   assert.throws(() => readIncidentBatch({}), /incident_events is required/u);
 });
 
-test("emits a corrected event as a revision with the same external record id", async () => {
-  await withStateDir(async () => {
-    const ctx = context();
-    const config = readRuntimeConfig(ctx);
-    const emitted: AdapterInboundRecord[] = [];
-    const emit = async (record: AdapterInboundRecord) => {
-      emitted.push(record);
-    };
-    const first = normalizeIncidentTransition(fixture(), config.source_id);
-    const corrected = normalizeIncidentTransition(
-      fixture({ summary: "Corrected summary after detector evidence was reconciled." }),
-      config.source_id,
-    );
+test("emits a corrected event under the same external record id (the store keeps it as a revision)", async () => {
+  const ctx = context();
+  const config = readRuntimeConfig(ctx);
+  const emitted: AdapterInboundRecord[] = [];
+  const emit = async (record: AdapterInboundRecord) => {
+    emitted.push(record);
+  };
+  const first = normalizeIncidentTransition(fixture(), config.source_id);
+  const corrected = normalizeIncidentTransition(
+    fixture({ summary: "Corrected summary after detector evidence was reconciled." }),
+    config.source_id,
+  );
 
-    await captureNormalizedEvent(ctx, config, first, emit);
-    const result = await captureNormalizedEvent(ctx, config, corrected, emit);
+  await captureNormalizedEvent(ctx, config, first, emit);
+  const result = await captureNormalizedEvent(ctx, config, corrected, emit);
 
-    assert.equal(result.revision, true);
-    assert.equal(emitted.length, 2);
-    assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
-    assert.notEqual(emitted[0]?.payload.content, emitted[1]?.payload.content);
-  });
-});
-
-test("rejects reuse of an event id for a different incident identity", async () => {
-  await withStateDir(async () => {
-    const ctx = context();
-    const config = readRuntimeConfig(ctx);
-    const emitted: AdapterInboundRecord[] = [];
-    const emit = async (record: AdapterInboundRecord) => {
-      emitted.push(record);
-    };
-    await captureNormalizedEvent(
-      ctx,
-      config,
-      normalizeIncidentTransition(fixture(), config.source_id),
-      emit,
-    );
-
-    const drifted = normalizeIncidentTransition(
-      fixture({ incident_id: "inc-different-999" }),
-      config.source_id,
-    );
-    await assert.rejects(
-      captureNormalizedEvent(ctx, config, drifted, emit),
-      /event_id identity drift detected/u,
-    );
-    assert.equal(emitted.length, 1);
-  });
+  assert.equal(result.revision, false);
+  assert.equal(emitted.length, 2);
+  assert.equal(emitted[0]?.payload.external_record_id, emitted[1]?.payload.external_record_id);
+  assert.notEqual(emitted[0]?.payload.content, emitted[1]?.payload.content);
 });
 
 test("validates an entire batch before emitting any record", async () => {
-  await withStateDir(async () => {
-    const ctx = context();
-    const config = readRuntimeConfig(ctx);
-    const emitted: AdapterInboundRecord[] = [];
-    await assert.rejects(
-      captureBatch(
-        ctx,
-        config,
-        [fixture(), fixture({ event_id: "evt-invalid", severity: "panic" })],
-        async (record) => {
-          emitted.push(record);
-        },
-      ),
-      /severity is not supported/u,
-    );
-    assert.equal(emitted.length, 0);
-  });
+  const ctx = context();
+  const config = readRuntimeConfig(ctx);
+  const emitted: AdapterInboundRecord[] = [];
+  await assert.rejects(
+    captureBatch(
+      ctx,
+      config,
+      [fixture(), fixture({ event_id: "evt-invalid", severity: "panic" })],
+      async (record) => {
+        emitted.push(record);
+      },
+    ),
+    /severity is not supported/u,
+  );
+  assert.equal(emitted.length, 0);
 });
 
 test("rejects credential-like metadata keys while allowing incident prose", () => {

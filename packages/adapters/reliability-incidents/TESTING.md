@@ -14,7 +14,7 @@ The required cleanroom proof additionally installs the package into a disposable
 - one reliability channel
 - one incident thread
 - two records
-- zero duplicate records after replay
+- zero duplicate records after replay (the runtime's immutable store dedupes by identity; since 0.1.2 the adapter keeps no ledger)
 - a corrected event creates a record revision with stable external identity
 - title, summary, component, impact, remediation, and validation text are searchable
 - no remote mutation method is exposed
