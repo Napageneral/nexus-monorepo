@@ -1,6 +1,6 @@
 {
   "id": "shopify",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "displayName": "Shopify",
   "description": "Canonical Shopify adapter package for Nex with GraphQL-backed provider methods and additive projection.",
   "platform": "shopify",
@@ -292,6 +292,12 @@
       "response": {
         "type": "object",
         "properties": {
+          "checkpoint": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
           "version": {
             "type": "integer",
             "enum": [
@@ -409,6 +415,12 @@
       "response": {
         "type": "object",
         "properties": {
+          "checkpoint": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
           "version": {
             "type": "integer",
             "enum": [
@@ -503,6 +515,12 @@
       "response": {
         "type": "object",
         "properties": {
+          "checkpoint": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
           "version": {
             "type": "integer",
             "enum": [
@@ -599,6 +617,12 @@
       "response": {
         "type": "object",
         "properties": {
+          "checkpoint": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
           "version": {
             "type": "integer",
             "enum": [

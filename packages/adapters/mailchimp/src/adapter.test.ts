@@ -745,3 +745,46 @@ describe("mailchimp.backfill.plan", () => {
     expect(stubbed.stub.calls).toEqual([]);
   });
 });
+
+describe("runtime-owned monitor checkpoint (P-9.2)", () => {
+  it("reads the cursor from the injected checkpoint and emits the advance as a checkpoint line", () => {
+    const emitted: Array<{ scope: string; key: string; value: unknown }> = [];
+    const managed = {
+      ...client,
+      checkpoints: { "monitor/transactional": { completed_through: "2026-09-07T20:23:44.740Z" } },
+      emitCheckpoint: (checkpoint: { scope: string; key: string; value: unknown }) => {
+        emitted.push(checkpoint);
+      },
+    };
+    expect(__test__.readMonitorCursor(managed)?.toISOString()).toBe("2026-09-07T20:23:44.740Z");
+    __test__.writeMonitorCursor(managed, new Date("2026-09-07T22:42:13.376Z"));
+    expect(emitted).toEqual([
+      {
+        scope: "monitor",
+        key: "transactional",
+        value: { completed_through: "2026-09-07T22:42:13.376Z" },
+      },
+    ]);
+    // The in-process view advanced with the line; the runtime injects the row next spawn.
+    expect(__test__.readMonitorCursor(managed)?.toISOString()).toBe("2026-09-07T22:42:13.376Z");
+    // No file: the runtime owns the row.
+    expect(process.env.NEXUS_ADAPTER_STATE_DIR).toBeUndefined();
+  });
+
+  it("treats a managed runtime without a row as the same cold start, and keeps the file path otherwise", () => {
+    const cold = { ...client, checkpoints: {}, emitCheckpoint: () => undefined };
+    expect(__test__.readMonitorCursor(cold)).toBeUndefined();
+    const stateDir = mkdtempSync(join(tmpdir(), "mailchimp-cursor-"));
+    process.env.NEXUS_ADAPTER_STATE_DIR = stateDir;
+    try {
+      const legacy = { ...client };
+      expect(__test__.readMonitorCursor(legacy)).toBeUndefined();
+      __test__.writeMonitorCursor(legacy, new Date("2026-09-07T22:42:13.376Z"));
+      expect(__test__.readMonitorCursor(legacy)?.toISOString()).toBe("2026-09-07T22:42:13.376Z");
+      expect(readdirSync(stateDir).some((name) => name.startsWith("transactional-monitor-"))).toBe(true);
+    } finally {
+      delete process.env.NEXUS_ADAPTER_STATE_DIR;
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
