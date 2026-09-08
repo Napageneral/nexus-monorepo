@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.4 (2026-09-07)
+
+- Runtime-owned monitor checkpoint (Nex P-9.2, runtime context version 2): when
+  the runtime injects `checkpoints`, the Transactional monitor cursor comes from
+  the `monitor/transactional` row and every completed window is handed back as a
+  `{"nex":"checkpoint","scope":"monitor","key":"transactional","value":{"completed_through":…}}`
+  stdout line behind the records of that window; the runtime persists it only
+  once those records were acknowledged, fenced by its authority epoch.
+  `transactional-monitor-<sha256(connection)>.json` is neither read nor written
+  under such a runtime. Without an injected `checkpoints` field (an older
+  runtime) the file path is unchanged; a version 2 runtime without a row is the
+  same cold start (48 h window, historical gap recorded). Export receipts
+  (`transactional-export-*.json`) and the ingestion-run history stay local
+  files: they are receipts, not cursors.
+
 ## 0.2.3 (2026-09-05)
 
 - `records.backfill.stage`: the staged form of an explicit backfill window, for

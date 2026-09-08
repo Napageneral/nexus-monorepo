@@ -263,6 +263,23 @@ func sourceStatePaths(connectionID string) (statePath string, lockPath string, e
 
 func withLockedSourceState[T any](connectionID string, fn func(*shopifySourceState) (T, error)) (T, error) {
 	var zero T
+	if managed := managedSourceStateFor(connectionID); managed != nil {
+		// Runtime-owned checkpoints: in memory for this process, returned as the result's
+		// `checkpoint` field (withSourceCheckpoints); no file, no lock.
+		var result T
+		err := managed.with(func(state *shopifySourceState) error {
+			value, fnErr := fn(state)
+			if fnErr != nil {
+				return fnErr
+			}
+			result = value
+			return nil
+		})
+		if err != nil {
+			return zero, err
+		}
+		return result, nil
+	}
 	statePath, lockPath, err := sourceStatePaths(connectionID)
 	if err != nil {
 		return zero, err
@@ -1009,6 +1026,17 @@ func handleShopifySourceCapture(ctx nexadapter.AdapterContext[struct{}], payload
 	if err != nil {
 		return nil, err
 	}
+	if _, err := enableManagedSourceState(state.ConnectionID, ctx.Runtime); err != nil {
+		return nil, err
+	}
+	result, err := handleShopifySourceCaptureLocked(ctx, state, payload)
+	if err != nil {
+		return nil, err
+	}
+	return withSourceCheckpoints(state.ConnectionID, result)
+}
+
+func handleShopifySourceCaptureLocked(ctx nexadapter.AdapterContext[struct{}], state *shopifyState, payload map[string]any) (any, error) {
 	family, _ := payload["family"].(string)
 	spec, err := sourceFamilySpec(family)
 	if err != nil {
@@ -1106,6 +1134,17 @@ func handleShopifySourceCommit(ctx nexadapter.AdapterContext[struct{}], payload 
 	if err != nil {
 		return nil, err
 	}
+	if _, err := enableManagedSourceState(state.ConnectionID, ctx.Runtime); err != nil {
+		return nil, err
+	}
+	result, err := handleShopifySourceCommitLocked(ctx, state, payload)
+	if err != nil {
+		return nil, err
+	}
+	return withSourceCheckpoints(state.ConnectionID, result)
+}
+
+func handleShopifySourceCommitLocked(ctx nexadapter.AdapterContext[struct{}], state *shopifyState, payload map[string]any) (any, error) {
 	family, _ := payload["family"].(string)
 	if _, err := sourceFamilySpec(family); err != nil {
 		return nil, err
@@ -1122,6 +1161,17 @@ func handleShopifySourceAbort(ctx nexadapter.AdapterContext[struct{}], payload m
 	if err != nil {
 		return nil, err
 	}
+	if _, err := enableManagedSourceState(state.ConnectionID, ctx.Runtime); err != nil {
+		return nil, err
+	}
+	result, err := handleShopifySourceAbortLocked(ctx, state, payload)
+	if err != nil {
+		return nil, err
+	}
+	return withSourceCheckpoints(state.ConnectionID, result)
+}
+
+func handleShopifySourceAbortLocked(ctx nexadapter.AdapterContext[struct{}], state *shopifyState, payload map[string]any) (any, error) {
 	family, _ := payload["family"].(string)
 	if _, err := sourceFamilySpec(family); err != nil {
 		return nil, err
@@ -1195,6 +1245,17 @@ func handleShopifySourceCheckpointAdopt(ctx nexadapter.AdapterContext[struct{}],
 	if err != nil {
 		return nil, err
 	}
+	if _, err := enableManagedSourceState(state.ConnectionID, ctx.Runtime); err != nil {
+		return nil, err
+	}
+	result, err := handleShopifySourceCheckpointAdoptLocked(ctx, state, payload)
+	if err != nil {
+		return nil, err
+	}
+	return withSourceCheckpoints(state.ConnectionID, result)
+}
+
+func handleShopifySourceCheckpointAdoptLocked(ctx nexadapter.AdapterContext[struct{}], state *shopifyState, payload map[string]any) (any, error) {
 	family, _ := payload["family"].(string)
 	if strings.TrimSpace(family) != "finance.transactions" {
 		return nil, errors.New("Shopify checkpoint adoption supports only finance.transactions")

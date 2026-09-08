@@ -10,6 +10,7 @@ import {
   AdapterInfoSchema,
   AdapterInboundRecordSchema,
 } from "./protocol.js";
+import { AdapterCheckpointLineSchema } from "./checkpoint.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
 
 function contractDir(): string {
@@ -162,5 +163,17 @@ describe("opaque record payload", () => {
       provider_object_json: '{"messageId":"1"}',
       provider_object_sha256: "a".repeat(64),
     });
+  });
+
+  it("accepts the checkpoint line fixture and the version 2 runtime context", () => {
+    const dir = contractDir();
+    const line = loadJSON(path.join(dir, "fixtures", "checkpoint_line.json"));
+    expect(() => AdapterCheckpointLineSchema.parse(line)).not.toThrow();
+    const context = readAdapterRuntimeContextFile(path.join(dir, "fixtures", "runtime_context_v2.json"));
+    expect(context.checkpoints).toEqual({
+      "monitor/history": (line as { value: unknown }).value,
+    });
+    const legacy = readAdapterRuntimeContextFile(path.join(dir, "fixtures", "runtime_context.json"));
+    expect(legacy.checkpoints).toBeUndefined();
   });
 });

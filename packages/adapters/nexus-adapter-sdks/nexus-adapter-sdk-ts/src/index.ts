@@ -152,3 +152,4 @@ export { newRecord, RecordBuilder, messageRecord } from "./event.js";
 
 export type { AdapterLogger } from "./logger.js";
 export { createAdapterLogger, patchConsoleToStderr } from "./logger.js";
+export * from "./checkpoint.js";

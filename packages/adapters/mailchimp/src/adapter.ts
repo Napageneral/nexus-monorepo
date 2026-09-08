@@ -19,7 +19,10 @@ import { parse as parseCsv } from "csv-parse/sync";
 import { unzipSync } from "fflate";
 import {
   defineAdapter,
+  emitAdapterCheckpoint,
+  hasManagedCheckpoints,
   method,
+  readAdapterCheckpoint,
   requireCredential,
   type AdapterBackfillWindow,
   type AdapterContext,
@@ -38,7 +41,18 @@ type MailchimpClient = {
   transactionalBaseUrl: string;
   fetchFn: typeof fetch;
   runtimeConfig: UnknownRecord;
+  /**
+   * Runtime-owned checkpoints (Nex P-9.2, runtime context version 2). Present when the runtime
+   * injected `checkpoints`: the monitor cursor then comes from the "monitor/transactional" row and
+   * every advance is a {"nex":"checkpoint"} stdout line behind the records of the window; no
+   * transactional-monitor-<sha>.json is read or written. Absent on an older runtime (file path).
+   */
+  checkpoints?: Record<string, unknown>;
+  emitCheckpoint?: (checkpoint: { scope: string; key: string; value: unknown }) => void;
 };
+
+const MONITOR_CHECKPOINT_SCOPE = "monitor";
+const MONITOR_CHECKPOINT_KEY = "transactional";
 
 const PLATFORM = "mailchimp";
 const DEFAULT_ACCOUNT_LABEL = "MoonSleep Mailchimp";
@@ -185,6 +199,9 @@ function buildClient(ctx: AdapterContext, connectionId?: string): MailchimpClien
       configText(ctx, "transactional_base_url") ?? DEFAULT_TRANSACTIONAL_BASE_URL,
     fetchFn: fetch,
     runtimeConfig: runtimeConfig(ctx),
+    ...(hasManagedCheckpoints(ctx.runtime)
+      ? { checkpoints: ctx.runtime?.checkpoints ?? {}, emitCheckpoint: emitAdapterCheckpoint }
+      : {}),
   };
 }
 
@@ -1039,21 +1056,39 @@ function monitorCursorPath(client: MailchimpClient): string {
   );
 }
 
+function parseMonitorCursor(value: unknown): Date | undefined {
+  const through = textValue(asRecord(value).completed_through);
+  if (!through) return undefined;
+  const timestamp = Date.parse(through);
+  return Number.isFinite(timestamp) ? new Date(timestamp) : undefined;
+}
+
 function readMonitorCursor(client: MailchimpClient): Date | undefined {
+  if (client.checkpoints) {
+    return parseMonitorCursor(
+      readAdapterCheckpoint(
+        { platform: PLATFORM, connection_id: client.connectionId, config: {}, checkpoints: client.checkpoints },
+        MONITOR_CHECKPOINT_SCOPE,
+        MONITOR_CHECKPOINT_KEY,
+      ),
+    );
+  }
   const path = monitorCursorPath(client);
   if (!existsSync(path)) return undefined;
   try {
-    const parsed = asRecord(JSON.parse(readFileSync(path, "utf8")));
-    const through = textValue(parsed.completed_through);
-    if (!through) return undefined;
-    const timestamp = Date.parse(through);
-    return Number.isFinite(timestamp) ? new Date(timestamp) : undefined;
+    return parseMonitorCursor(JSON.parse(readFileSync(path, "utf8")));
   } catch {
     return undefined;
   }
 }
 
 function writeMonitorCursor(client: MailchimpClient, completedThrough: Date): void {
+  if (client.checkpoints) {
+    const value = { completed_through: completedThrough.toISOString() };
+    client.checkpoints[`${MONITOR_CHECKPOINT_SCOPE}/${MONITOR_CHECKPOINT_KEY}`] = value;
+    client.emitCheckpoint?.({ scope: MONITOR_CHECKPOINT_SCOPE, key: MONITOR_CHECKPOINT_KEY, value });
+    return;
+  }
   const path = monitorCursorPath(client);
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(
@@ -1446,6 +1481,8 @@ async function health(client: MailchimpClient) {
 }
 
 export const __test__ = {
+  readMonitorCursor,
+  writeMonitorCursor,
   normalizedEmailHash,
   marketingDatacenter,
   marketingCampaignRecord,
