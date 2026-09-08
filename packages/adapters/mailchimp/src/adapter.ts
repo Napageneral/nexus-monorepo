@@ -1506,7 +1506,7 @@ export const __test__ = {
 export const mailchimpAdapter = defineAdapter<MailchimpClient>({
   platform: PLATFORM,
   name: "nexus-mailchimp-readonly-adapter",
-  version: "0.2.3",
+  version: "0.2.5",
   multi_account: true,
   credential_service: "mailchimp",
   auth: {
