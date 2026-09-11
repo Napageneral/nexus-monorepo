@@ -1,0 +1,9 @@
+{
+  "id": "wwex-speedship",
+  "version": "0.1.0",
+  "displayName": "WWEX SpeedShip Invoices",
+  "description": "Read-only external-capture registration adapter for WWEX SpeedShip invoice evidence.",
+  "platform": "speedship",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md"
+}

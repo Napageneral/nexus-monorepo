@@ -7,6 +7,8 @@ summary: "Discovery entrypoint for adapter authors working inside the Nex monore
 
 This directory contains Nex adapter packages and adapter-related support code.
 
+[WWEX SpeedShip adapter](./wwex-speedship/README.md), the read-only external-capture connection identity for MoonSleep's SpeedShip invoice, payment, and shipment capture (the capture itself is a dormant moonsleep-v1 workload; Records enter through `record.ingest`).
+
 Implemented provider packages include the read-only
 [Mailchimp adapter](./mailchimp/README.md), which ingests Marketing campaign
 recipient activity and Transactional delivery history without exposing a send
