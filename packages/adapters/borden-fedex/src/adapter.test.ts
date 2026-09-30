@@ -30,8 +30,8 @@ test("adapter advertises only the external read-only setup flow", async () => {
     fields: __test__.setupFields(),
   });
   assert.deepEqual(info.methods, []);
-  assert.ok(info.operations.includes("records.backfill"));
-  assert.ok(info.operations.includes("adapter.monitor.start"));
+  assert.ok(!info.operations.includes("records.backfill"));
+  assert.ok(!info.operations.includes("adapter.monitor.start"));
   assert.ok(info.operations.includes("adapter.setup.start"));
   assert.ok(info.operations.includes("adapter.setup.submit"));
 });
