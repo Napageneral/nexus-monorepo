@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import type { NexAppMethodHandler } from "../../../../../nex/src/runtime/domains/apps/context.js";
+import type {
+  NexAppMethodContext,
+  NexAppMethodHandler,
+} from "../../../../../nex/src/runtime/domains/apps/context.js";
+import { listEveryPage } from "../jobs/nex-runtime-lists.js";
 import {
   buildShopifyCustomerObservation,
   projectShopifyCustomerIdentities,
@@ -171,6 +175,16 @@ function unwrapPayload(value: unknown): RuntimeRow {
   }
   const payload = asRecord(row.payload);
   return Object.keys(payload).length > 0 ? payload : row;
+}
+
+function listJobs(ctx: NexAppMethodContext): Promise<RuntimeRow[]> {
+  return listEveryPage("jobs.list", async (page) => unwrapPayload(await ctx.nex.jobs.list(page)));
+}
+
+function listSchedules(ctx: NexAppMethodContext): Promise<RuntimeRow[]> {
+  return listEveryPage("schedules.list", async (page) =>
+    unwrapPayload(await ctx.nex.schedules.list(page)),
+  );
 }
 
 function requireCohortRecordIds(params: RuntimeRow): string[] {
@@ -470,9 +484,7 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   if (reissueOf && !observation) {
     throw new Error("reissue_of requires an observation");
   }
-  const listed = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listed.jobs) ? listed.jobs.map(asRecord) : [];
-  const matches = jobs.filter((job) => asString(job.name) === jobName);
+  const matches = (await listJobs(ctx)).filter((job) => asString(job.name) === jobName);
   if (matches.length !== 1) {
     throw new Error("Shopify source job is missing or duplicated");
   }
@@ -584,12 +596,8 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     throw new Error("confirmation does not authorize Shopify source schedule configuration");
   }
 
-  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
-  const listedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
-  const schedules = Array.isArray(listedSchedules.schedules)
-    ? listedSchedules.schedules.map(asRecord)
-    : [];
+  const jobs = await listJobs(ctx);
+  const schedules = await listSchedules(ctx);
 
   for (const target of plan.schedules) {
     const jobMatches = jobs.filter((job) => asString(job.name) === target.job_name);
@@ -661,12 +669,8 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     throw error;
   }
 
-  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const verifiedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
-  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
-  const scheduleRows = Array.isArray(verifiedSchedules.schedules)
-    ? verifiedSchedules.schedules.map(asRecord)
-    : [];
+  const jobRows = await listJobs(ctx);
+  const scheduleRows = await listSchedules(ctx);
   for (const target of plan.schedules) {
     const job = jobRows.find((entry) => asString(entry.name) === target.job_name);
     const schedule = scheduleRows.find((entry) => asString(entry.name) === target.schedule_name);
@@ -744,8 +748,7 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     throw new Error("confirmation does not authorize Shopify projection configuration");
   }
 
-  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
+  const jobs = await listJobs(ctx);
   const bound: Array<{
     projection: ShopifyProjection;
     job: RuntimeRow;
@@ -832,8 +835,7 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     throw error;
   }
 
-  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
+  const jobRows = await listJobs(ctx);
   for (const target of plan.projections) {
     const enabled = target.enabled;
     const job = jobRows.find((row) => asString(row.name) === target.job_name);
