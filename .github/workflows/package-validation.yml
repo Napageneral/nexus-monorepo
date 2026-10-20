@@ -23,9 +23,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the pinned Nex commit
+        id: nex-pin
+        run: echo "sha=$(git ls-tree HEAD nex | awk '{print $3}')" >> "$GITHUB_OUTPUT"
+
+      # Napageneral/nex is private, so the job's own GITHUB_TOKEN cannot clone it.
+      - name: Require the Nex read token
+        env:
+          NEX_REPO_READ_TOKEN: ${{ secrets.NEX_REPO_READ_TOKEN }}
+        run: |
+          if [ -z "$NEX_REPO_READ_TOKEN" ]; then
+            echo "::error::Actions secret NEX_REPO_READ_TOKEN is not set: add a fine-grained token with Contents: read on Napageneral/nex."
+            exit 1
+          fi
 
       - name: Checkout Nex runtime
-        run: git submodule update --init --depth 1 nex
+        uses: actions/checkout@v4
+        with:
+          repository: Napageneral/nex
+          ref: ${{ steps.nex-pin.outputs.sha }}
+          token: ${{ secrets.NEX_REPO_READ_TOKEN }}
+          path: nex
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -50,5 +72,14 @@ jobs:
       - name: Audit package tree
         run: python3 packages/scripts/audit-packages.py
 
-      - name: Validate discovered package roots
-        run: bash packages/scripts/validate-package-roots.sh
+      # Pull requests and pushes validate the package roots they change; a
+      # manual run validates every root.
+      - name: Validate package roots
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            bash packages/scripts/validate-package-roots.sh
+          else
+            bash packages/scripts/validate-package-roots.sh --changed-since "$BASE_SHA"
+          fi
