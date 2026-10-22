@@ -284,8 +284,9 @@ function health(ctx: FlexportContext): Omit<AdapterHealth, "connection_id"> {
 
 /**
  * A final document's bytes into custody. A download that fails (a non-2xx answer, a refused
- * redirect, a timeout) leaves that attachment off for this pass only: the bundle still goes out
- * and the download is tried again on the next pass. A refused token still stops the pass.
+ * redirect, a timeout, a body cut off after the headers) leaves that attachment off for this pass
+ * only: the bundle still goes out and the download is tried again on the next pass. A refused
+ * token still stops the pass.
  */
 async function documentCustody(
   ctx: FlexportContext,

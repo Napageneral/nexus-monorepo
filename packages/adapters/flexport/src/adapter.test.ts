@@ -146,6 +146,54 @@ function statusFile(harness: Harness) {
   return JSON.parse(readFileSync(join(harness.dir, "status", `${CONNECTION_ID}.json`), "utf8"));
 }
 
+/** Ways a document download can stop after Flexport answered 200, and the error name each gives. */
+const BODY_CUTS = [
+  { cut: "the connection drops", name: "TypeError" },
+  { cut: "the download timeout fires", name: "TimeoutError" },
+] as const;
+
+/**
+ * Cuts the next D1 download off after its headers and first 10 bytes; returns the undo. A dropped
+ * connection is a real one from the fake (undici rejects the body read with TypeError
+ * 'terminated'). The download timeout is five minutes, so its DOMException TimeoutError is raised
+ * on the body stream by a wrapped fetch instead.
+ */
+function cutDownloadBody(harness: Harness, cut: (typeof BODY_CUTS)[number]["cut"]): () => void {
+  const path = "/documents/D1/download";
+  const file = harness.fake.fixtures.document_files.D1;
+  if (cut === "the connection drops") {
+    harness.fake.inject({ path, status: 200, headers: { "content-type": file.content_type }, body: file.bytes, dropAfter: 10 });
+    return () => {};
+  }
+  const realFetch = globalThis.fetch;
+  let remaining = 1;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const response = await realFetch(input, init);
+    if (remaining === 0 || new URL(String(input)).pathname !== path) return response;
+    remaining -= 1;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) {
+          controller.error(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+          return;
+        }
+        sent = true;
+        controller.enqueue(bytes.slice(0, 10));
+      },
+    });
+    return new Response(body, { status: response.status, headers: response.headers });
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = realFetch;
+  };
+}
+
+function downloadRequests(harness: Harness, id: string): number {
+  return harness.fake.requests.filter((request) => request.path === `/documents/${id}/download`).length;
+}
+
 test("adapter.info declares the api_key auth, ingest operations and exactly eight methods", async () => {
   const reflected = await info();
   assert.equal(reflected.platform, "flexport");
@@ -354,6 +402,49 @@ test("a monitor pass whose only failures are documents is a successful pass", as
     assert.equal(health.details?.document_failures, 1);
   });
 });
+
+for (const { cut, name } of BODY_CUTS) {
+  const logged =
+    "Flexport document D1 on shipment 1234567 not attached this pass (tried again next pass): " +
+    `Flexport document D1 download interrupted (${name})`;
+
+  test(`a download where ${cut} after the headers is left off this backfill; the bundle goes out and the download is retried`, async () => {
+    await withHarness(async (harness) => {
+      const restore = cutDownloadBody(harness, cut);
+      try {
+        const first = await backfill(harness);
+        assert.deepEqual(first.map((record) => record.payload.external_record_id), ["shipment:1234567", "network:me"]);
+        assert.equal(first[0]!.payload.attachments, undefined);
+        assert.deepEqual(harness.errors, [logged]);
+        const second = await backfill(harness);
+        assert.equal(second[0]!.payload.attachments?.[0]?.id, "document:D1");
+        assert.equal(downloadRequests(harness, "D1"), 2);
+      } finally {
+        restore();
+      }
+    });
+  });
+
+  test(`a monitor pass whose only failure is a download where ${cut} after the headers is a successful pass`, async () => {
+    await withHarness(async (harness) => {
+      const restore = cutDownloadBody(harness, cut);
+      try {
+        const records: AdapterInboundRecord[] = [];
+        await monitorOnePass(harness, records);
+        assert.deepEqual(records.map((record) => record.payload.external_record_id), ["shipment:1234567", "network:me"]);
+        assert.equal(records[0]!.payload.attachments, undefined);
+        const status = statusFile(harness);
+        assert.ok(status.last_success_at);
+        assert.equal(status.document_failures, 1);
+        assert.equal(status.last_error, null);
+        assert.deepEqual(harness.errors, [logged]);
+        assert.equal(checkpointLines(harness).length, 1);
+      } finally {
+        restore();
+      }
+    });
+  });
+}
 
 test("an unchanged bundle and network are written again, byte for byte, once a day", async () => {
   await withHarness(async (harness) => {

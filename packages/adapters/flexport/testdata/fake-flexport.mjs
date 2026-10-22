@@ -78,6 +78,24 @@ export async function startFakeFlexport(options = {}) {
     response.end(bytes);
   }
 
+  /**
+   * The status, the headers (the full content-length) and the first bytes of the body, then the
+   * connection is dropped (`dropAfter`) or left open with nothing more sent (`stallAfter`).
+   */
+  function cutBody(response, injected) {
+    const body = injected.body ?? envelope(null);
+    const bytes = Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
+    response.writeHead(injected.status, {
+      "content-type": Buffer.isBuffer(body) ? "application/octet-stream" : "application/json",
+      "content-length": String(bytes.length),
+      ...injected.headers,
+    });
+    const sent = bytes.subarray(0, injected.dropAfter ?? injected.stallAfter);
+    response.write(sent, () => {
+      if (injected.dropAfter !== undefined) response.socket?.destroy();
+    });
+  }
+
   function error(response, status, code, message, self) {
     send(response, status, {
       _object: "/api/response",
@@ -264,6 +282,10 @@ export async function startFakeFlexport(options = {}) {
       );
       if (injected) {
         injected.times -= 1;
+        if (injected.dropAfter !== undefined || injected.stallAfter !== undefined) {
+          cutBody(response, injected);
+          return;
+        }
         send(response, injected.status, injected.body ?? envelope(null), injected.headers ?? {});
         return;
       }
@@ -295,7 +317,10 @@ export async function startFakeFlexport(options = {}) {
     apiRequests() {
       return requests.filter((entry) => entry.path !== "/oauth/token" && entry.path !== "/__fake/stats");
     },
-    /** One-shot (or `times`-shot) response for a path: a 302, a 429 with Retry-After, an error body. */
+    /**
+     * One-shot (or `times`-shot) response for a path: a 302, a 429 with Retry-After, an error body,
+     * or a body cut off after its first bytes (`dropAfter`, `stallAfter`).
+     */
     inject(entry) {
       injections.push({ times: 1, ...entry });
     },

@@ -1093,9 +1093,16 @@ export function createFlexportClient(options: FlexportClientOptions) {
     try {
       bytes = await readCapped(response, config.max_document_bytes, `Flexport document ${documentId}`);
     } catch (error) {
-      if (!(error instanceof FlexportError) || !/is larger than/.test(error.message)) throw error;
-      remember({ skipped: "too_large", limit: config.max_document_bytes });
-      return { skipped: "too_large" };
+      if (error instanceof FlexportError && /is larger than/.test(error.message)) {
+        remember({ skipped: "too_large", limit: config.max_document_bytes });
+        return { skipped: "too_large" };
+      }
+      // The body stopped after the headers: the connection dropped (undici's TypeError
+      // 'terminated') or the download timeout fired. Only this document waits for the next pass.
+      throw new FlexportError(
+        `Flexport document ${documentId} download interrupted (${error instanceof Error ? error.name : "error"})`,
+        { status: response.status },
+      );
     }
     const sha256 = sha256Hex(bytes);
     const localPath = storeCustody(bytes, sha256);

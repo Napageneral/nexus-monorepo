@@ -47,7 +47,13 @@ function stateDir(): string {
 function clientFor(
   fake: FakeFlexport,
   dir: string,
-  options: { config?: Record<string, unknown>; secret?: string; sleeps?: number[]; now?: () => number } = {},
+  options: {
+    config?: Record<string, unknown>;
+    secret?: string;
+    sleeps?: number[];
+    now?: () => number;
+    requestTimeoutMs?: number;
+  } = {},
 ) {
   const config: FlexportConfig = readFlexportConfig({ base_url: fake.url, ...options.config });
   return createFlexportClient({
@@ -60,6 +66,7 @@ function clientFor(
       options.sleeps?.push(milliseconds);
     },
     ...(options.now ? { now: options.now } : {}),
+    ...(options.requestTimeoutMs ? { requestTimeoutMs: options.requestTimeoutMs } : {}),
   });
 }
 
@@ -620,6 +627,50 @@ test("a final document is downloaded once into private sha256 custody", async ()
     assert.deepEqual(await small.documentIntoCustody(other), { skipped: "too_large" });
     assert.deepEqual(await small.documentIntoCustody(other), { skipped: "too_large" });
     assert.equal(fake.downloads["D1-big"], undefined);
+  });
+});
+
+test("a download cut off after its headers is a FlexportError naming the document; it is not remembered", async () => {
+  await withFake(async (fake, dir) => {
+    // Downloads get five request timeouts: 500 ms here.
+    const client = clientFor(fake, dir, { requestTimeoutMs: 100 });
+    const document = fake.fixtures.documents.find((row: { id: string }) => row.id === "D1");
+    const file = fake.fixtures.document_files.D1;
+    const cut = {
+      path: "/documents/D1/download",
+      status: 200,
+      headers: { "content-type": file.content_type },
+      body: file.bytes,
+    };
+    const interrupted = (name: string) => ({
+      name: "FlexportError",
+      message: `Flexport document D1 download interrupted (${name})`,
+      status: 200,
+      abortsPass: false,
+    });
+
+    // The connection drops partway through the body: undici rejects the read with TypeError('terminated').
+    fake.inject({ ...cut, dropAfter: 10 });
+    await assert.rejects(client.documentIntoCustody(document), interrupted("TypeError"));
+
+    // Nothing more arrives: the download timeout fires mid-body with a DOMException TimeoutError.
+    fake.inject({ ...cut, stallAfter: 10 });
+    const started = Date.now();
+    await assert.rejects(client.documentIntoCustody(document), interrupted("TimeoutError"));
+    assert.ok(Date.now() - started >= 450, "the download timeout, not the request timeout");
+
+    // Neither is remembered as a skip: the next call downloads the document.
+    const stored = await client.documentIntoCustody(document);
+    assert.ok("stored" in stored);
+    assert.equal(stored.stored.size, file.bytes.length);
+    assert.equal(fake.requests.filter((request) => request.path === "/documents/D1/download").length, 3);
+
+    // A body over max_document_bytes is still a remembered skip, not an interruption.
+    const small = clientFor(fake, dir, { config: { max_document_bytes: 50 } });
+    const unsized = { ...document, id: "D1", file_metadata: { uploaded_at: "2026-10-09T03:00:00Z" } };
+    assert.deepEqual(await small.documentIntoCustody(unsized), { skipped: "too_large" });
+    assert.deepEqual(await small.documentIntoCustody(unsized), { skipped: "too_large" });
+    assert.equal(fake.requests.filter((request) => request.path === "/documents/D1/download").length, 4);
   });
 });
 

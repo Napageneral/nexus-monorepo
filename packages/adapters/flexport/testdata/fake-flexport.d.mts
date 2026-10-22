@@ -20,6 +20,10 @@ export type FakeInjection = {
   headers?: Record<string, string>;
   body?: unknown;
   times?: number;
+  /** Send the headers and this many body bytes, then drop the connection. */
+  dropAfter?: number;
+  /** Send the headers and this many body bytes, then nothing more (the connection stays open). */
+  stallAfter?: number;
 };
 
 export type FakeFixtures = Record<string, any>;
