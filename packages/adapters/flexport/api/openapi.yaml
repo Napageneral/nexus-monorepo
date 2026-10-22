@@ -1,0 +1,1132 @@
+openapi: 3.1.0
+info:
+  title: flexport-adapter Adapter API
+  version: 0.1.0
+  description: "Published adapter package contract for flexport. This artifact
+    covers ordinary JSON request/response adapter operations. Long-lived
+    stream/session operations remain in the shared adapter protocol and are
+    intentionally omitted here: adapter.monitor.start, records.backfill."
+tags:
+  - name: Adapter
+paths:
+  /operations/adapter.connections.list:
+    post:
+      operationId: adapter.connections.list
+      summary: List adapter connections
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterConnectionsListResultSchema"
+  /operations/adapter.health:
+    post:
+      operationId: adapter.health
+      summary: Check adapter connection health
+      tags:
+        - Adapter
+      x-sdk-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdapterConnectionRequestSchema"
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterHealthSchema"
+  /operations/adapter.info:
+    post:
+      operationId: adapter.info
+      summary: Read adapter package metadata
+      tags:
+        - Adapter
+      x-sdk-public: true
+      responses:
+        "200":
+          description: Successful adapter package response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdapterInfoSchema"
+  /operations/flexport.bookings.create:
+    post:
+      operationId: flexport.bookings.create
+      summary: Create one Flexport booking from the exact approved body (POST
+        /bookings).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: write
+      x-nexus-mutates-remote: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    body_json:
+                      type: string
+                      minLength: 1
+                      description: The exact JSON text sent to Flexport.
+                    body_sha256:
+                      type: string
+                      pattern: ^[0-9a-f]{64}$
+                      description: sha256 hex of body_json.
+                    go:
+                      type: string
+                      minLength: 1
+                      description: Tyler's words approving this exact write.
+                    confirm:
+                      type: string
+                      enum:
+                        - SEND_TO_FLEXPORT
+                  required:
+                    - body_json
+                    - body_sha256
+                    - go
+                    - confirm
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sent
+                  path:
+                    type: string
+                  flexport_id:
+                    type:
+                      - string
+                      - "null"
+                  object:
+                    type:
+                      - object
+                      - "null"
+                    additionalProperties: true
+                required:
+                  - status
+                  - path
+                  - flexport_id
+                  - object
+                additionalProperties: false
+  /operations/flexport.documents.create:
+    post:
+      operationId: flexport.documents.create
+      summary: Upload one Flexport shipment document from the exact approved body
+        (POST /documents).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: write
+      x-nexus-mutates-remote: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    body_json:
+                      type: string
+                      minLength: 1
+                      description: The exact JSON text sent to Flexport.
+                    body_sha256:
+                      type: string
+                      pattern: ^[0-9a-f]{64}$
+                      description: sha256 hex of body_json.
+                    go:
+                      type: string
+                      minLength: 1
+                      description: Tyler's words approving this exact write.
+                    confirm:
+                      type: string
+                      enum:
+                        - SEND_TO_FLEXPORT
+                  required:
+                    - body_json
+                    - body_sha256
+                    - go
+                    - confirm
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sent
+                  path:
+                    type: string
+                  flexport_id:
+                    type:
+                      - string
+                      - "null"
+                  object:
+                    type:
+                      - object
+                      - "null"
+                    additionalProperties: true
+                required:
+                  - status
+                  - path
+                  - flexport_id
+                  - object
+                additionalProperties: false
+  /operations/flexport.network.get:
+    post:
+      operationId: flexport.network.get
+      summary: "Read MoonSleep's Flexport network: own company, company entities,
+        companies, and locations."
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties: {}
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  network:
+                    type: object
+                    additionalProperties: true
+                  network_sha256:
+                    type: string
+                    pattern: ^[0-9a-f]{64}$
+                required:
+                  - network
+                  - network_sha256
+                additionalProperties: false
+  /operations/flexport.products.create:
+    post:
+      operationId: flexport.products.create
+      summary: Create one Flexport product from the exact approved body (POST
+        /products).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: write
+      x-nexus-mutates-remote: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    body_json:
+                      type: string
+                      minLength: 1
+                      description: The exact JSON text sent to Flexport.
+                    body_sha256:
+                      type: string
+                      pattern: ^[0-9a-f]{64}$
+                      description: sha256 hex of body_json.
+                    go:
+                      type: string
+                      minLength: 1
+                      description: Tyler's words approving this exact write.
+                    confirm:
+                      type: string
+                      enum:
+                        - SEND_TO_FLEXPORT
+                  required:
+                    - body_json
+                    - body_sha256
+                    - go
+                    - confirm
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sent
+                  path:
+                    type: string
+                  flexport_id:
+                    type:
+                      - string
+                      - "null"
+                  object:
+                    type:
+                      - object
+                      - "null"
+                    additionalProperties: true
+                required:
+                  - status
+                  - path
+                  - flexport_id
+                  - object
+                additionalProperties: false
+  /operations/flexport.products.update:
+    post:
+      operationId: flexport.products.update
+      summary: Update one Flexport product from the exact approved body (PATCH
+        /products/{product_id}).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: write
+      x-nexus-mutates-remote: true
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    product_id:
+                      type: string
+                      pattern: ^[A-Za-z0-9_-]{1,64}$
+                    body_json:
+                      type: string
+                      minLength: 1
+                      description: The exact JSON text sent to Flexport.
+                    body_sha256:
+                      type: string
+                      pattern: ^[0-9a-f]{64}$
+                      description: sha256 hex of body_json.
+                    go:
+                      type: string
+                      minLength: 1
+                      description: Tyler's words approving this exact write.
+                    confirm:
+                      type: string
+                      enum:
+                        - SEND_TO_FLEXPORT
+                  required:
+                    - product_id
+                    - body_json
+                    - body_sha256
+                    - go
+                    - confirm
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - sent
+                  path:
+                    type: string
+                  flexport_id:
+                    type:
+                      - string
+                      - "null"
+                  object:
+                    type:
+                      - object
+                      - "null"
+                    additionalProperties: true
+                required:
+                  - status
+                  - path
+                  - flexport_id
+                  - object
+                additionalProperties: false
+  /operations/flexport.shipments.bundle:
+    post:
+      operationId: flexport.shipments.bundle
+      summary: Read one shipment's bundle (shipment, containers, legs, customs
+        entries, invoices, documents).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    shipment_id:
+                      type: string
+                      pattern: ^[A-Za-z0-9_-]{1,64}$
+                  required:
+                    - shipment_id
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bundle:
+                    type: object
+                    additionalProperties: true
+                  bundle_sha256:
+                    type: string
+                    pattern: ^[0-9a-f]{64}$
+                required:
+                  - bundle
+                  - bundle_sha256
+                additionalProperties: false
+  /operations/flexport.shipments.list:
+    post:
+      operationId: flexport.shipments.list
+      summary: List Flexport shipments, most recently updated first (default and
+        maximum 100).
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties:
+                    limit:
+                      type: integer
+                      minimum: 1
+                      maximum: 100
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shipments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type:
+                            - string
+                            - "null"
+                        name:
+                          type:
+                            - string
+                            - "null"
+                        status:
+                          type:
+                            - string
+                            - "null"
+                        updated_at:
+                          type:
+                            - string
+                            - "null"
+                        transportation_mode:
+                          type:
+                            - string
+                            - "null"
+                      required:
+                        - id
+                        - name
+                        - status
+                        - updated_at
+                        - transportation_mode
+                      additionalProperties: false
+                required:
+                  - shipments
+                additionalProperties: false
+  /operations/flexport.status:
+    post:
+      operationId: flexport.status
+      summary: Read the adapter's token, poll, and write-authority status without
+        calling Flexport.
+      tags:
+        - Adapter
+      x-sdk-public: true
+      x-nexus-action: read
+      x-nexus-mutates-remote: false
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                connection_id:
+                  type: string
+                payload:
+                  type: object
+                  properties: {}
+                  additionalProperties: false
+      responses:
+        "200":
+          description: Successful adapter method response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+components:
+  schemas:
+    AdapterInfoSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        platform:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        operations:
+          type: array
+          items:
+            type: string
+            enum:
+              - adapter.info
+              - adapter.health
+              - adapter.connections.list
+              - adapter.monitor.start
+              - adapter.serve.start
+              - adapter.setup.start
+              - adapter.setup.submit
+              - adapter.setup.status
+              - adapter.setup.cancel
+              - records.backfill
+        methods:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type:
+                  - string
+                  - "null"
+              action:
+                type: string
+                enum:
+                  - read
+                  - write
+              params:
+                anyOf:
+                  - type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties: {}
+                  - type: "null"
+              response:
+                anyOf:
+                  - type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties: {}
+                  - type: "null"
+              connection_required:
+                type: boolean
+              mutates_remote:
+                type: boolean
+              context_hints:
+                type: object
+                properties:
+                  params:
+                    type: object
+                    propertyNames:
+                      type: string
+                    additionalProperties:
+                      type: object
+                      properties:
+                        value: {}
+                        source:
+                          type: string
+                        confidence:
+                          type: string
+                          enum:
+                            - exact
+                            - derived
+                            - weak
+                      required:
+                        - value
+                        - source
+                        - confidence
+                      additionalProperties: false
+                required:
+                  - params
+                additionalProperties: false
+              origin:
+                type: object
+                properties:
+                  package_kind:
+                    type: string
+                    const: adapter
+                  package_id:
+                    type:
+                      - string
+                      - "null"
+                  package_version:
+                    type:
+                      - string
+                      - "null"
+                  declaration_mode:
+                    type: string
+                    enum:
+                      - manifest
+                      - openapi
+                      - builtin
+                  declaration_source:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                  - package_kind
+                  - package_id
+                  - package_version
+                  - declaration_mode
+                  - declaration_source
+                  - namespace
+                additionalProperties: false
+            required:
+              - name
+            additionalProperties: false
+        credential_service:
+          type: string
+        multi_account:
+          type: boolean
+        supports_payload_file:
+          type: boolean
+        platform_capabilities:
+          type: object
+          properties:
+            text_limit:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            caption_limit:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            supports_markdown:
+              type: boolean
+            markdown_flavor:
+              type: string
+            supports_tables:
+              type: boolean
+            supports_code_blocks:
+              type: boolean
+            supports_embeds:
+              type: boolean
+            supports_threads:
+              type: boolean
+            supports_reactions:
+              type: boolean
+            supports_polls:
+              type: boolean
+            supports_buttons:
+              type: boolean
+            supports_edit:
+              type: boolean
+            supports_delete:
+              type: boolean
+            supports_media:
+              type: boolean
+            supports_voice_notes:
+              type: boolean
+            supports_streaming_edit:
+              type: boolean
+            supports_ptt:
+              type: boolean
+            supports_streaming:
+              type: boolean
+            max_message_length:
+              type: integer
+              exclusiveMinimum: 0
+              maximum: 9007199254740991
+            max_attachments:
+              type: integer
+              exclusiveMinimum: 0
+              maximum: 9007199254740991
+          additionalProperties: {}
+        auth:
+          type: object
+          properties:
+            methods:
+              type: array
+              items:
+                oneOf:
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: oauth2
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      scopes:
+                        type: array
+                        items:
+                          type: string
+                      platformCredentials:
+                        type: boolean
+                      platformCredentialUrl:
+                        type: string
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                      - scopes
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: api_key
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              enum:
+                                - secret
+                                - text
+                                - select
+                            required:
+                              type: boolean
+                            placeholder:
+                              type: string
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  label:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                  - label
+                                  - value
+                                additionalProperties: false
+                          required:
+                            - name
+                            - label
+                            - type
+                            - required
+                          additionalProperties: false
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                      - fields
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: file_upload
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      accept:
+                        type: array
+                        items:
+                          type: string
+                      templateUrl:
+                        type: string
+                      maxSize:
+                        type: integer
+                        exclusiveMinimum: 0
+                        maximum: 9007199254740991
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - accept
+                    additionalProperties: false
+                  - type: object
+                    properties:
+                      id:
+                        type: string
+                      type:
+                        type: string
+                        const: custom_flow
+                      label:
+                        type: string
+                      icon:
+                        type: string
+                      service:
+                        type: string
+                      fields:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              enum:
+                                - secret
+                                - text
+                                - select
+                            required:
+                              type: boolean
+                            placeholder:
+                              type: string
+                            options:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  label:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                  - label
+                                  - value
+                                additionalProperties: false
+                          required:
+                            - name
+                            - label
+                            - type
+                            - required
+                          additionalProperties: false
+                    required:
+                      - id
+                      - type
+                      - label
+                      - icon
+                      - service
+                    additionalProperties: false
+            setupGuide:
+              type: string
+          required:
+            - methods
+          additionalProperties: false
+        methodCatalog:
+          type: object
+          properties:
+            source:
+              type: string
+              enum:
+                - manifest
+                - openapi
+            document:
+              type: string
+            namespace:
+              type: string
+          additionalProperties: false
+      required:
+        - platform
+        - name
+        - version
+        - operations
+        - methods
+        - multi_account
+        - platform_capabilities
+      additionalProperties: false
+    AdapterConnectionIdentitySchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        account:
+          type: string
+        account_contact:
+          type: object
+          properties:
+            platform:
+              type: string
+            space_id:
+              type: string
+            contact_id:
+              type: string
+          required:
+            - platform
+            - space_id
+            - contact_id
+          additionalProperties: false
+        credential_ref:
+          type: string
+        status:
+          type: string
+          enum:
+            - ready
+            - active
+            - error
+      required:
+        - id
+        - status
+      additionalProperties: false
+    AdapterHealthSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        connected:
+          type: boolean
+        connection_id:
+          type: string
+        account:
+          type: string
+        account_contact:
+          type: object
+          properties:
+            platform:
+              type: string
+            space_id:
+              type: string
+            contact_id:
+              type: string
+          required:
+            - platform
+            - space_id
+            - contact_id
+          additionalProperties: false
+        last_event_at:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        error:
+          type: string
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required:
+        - connected
+        - connection_id
+      additionalProperties: false
+    AdapterSetupResultSchema:
+      $schema: http://json-schema.org/draft-07/schema#
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - pending
+            - requires_input
+            - completed
+            - failed
+            - cancelled
+        session_id:
+          type: string
+        connection_id:
+          type: string
+        service:
+          type: string
+        account:
+          type: string
+        account_contact:
+          type: object
+          properties:
+            platform:
+              type: string
+            space_id:
+              type: string
+            contact_id:
+              type: string
+          required:
+            - platform
+            - space_id
+            - contact_id
+          additionalProperties: false
+        message:
+          type: string
+        instructions:
+          type: string
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              label:
+                type: string
+              type:
+                type: string
+                enum:
+                  - secret
+                  - text
+                  - select
+              required:
+                type: boolean
+              placeholder:
+                type: string
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    label:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                    - label
+                    - value
+                  additionalProperties: false
+            required:
+              - name
+              - label
+              - type
+              - required
+            additionalProperties: false
+        secret_fields:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: string
+        metadata:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required:
+        - status
+      additionalProperties: {}
+    AdapterConnectionsListResultSchema:
+      type: array
+      items:
+        $ref: "#/components/schemas/AdapterConnectionIdentitySchema"
+    AdapterEmptyRequestSchema:
+      type: object
+      additionalProperties: false
+      properties: {}
+    AdapterConnectionRequestSchema:
+      type: object
+      additionalProperties: false
+      required:
+        - connection_id
+      properties:
+        connection_id:
+          type: string
+    AdapterSetupRequestSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        connection_id:
+          type: string
+        session_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true

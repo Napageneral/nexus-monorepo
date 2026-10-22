@@ -1,6 +1,9 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { describe, expect, it } from "vitest";
-import { runAdapter } from "./run.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { runAdapter, type AdapterDefinition, type AdapterMethodInvokeRequest } from "./run.js";
 
 function captureStream() {
   const stream = new PassThrough();
@@ -504,5 +507,155 @@ describe("runAdapter", () => {
         value: "hello",
       },
     });
+  });
+});
+
+describe("runAdapter --payload-file", () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  function payloadDir(): string {
+    const root = mkdtempSync(join(tmpdir(), "nexus-sdk-payload-"));
+    roots.push(root);
+    return root;
+  }
+
+  function echoAdapter(seen: AdapterMethodInvokeRequest[]): AdapterDefinition {
+    return {
+      operations: {
+        "adapter.setup.submit": async (_ctx, req) => ({
+          status: "completed",
+          session_id: req.session_id ?? "setup-1",
+          service: "test",
+          message: `fields ${Object.keys(req.payload ?? {}).sort().join(",")}`,
+        }),
+        methods: {
+          "test.upload": async (_ctx, req) => {
+            seen.push(req);
+            return { ok: true, bytes: String(req.payload?.body ?? "").length };
+          },
+        },
+      },
+    };
+  }
+
+  async function invoke(adapter: AdapterDefinition, args: string[]) {
+    const stdout = captureStream();
+    const stderr = captureStream();
+    const code = await runAdapter(adapter, {
+      argv: ["node", "adapter", ...args],
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      requireRuntimeContext: false,
+      patchConsole: false,
+      installSignalHandlers: false,
+    });
+    return { code, stdout: stdout.read(), stderr: stderr.read() };
+  }
+
+  it("reads a method payload over 200 KiB from a private file, exactly once", async () => {
+    const dir = payloadDir();
+    const body = "x".repeat(210 * 1024);
+    const payloadPath = join(dir, "payload.json");
+    writeFileSync(payloadPath, JSON.stringify({ body, note: "é" }), { mode: 0o600 });
+    const seen: AdapterMethodInvokeRequest[] = [];
+
+    const result = await invoke(echoAdapter(seen), [
+      "test.upload",
+      "--connection",
+      "acct-1",
+      "--payload-file",
+      payloadPath,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout.trim())).toEqual({ ok: true, bytes: body.length });
+    expect(seen).toEqual([{ connection_id: "acct-1", payload: { body, note: "é" } }]);
+  });
+
+  it("reads a setup payload from --payload-file too", async () => {
+    const dir = payloadDir();
+    const payloadPath = join(dir, "payload.json");
+    writeFileSync(payloadPath, JSON.stringify({ confirm: "yes", code: "123" }), { mode: 0o600 });
+
+    const result = await invoke(echoAdapter([]), [
+      "adapter.setup.submit",
+      "--session-id",
+      "setup-1",
+      "--payload-file",
+      payloadPath,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout.trim())).toMatchObject({ status: "completed", message: "fields code,confirm" });
+  });
+
+  it("refuses --payload-json together with --payload-file before the handler runs", async () => {
+    const dir = payloadDir();
+    const payloadPath = join(dir, "payload.json");
+    writeFileSync(payloadPath, "{}", { mode: 0o600 });
+    const seen: AdapterMethodInvokeRequest[] = [];
+
+    const result = await invoke(echoAdapter(seen), [
+      "test.upload",
+      "--payload-json",
+      "{}",
+      "--payload-file",
+      payloadPath,
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("--payload-json and --payload-file are mutually exclusive");
+    expect(seen).toEqual([]);
+  });
+
+  it("refuses a link, a directory and a missing path", async () => {
+    const dir = payloadDir();
+    const target = join(dir, "target.json");
+    writeFileSync(target, '{"a":1}', { mode: 0o600 });
+    const link = join(dir, "link.json");
+    symlinkSync(target, link);
+    const folder = join(dir, "folder");
+    mkdirSync(folder);
+    const seen: AdapterMethodInvokeRequest[] = [];
+
+    const linked = await invoke(echoAdapter(seen), ["test.upload", "--payload-file", link]);
+    expect(linked.code).toBe(1);
+    expect(linked.stderr).toContain("--payload-file must be a regular file, not a link");
+
+    const directory = await invoke(echoAdapter(seen), ["test.upload", "--payload-file", folder]);
+    expect(directory.code).toBe(1);
+    expect(directory.stderr).toContain("--payload-file must be a regular file");
+
+    const missing = await invoke(echoAdapter(seen), ["test.upload", "--payload-file", join(dir, "absent.json")]);
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain("--payload-file could not be read");
+    expect(seen).toEqual([]);
+  });
+
+  it("refuses malformed or non-object JSON without quoting the file", async () => {
+    const dir = payloadDir();
+    const broken = join(dir, "broken.json");
+    writeFileSync(broken, '{"body":"SECRET-DOCUMENT-TEXT"', { mode: 0o600 });
+    const list = join(dir, "list.json");
+    writeFileSync(list, '["SECRET-DOCUMENT-TEXT"]', { mode: 0o600 });
+    const seen: AdapterMethodInvokeRequest[] = [];
+
+    const malformed = await invoke(echoAdapter(seen), ["test.upload", "--payload-file", broken]);
+    expect(malformed.code).toBe(1);
+    expect(malformed.stderr).toContain("--payload-file must contain valid JSON");
+    expect(malformed.stderr).not.toContain("SECRET-DOCUMENT-TEXT");
+
+    const array = await invoke(echoAdapter(seen), ["test.upload", "--payload-file", list]);
+    expect(array.code).toBe(1);
+    expect(array.stderr).toContain("--payload-file must decode to a JSON object");
+    expect(array.stderr).not.toContain("SECRET-DOCUMENT-TEXT");
+    expect(seen).toEqual([]);
   });
 });
