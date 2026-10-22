@@ -98,6 +98,8 @@ source_revision="$(git -C "${UMBRELLA_ROOT}" rev-parse HEAD)"
 source_tree="$(git -C "${UMBRELLA_ROOT}" rev-parse 'HEAD^{tree}')"
 nex_revision="$(docker image inspect "${NEX_IMAGE}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
 [[ "${nex_revision}" =~ ^[0-9a-f]{40}$ ]] || fail "NEX_RELEASE_IMAGE is missing an exact 40-hex revision label"
+nex_manifest_digest="$(docker image inspect "${NEX_IMAGE}" --format '{{range .RepoDigests}}{{println .}}{{end}}' | sed -n 's/.*@//p' | head -1)"
+[[ "${nex_manifest_digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "NEX_RELEASE_IMAGE has no registry manifest digest (the production migrator requires one, as nex-migrate-roll passes it)"
 
 artifact_sha256="$(sha256_of "${PACKAGE_ARTIFACT}")"
 artifact_size="$(size_of "${PACKAGE_ARTIFACT}")"
@@ -307,6 +309,7 @@ migration_receipt="$(docker run --rm \
   --env NEXUS_POSTGRES_CONNECTION_FILE=/run/nex-credentials/postgres-migrator-dsn \
   --env NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=1 \
   --env "NEXUS_MIGRATION_CANDIDATE_SOURCE_REVISION=${nex_revision}" \
+  --env "NEXUS_MIGRATION_CANDIDATE_IMAGE_MANIFEST_DIGEST=${nex_manifest_digest}" \
   --env "NEXUS_POSTGRES_RECORDS_RUNTIME_ROLE=${runtime_role}" \
   --env "NEXUS_POSTGRES_RECORDS_ACCESS_ROLE=${access_role}" \
   --env "NEXUS_POSTGRES_RECORDS_OWNER_ROLE=${owner_role}" \
