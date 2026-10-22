@@ -297,6 +297,10 @@ docker run --rm \
   "${NEX_IMAGE}" \
   -c 'set -eu; umask 077; printf "%s\n" "$MIGRATOR_DSN" > /target/postgres-migrator-dsn; chown root:root /target/postgres-migrator-dsn; chmod 0400 /target/postgres-migrator-dsn'
 
+# A fresh database: the production pass (NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=1, as nex-migrate-roll runs it) reads
+# the existing migration ledger first and refuses an empty schema, so this one migrator run takes the fresh-install
+# path. It still reads its credential from the canonical path as the production migrator user; the runtime below
+# keeps the image default (production credentials on).
 migration_receipt="$(docker run --rm \
   --platform linux/amd64 \
   --network "${network}" \
@@ -307,7 +311,7 @@ migration_receipt="$(docker run --rm \
   --user 0:0 \
   --mount "type=volume,src=${migrator_volume},dst=/run/nex-credentials,readonly" \
   --env NEXUS_POSTGRES_CONNECTION_FILE=/run/nex-credentials/postgres-migrator-dsn \
-  --env NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=1 \
+  --env NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=0 \
   --env "NEXUS_MIGRATION_CANDIDATE_SOURCE_REVISION=${nex_revision}" \
   --env "NEXUS_MIGRATION_CANDIDATE_IMAGE_MANIFEST_DIGEST=${nex_manifest_digest}" \
   --env "NEXUS_POSTGRES_RECORDS_RUNTIME_ROLE=${runtime_role}" \
