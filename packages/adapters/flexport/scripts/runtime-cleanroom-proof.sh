@@ -350,17 +350,16 @@ docker run -d \
   --read-only \
   --cpus 2 --memory 3g --pids-limit 512 \
   --security-opt no-new-privileges \
-  --cap-drop ALL \
-  --cap-add CHOWN \
-  --cap-add SETUID \
-  --cap-add SETGID \
   --mount "type=volume,src=${state_volume},dst=/var/lib/nex" \
   --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
   --mount "type=bind,src=$(dirname "${PACKAGE_ARTIFACT}"),dst=/artifacts,readonly" \
   --mount "type=bind,src=${ROOT_DIR}/testdata,dst=/flexport-testdata,readonly" \
-  --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,uid=20042,gid=20042,mode=0700 \
   --tmpfs /run/nex-credentials:rw,nosuid,nodev,noexec,mode=0700 \
   "${NEX_IMAGE}" >/dev/null
+# As production runs the Request (docker inspect of moonsleep-node-nex-runtime-a, 2026-10-22): Docker's default
+# capabilities, read-only root, no-new-privileges, and these two tmpfs mounts. The image's entrypoint narrows its own
+# capabilities with setpriv (it needs CAP_SETPCAP to do that), so the proof must not drop them first.
 wait_for_runtime
 
 echo "[cleanroom] start the fake Flexport API inside the runtime container on 127.0.0.1:${FAKE_PORT}"
