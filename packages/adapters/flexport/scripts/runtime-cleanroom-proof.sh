@@ -354,12 +354,15 @@ docker run -d \
   --mount "type=volume,src=${credential_volume},dst=/run/moonsleep-load-credentials,readonly" \
   --mount "type=bind,src=$(dirname "${PACKAGE_ARTIFACT}"),dst=/artifacts,readonly" \
   --mount "type=bind,src=${ROOT_DIR}/testdata,dst=/flexport-testdata,readonly" \
+  --env NEXUS_MOONSLEEP_CLAIMS_OWNER_VERIFICATION=lazy \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,uid=20042,gid=20042,mode=0700 \
   --tmpfs /run/nex-credentials:rw,nosuid,nodev,noexec,mode=0700 \
   "${NEX_IMAGE}" >/dev/null
 # As production runs the Request (docker inspect of moonsleep-node-nex-runtime-a, 2026-10-22): Docker's default
 # capabilities, read-only root, no-new-privileges, and these two tmpfs mounts. The image's entrypoint narrows its own
 # capabilities with setpriv (it needs CAP_SETPCAP to do that), so the proof must not drop them first.
+# One lab difference: NEXUS_MOONSLEEP_CLAIMS_OWNER_VERIFICATION=lazy (nex runtime-store-bundle.ts: production verifies
+# the opsanalytics claims owner at boot; labs and rehearsals verify it on first use). This proof has no opsanalytics.
 wait_for_runtime
 
 echo "[cleanroom] start the fake Flexport API inside the runtime container on 127.0.0.1:${FAKE_PORT}"
