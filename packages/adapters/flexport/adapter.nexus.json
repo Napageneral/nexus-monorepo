@@ -1,0 +1,461 @@
+{
+  "id": "flexport",
+  "version": "0.1.0",
+  "displayName": "Flexport",
+  "description": "Flexport API v2 adapter: shipment bundles, final documents and the network as Records, plus four guarded writes.",
+  "platform": "flexport",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md",
+  "methods": {
+    "flexport.status": {
+      "description": "Read the adapter's token, poll, and write-authority status without calling Flexport.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "flexport.shipments.list": {
+      "description": "List Flexport shipments, most recently updated first (default and maximum 100).",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "shipments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "transportation_mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "status",
+                "updated_at",
+                "transportation_mode"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "shipments"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.shipments.bundle": {
+      "description": "Read one shipment's bundle (shipment, containers, legs, customs entries, invoices, documents).",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "shipment_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          }
+        },
+        "required": [
+          "shipment_id"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "bundle_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "bundle",
+          "bundle_sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.network.get": {
+      "description": "Read MoonSleep's Flexport network: own company, company entities, companies, and locations.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "network": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "network_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "network",
+          "network_sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.products.create": {
+      "description": "Create one Flexport product from the exact approved body (POST /products).",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "body_json": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact JSON text sent to Flexport."
+          },
+          "body_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "sha256 hex of body_json."
+          },
+          "go": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tyler's words approving this exact write."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "SEND_TO_FLEXPORT"
+            ]
+          }
+        },
+        "required": [
+          "body_json",
+          "body_sha256",
+          "go",
+          "confirm"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "sent"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "flexport_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "object": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "flexport_id",
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.products.update": {
+      "description": "Update one Flexport product from the exact approved body (PATCH /products/{product_id}).",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "body_json": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact JSON text sent to Flexport."
+          },
+          "body_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "sha256 hex of body_json."
+          },
+          "go": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tyler's words approving this exact write."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "SEND_TO_FLEXPORT"
+            ]
+          }
+        },
+        "required": [
+          "product_id",
+          "body_json",
+          "body_sha256",
+          "go",
+          "confirm"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "sent"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "flexport_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "object": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "flexport_id",
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.bookings.create": {
+      "description": "Create one Flexport booking from the exact approved body (POST /bookings).",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "body_json": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact JSON text sent to Flexport."
+          },
+          "body_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "sha256 hex of body_json."
+          },
+          "go": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tyler's words approving this exact write."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "SEND_TO_FLEXPORT"
+            ]
+          }
+        },
+        "required": [
+          "body_json",
+          "body_sha256",
+          "go",
+          "confirm"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "sent"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "flexport_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "object": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "flexport_id",
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "flexport.documents.create": {
+      "description": "Upload one Flexport shipment document from the exact approved body (POST /documents).",
+      "action": "write",
+      "connection_required": true,
+      "mutates_remote": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "body_json": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact JSON text sent to Flexport."
+          },
+          "body_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "sha256 hex of body_json."
+          },
+          "go": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tyler's words approving this exact write."
+          },
+          "confirm": {
+            "type": "string",
+            "enum": [
+              "SEND_TO_FLEXPORT"
+            ]
+          }
+        },
+        "required": [
+          "body_json",
+          "body_sha256",
+          "go",
+          "confirm"
+        ],
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "sent"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "flexport_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "object": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "status",
+          "path",
+          "flexport_id",
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

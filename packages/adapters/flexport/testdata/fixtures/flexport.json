@@ -1,0 +1,96 @@
+{
+  "about": "Invented Flexport API v2 data shaped from apidocs.flexport.com/v2 for the adapter tests and the runtime cleanroom. One MoonSleep shipment is listed; rows for a second shipment (7654321) sit in the child collections so a request that loses its f.shipment.id filter would pull them in. No real Flexport data.",
+  "shipments": [
+    {
+      "_object": "/shipments",
+      "id": 1234567,
+      "name": "SWRC26012 S3 Ningbo to Vernon",
+      "status": "in_transit_to_arrival_port",
+      "priority": "standard",
+      "transportation_mode": "ocean",
+      "freight_type": "port_to_door",
+      "incoterm": "FOB",
+      "calculated_weight": {"_object": "/quantity/weight", "value": 12564.0, "unit": "kg"},
+      "calculated_volume": {"_object": "/quantity/volume", "value": 99.01, "unit": "cbm"},
+      "pieces": 873,
+      "cargo_ready_date": "2026-10-05",
+      "estimated_departure_date": "2026-10-10T08:00:00.000Z",
+      "actual_departure_date": "2026-10-11T02:30:00.000Z",
+      "estimated_arrival_date": "2026-10-28T14:00:00.000Z",
+      "actual_arrival_date": null,
+      "estimated_delivered_in_full_date": "2026-11-03T17:00:00.000Z",
+      "actual_delivered_in_full_date": null,
+      "created_date": "2026-09-28T16:00:00.000Z",
+      "updated_at": "2026-10-20T12:00:00.000Z",
+      "metadata": {"moonsleep_shipment_id": ["SWRC26012-SHIPMENT-3-202610"]},
+      "ocean_shipment": {
+        "_object": "/ocean/shipment",
+        "is_lcl": false,
+        "house_bill_number": "FLXT00012345",
+        "master_bill_number": "COSU6312345670",
+        "carrier_booking_number": "6312345670",
+        "containers": {"_object": "/api/refs/collection", "ref_type": "/ocean/shipment_container", "link": "https://api.flexport.com/ocean/shipment_containers?f.shipment.id=1234567"}
+      },
+      "items": [
+        {"_object": "/shipment_item", "id": 1, "purchase_order_number": "SWRC26012", "total_units": 6500, "reference": "faux fur pillow cover"}
+      ],
+      "legs": {"_object": "/api/refs/collection", "ref_type": "/shipment_leg", "link": "https://api.flexport.com/shipment_legs?f.shipment.id=1234567"},
+      "customs_entries": {"_object": "/api/refs/collection", "ref_type": "/customs_entry", "link": "https://api.flexport.com/customs_entries?f.shipment.id=1234567"},
+      "documents": {"_object": "/api/refs/collection", "ref_type": "/document", "link": "https://api.flexport.com/documents?f.shipment.id=1234567"}
+    }
+  ],
+  "containers": [
+    {"_object": "/ocean/shipment_container", "id": 11, "container_number": "CSNU7654321", "container_type": "dry", "container_size": "fourty_ft_hc", "seal_number": "CN8812", "last_free_day_date": "2026-11-04", "available_for_pickup_date": null, "actual_pickup_date": null, "actual_delivery_date": null, "empty_returned_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "link": "https://api.flexport.com/shipments/1234567", "id": 1234567}},
+    {"_object": "/ocean/shipment_container", "id": 91, "container_number": "MSKU0000091", "container_type": "dry", "container_size": "twenty_ft", "seal_number": "OTHER", "last_free_day_date": null, "available_for_pickup_date": null, "actual_pickup_date": null, "actual_delivery_date": null, "empty_returned_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "link": "https://api.flexport.com/shipments/7654321", "id": 7654321}},
+    {"_object": "/ocean/shipment_container", "id": 12, "container_number": "CSNU1234567", "container_type": "dry", "container_size": "fourty_ft_hc", "seal_number": "CN8811", "last_free_day_date": "2026-11-03", "available_for_pickup_date": null, "actual_pickup_date": null, "actual_delivery_date": null, "empty_returned_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "link": "https://api.flexport.com/shipments/1234567", "id": 1234567}}
+  ],
+  "legs": [
+    {"_object": "/shipment_leg", "id": 21, "transportation_mode": "truck", "carrier_name": "Origin trucking", "estimated_departure_date": "2026-10-07T00:00:00.000Z", "actual_departure_date": "2026-10-07T03:00:00.000Z", "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 1234567}},
+    {"_object": "/shipment_leg", "id": 99, "transportation_mode": "air", "carrier_name": "Other shipment carrier", "estimated_departure_date": "2026-10-09T00:00:00.000Z", "actual_departure_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 7654321}},
+    {"_object": "/shipment_leg", "id": 22, "transportation_mode": "ocean", "carrier_name": "COSCO", "estimated_departure_date": "2026-10-10T08:00:00.000Z", "actual_departure_date": "2026-10-11T02:30:00.000Z", "estimated_arrival_date": "2026-10-28T14:00:00.000Z", "actual_arrival_date": null, "ocean_leg": {"vessel_name": "COSCO SHIPPING ARIES", "vessel_imo": "9783473", "voyage_number": "082E", "scac_code": "COSU"}, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 1234567}}
+  ],
+  "customs_entries": [
+    {"_object": "/customs_entry", "id": "CE1", "entry_number": "FLX-1234567-8", "release_status": "pending", "release_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "link": "https://api.flexport.com/shipments/1234567", "id": 1234567}},
+    {"_object": "/customs_entry", "id": "CE9", "entry_number": "FLX-7654321-0", "release_status": "customs_hold", "release_date": null, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "link": "https://api.flexport.com/shipments/7654321", "id": 7654321}}
+  ],
+  "invoices": [
+    {"_object": "/invoice", "id": "INV1", "name": "FLX-INV-0001", "type": "Shipment", "invoice_type": "general", "status": "outstanding", "issued_at": "2026-10-12T00:00:00.000Z", "due_date": "2026-11-12", "total": {"_object": "/money", "amount": "16600.00", "currency_code": "USD"}, "items": [{"_object": "/invoice_item", "name": "Ocean freight", "slug": "ocean_freight", "category": "freight", "amount": {"_object": "/money", "amount": "16600.00", "currency_code": "USD"}}], "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 1234567}},
+    {"_object": "/invoice", "id": "INV9", "name": "FLX-INV-0009", "type": "Shipment", "invoice_type": "general", "status": "paid", "issued_at": "2026-10-01T00:00:00.000Z", "due_date": "2026-10-30", "total": {"_object": "/money", "amount": "999.00", "currency_code": "USD"}, "items": [], "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 7654321}}
+  ],
+  "documents": [
+    {"_object": "/document", "id": "D1", "file_name": "CI-SWRC26012-S3.pdf", "document_type": "commercial_invoice", "memo": null, "file_link": "https://api.flexport.com/documents/D1/download", "archived_at": null, "file_metadata": {"_object": "file/metadata", "size": 110, "uploaded_at": "2026-10-08T03:00:00.338Z"}, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 1234567}},
+    {"_object": "/document", "id": "D3", "file_name": "old-PL.pdf", "document_type": "packing_list", "memo": "superseded", "file_link": "https://api.flexport.com/documents/D3/download", "archived_at": "2026-10-08T04:00:00.000Z", "file_metadata": {"_object": "file/metadata", "size": 99, "uploaded_at": "2026-10-07T03:01:00.000Z"}, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 1234567}},
+    {"_object": "/document", "id": "D9", "file_name": "BL-OTHER.pdf", "document_type": "bill_of_lading", "memo": null, "file_link": "https://api.flexport.com/documents/D9/download", "archived_at": null, "file_metadata": {"_object": "file/metadata", "size": 80, "uploaded_at": "2026-10-09T03:00:00.000Z"}, "shipment": {"_object": "/api/refs/object", "ref_type": "/shipment", "id": 7654321}}
+  ],
+  "document_files": {
+    "D1": {"content_type": "application/pdf", "file": "documents/D1.pdf"},
+    "D3": {"content_type": "application/pdf", "file": "documents/D3.pdf"},
+    "D9": {"content_type": "application/pdf", "file": "documents/D9.pdf"}
+  },
+  "network": {
+    "me_company": {
+      "_object": "/network/company",
+      "id": "MSCO1",
+      "ref": "moonsleep",
+      "name": "MoonSleep Inc.",
+      "editable": false,
+      "metadata": {},
+      "entities": [
+        {"_object": "/company_entity", "id": 9281, "ref": "moonsleep-us", "name": "MoonSleep Inc.", "vat_numbers": [], "mailing_address": {"_object": "/address", "street_address": "2000 E Example St", "street_address2": null, "city": "Vernon", "state": "CA", "country": "United States", "country_code": "US", "zip": "90058", "unlocode": "USVRN", "timezone": "America/Los_Angeles", "ref": null}}
+      ],
+      "locations": {"_object": "/api/refs/collection", "ref_type": "/network/location", "link": "https://api.flexport.com/network/locations?f.company.id=MSCO1"},
+      "contacts": {"_object": "/api/refs/collection", "ref_type": "/network/contact", "link": "https://api.flexport.com/network/contacts?f.company.id=MSCO1"}
+    },
+    "company_entities": [
+      {"_object": "/company_entity", "id": 9281, "ref": "moonsleep-us", "name": "MoonSleep Inc.", "vat_numbers": [], "mailing_address": {"_object": "/address", "city": "Vernon", "state": "CA", "country_code": "US", "zip": "90058"}},
+      {"_object": "/company_entity", "id": 9282, "ref": "surewal", "name": "Example Supplier Co., Ltd.", "vat_numbers": [], "mailing_address": {"_object": "/address", "city": "Ningbo", "country_code": "CN", "zip": "315000"}}
+    ],
+    "companies": [
+      {"_object": "/network/company", "id": "SUPP1", "ref": "surewal", "name": "Example Supplier Co., Ltd.", "editable": true, "metadata": {}, "entities": []}
+    ],
+    "locations": [
+      {"_object": "/network/location", "id": "loc-vernon", "ref": "vernon-dc", "name": "Vernon DC", "editable": true, "metadata": {}, "address": {"_object": "/address", "city": "Vernon", "state": "CA", "country_code": "US", "zip": "90058", "ref": "vernon-dc"}, "company": {"_object": "/api/refs/object", "ref_type": "/network/company", "id": "MSCO1"}},
+      {"_object": "/network/location", "id": "loc-ningbo", "ref": "ningbo-factory", "name": "Ningbo factory", "editable": true, "metadata": {}, "address": {"_object": "/address", "city": "Ningbo", "country_code": "CN", "zip": "315000", "ref": "ningbo-factory"}, "company": {"_object": "/api/refs/object", "ref_type": "/network/company", "id": "SUPP1"}}
+    ]
+  }
+}
