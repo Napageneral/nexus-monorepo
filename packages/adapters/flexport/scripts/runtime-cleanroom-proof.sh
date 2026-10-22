@@ -110,14 +110,20 @@ runtime_container="${network}-runtime"
 postgres_volume="${network}-postgres"
 state_volume="${network}-state"
 credential_volume="${network}-credentials"
-runtime_role="nex_flexport_runtime"
-migrator_role="nex_flexport_migrator"
+migrator_volume="${network}-migrator"
+# The MoonSleep Nex image runs with NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=1: each PostgreSQL credential is read from its
+# canonical /run/nex-credentials path and must authenticate its production database user, so the cleanroom uses the
+# production role names and the migrator invocation of infra/site/bin/nex-migrate-roll (moonsleep-v1).
+runtime_role="nex_moonsleep_runtime"
+migrator_role="nex_moonsleep_migrator"
+access_role="nex_runtime_operator"
+owner_role="nex_runtime_schema_owner"
 runtime_token="nex_rt_$(openssl rand -hex 24)"
 export NEX_CLEANROOM_TOKEN="${runtime_token}"
 
 cleanup() {
   docker rm -f "${runtime_container}" "${postgres_container}" >/dev/null 2>&1 || true
-  docker volume rm -f "${postgres_volume}" "${state_volume}" "${credential_volume}" >/dev/null 2>&1 || true
+  docker volume rm -f "${postgres_volume}" "${state_volume}" "${credential_volume}" "${migrator_volume}" >/dev/null 2>&1 || true
   docker network rm "${network}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -195,6 +201,7 @@ docker network create --internal "${network}" >/dev/null
 docker volume create "${postgres_volume}" >/dev/null
 docker volume create "${state_volume}" >/dev/null
 docker volume create "${credential_volume}" >/dev/null
+docker volume create "${migrator_volume}" >/dev/null
 
 postgres_dsn="postgresql://${runtime_role}@postgres:5432/moonsleep_nex"
 
@@ -263,11 +270,30 @@ postgres_version="$(docker exec -u postgres "${postgres_container}" psql -X -d m
 [[ "${postgres_version}" == 17.* ]] || fail "POSTGRES_RELEASE_IMAGE is PostgreSQL ${postgres_version}, not 17"
 
 docker exec -i "${postgres_container}" psql -X -U postgres -d moonsleep_nex -v ON_ERROR_STOP=1 <<SQL >/dev/null
+CREATE ROLE ${owner_role} NOLOGIN;
+CREATE ROLE ${access_role} NOLOGIN;
 CREATE ROLE ${migrator_role} LOGIN;
 CREATE ROLE ${runtime_role} LOGIN;
+GRANT ${owner_role} TO ${migrator_role};
+GRANT ${access_role} TO ${runtime_role};
+GRANT CONNECT, CREATE ON DATABASE moonsleep_nex TO ${owner_role};
 GRANT CONNECT, CREATE ON DATABASE moonsleep_nex TO ${migrator_role};
 GRANT CONNECT ON DATABASE moonsleep_nex TO ${runtime_role};
+GRANT CONNECT ON DATABASE moonsleep_nex TO ${access_role};
+ALTER DATABASE moonsleep_nex OWNER TO ${owner_role};
 SQL
+
+docker run --rm \
+  --platform linux/amd64 \
+  --network none \
+  --read-only \
+  --cpus 1 --memory 256m --pids-limit 64 \
+  --user 0:0 \
+  --env "MIGRATOR_DSN=postgresql://${migrator_role}@postgres:5432/moonsleep_nex" \
+  --mount "type=volume,src=${migrator_volume},dst=/target" \
+  --entrypoint sh \
+  "${NEX_IMAGE}" \
+  -c 'set -eu; umask 077; printf "%s\n" "$MIGRATOR_DSN" > /target/postgres-migrator-dsn; chown root:root /target/postgres-migrator-dsn; chmod 0400 /target/postgres-migrator-dsn'
 
 migration_receipt="$(docker run --rm \
   --platform linux/amd64 \
@@ -276,9 +302,14 @@ migration_receipt="$(docker run --rm \
   --cpus 1 --memory 1g --pids-limit 128 \
   --security-opt no-new-privileges \
   --env NEXUS_RUNTIME_STORAGE_PROFILE=moonsleep-postgres-v1 \
-  --env NEXUS_POSTGRES_MIGRATOR_CONNECTION_ENV=CLEANROOM_MIGRATOR_DATABASE_URL \
-  --env "CLEANROOM_MIGRATOR_DATABASE_URL=postgresql://${migrator_role}@postgres/moonsleep_nex" \
+  --user 0:0 \
+  --mount "type=volume,src=${migrator_volume},dst=/run/nex-credentials,readonly" \
+  --env NEXUS_POSTGRES_CONNECTION_FILE=/run/nex-credentials/postgres-migrator-dsn \
+  --env NEXUS_MOONSLEEP_PRODUCTION_CREDENTIALS=1 \
+  --env "NEXUS_MIGRATION_CANDIDATE_SOURCE_REVISION=${nex_revision}" \
   --env "NEXUS_POSTGRES_RECORDS_RUNTIME_ROLE=${runtime_role}" \
+  --env "NEXUS_POSTGRES_RECORDS_ACCESS_ROLE=${access_role}" \
+  --env "NEXUS_POSTGRES_RECORDS_OWNER_ROLE=${owner_role}" \
   --env NEXUS_POSTGRES_RECORDS_SCHEMA=nex_runtime \
   --entrypoint node \
   "${NEX_IMAGE}" \
