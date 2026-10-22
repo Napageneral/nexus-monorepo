@@ -8,8 +8,10 @@
 # inside the runtime container on 127.0.0.1, creates connection cleanroom-flexport with fake
 # credentials and base_url http://127.0.0.1:<port>, runs records.backfill, reads records.scan for
 # platform flexport, checks one shipment bundle Record (with its document attachment), one network
-# Record and the eight-method catalog, and writes a private JSON receipt. Every resource is named
-# flexport-cleanroom-* and removed on exit.
+# Record and the eight-method catalog, sends one flexport.documents.create of more than 200 KiB to
+# the fake through the runtime (over 64 KiB the runtime must pass it as --payload-file; inline it
+# would exceed Linux's 128 KiB per-argument limit), and writes a private JSON receipt. Every
+# resource is named flexport-cleanroom-* and removed on exit.
 #
 # Assumptions (each is checked, and the script stops with a message when one does not hold):
 #   - docker, jq, git, openssl, tar and sha256sum or shasum are on PATH; the Docker daemon runs
@@ -122,25 +124,34 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# Every runtime call reads the token from this script's environment (docker exec -e NAME), so it
-# never appears on a process command line.
+# The token reaches each container command through its environment (docker exec -e NAME, no value
+# on the docker command line). curl reads the Authorization header from a private 0600 file that
+# the container shell's printf builtin writes in its /tmp tmpfs and removes on exit, so the token is
+# never on curl's command line. The one exception is `nexus runtime call --url ... --token` for
+# records.backfill below: with --url the CLI takes no token from the environment, so this run's
+# throwaway token is on that one node command line, inside the isolated container only.
 runtime_exec() {
   docker exec -e NEX_CLEANROOM_TOKEN "${runtime_container}" "$@"
 }
 
+# runtime_curl <curl arguments...>: curl inside the runtime container with the runtime token.
+runtime_curl() {
+  runtime_exec sh -c '
+    umask 077
+    header="/tmp/.cleanroom-runtime-auth.$$"
+    trap "rm -f \"${header}\"" EXIT
+    printf "Authorization: Bearer %s\n" "${NEX_CLEANROOM_TOKEN}" > "${header}"
+    curl -H "@${header}" "$@"
+  ' sh "$@"
+}
+
 runtime_get() {
-  runtime_exec sh -c 'exec curl -fsS -H "Authorization: Bearer ${NEX_CLEANROOM_TOKEN}" "http://127.0.0.1:18789$1"' sh "$1"
+  runtime_curl -fsS "http://127.0.0.1:18789$1"
 }
 
 # POST <path> <json-body>; prints the body and fails on a non-2xx status.
 runtime_post() {
-  runtime_exec sh -c '
-    exec curl -sS --fail-with-body \
-      -H "Authorization: Bearer ${NEX_CLEANROOM_TOKEN}" \
-      -H "Content-Type: application/json" \
-      --data "$2" \
-      "http://127.0.0.1:18789$1"
-  ' sh "$1" "$2"
+  runtime_curl -sS --fail-with-body -H "Content-Type: application/json" --data "$2" "http://127.0.0.1:18789$1"
 }
 
 wait_for_postgres() {
@@ -305,13 +316,12 @@ wait_for_fake_flexport
 echo "[cleanroom] upload and install the exact Flexport artifact"
 release_id="cleanroom-flexport-${artifact_sha256:0:16}"
 operation_id="${release_id}-install"
-upload_response="$(runtime_exec sh -c '
-  exec curl -sS --fail-with-body \
-    -H "Authorization: Bearer ${NEX_CLEANROOM_TOKEN}" \
-    -H "Content-Type: application/octet-stream" \
-    --data-binary "@/artifacts/$2" \
-    "http://127.0.0.1:18789/api/operator/packages/upload?operation_id=$1&filename=$2"
-' sh "${operation_id}" "flexport-${PACKAGE_VERSION}.tar.gz")" || fail "package upload failed: ${upload_response:-no response}"
+artifact_name="flexport-${PACKAGE_VERSION}.tar.gz"
+upload_response="$(runtime_curl -sS --fail-with-body \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary "@/artifacts/${artifact_name}" \
+  "http://127.0.0.1:18789/api/operator/packages/upload?operation_id=${operation_id}&filename=${artifact_name}")" \
+  || fail "package upload failed: ${upload_response:-no response}"
 jq -e --arg sha256 "${artifact_sha256}" --argjson size "${artifact_size}" '
   .ok == true and .staged_artifact.sha256 == $sha256 and .staged_artifact.size_bytes == $size
 ' <<<"${upload_response}" >/dev/null || fail "unexpected upload response: ${upload_response}"
@@ -371,7 +381,8 @@ jq -e --arg sha256 "${document_sha256}" --argjson size "${document_size}" '
   .[0].attachments[0].id == "document:D1" and
   .[0].attachments[0].content_hash == $sha256 and
   .[0].attachments[0].size == $size and
-  (.[0].attachments[0].url | startswith("nex-artifact:")) and
+  ((.[0].payload.attachments[0].source_url // "") | startswith("nex-artifact:")) and
+  .[0].payload.attachments[0].content_sha256 == $sha256 and
   .[0].payload.source_metadata.provider_payload.contract == "moonsleep.flexport_shipment_bundle.v1"
 ' <<<"${shipment_record}" >/dev/null || fail "unexpected shipment bundle Record: ${shipment_record}"
 jq -e '
@@ -401,9 +412,46 @@ status_response="$(runtime_post /runtime/operations/flexport.status "${status_bo
 jq -e '.ok == true and .payload.automatic_writes == false and .payload.token_requests_24h == 1' <<<"${status_response}" >/dev/null \
   || fail "unexpected flexport.status: ${status_response}"
 
+echo "[cleanroom] send a flexport.documents.create over 200 KiB to the fake through the runtime"
+# The request is built inside the container into a 0600 file in its /tmp tmpfs and sent with
+# --data @file: the body is never on a command line. Over 64 KiB the runtime hands the adapter a
+# --payload-file because adapter.info says supports_payload_file; inline, the spawn would fail
+# with E2BIG on this Linux runtime.
+document_request="$(runtime_exec node -e '
+  const { createHash, randomBytes } = require("node:crypto");
+  const { writeFileSync } = require("node:fs");
+  const body = JSON.stringify({
+    shipment_id: "1234567",
+    document_type: "commercial_invoice",
+    file_name: "CI-cleanroom.pdf",
+    file: randomBytes(160 * 1024).toString("base64"),
+  });
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const request = {
+    connection_id: process.argv[1],
+    payload: { body_json: body, body_sha256: sha256, go: "cleanroom: fake document upload", confirm: "SEND_TO_FLEXPORT" },
+    timeout_ms: 120000,
+  };
+  writeFileSync("/tmp/cleanroom-document-request.json", JSON.stringify(request), { mode: 0o600 });
+  process.stdout.write(JSON.stringify({ body_bytes: Buffer.byteLength(body), body_sha256: sha256 }));
+' "${CONNECTION_ID}")" || fail "could not build the document request"
+document_body_sha256="$(jq -er '.body_sha256' <<<"${document_request}")"
+document_body_bytes="$(jq -er '.body_bytes' <<<"${document_request}")"
+(( document_body_bytes > 200 * 1024 )) || fail "the document body is not over 200 KiB: ${document_body_bytes}"
+document_response="$(runtime_curl -sS --fail-with-body -H "Content-Type: application/json" \
+  --data @/tmp/cleanroom-document-request.json \
+  "http://127.0.0.1:18789/runtime/operations/flexport.documents.create")" \
+  || fail "flexport.documents.create failed: ${document_response:-no response}"
+jq -e '.ok == true and .payload.status == "sent" and .payload.path == "/documents" and .payload.flexport_id == "DOC-2001"' \
+  <<<"${document_response}" >/dev/null || fail "unexpected flexport.documents.create result: ${document_response}"
+
 fake_stats="$(runtime_exec curl -fsS "http://127.0.0.1:${FAKE_PORT}/__fake/stats")"
 jq -e '.token_requests == 1 and .downloads.D1 == 1 and (.downloads.D3 // 0) == 0 and (.downloads.D9 // 0) == 0' <<<"${fake_stats}" >/dev/null \
   || fail "unexpected fake Flexport traffic: ${fake_stats}"
+jq -e --arg sha256 "${document_body_sha256}" --argjson bytes "${document_body_bytes}" '
+  (.writes | length) == 1 and .writes[0].method == "POST" and .writes[0].path == "/documents" and
+  .writes[0].sha256 == $sha256 and .writes[0].bytes == $bytes
+' <<<"${fake_stats}" >/dev/null || fail "the fake did not receive the document body byte for byte: ${fake_stats}"
 
 mkdir -p "$(dirname "${RECEIPT_PATH}")"
 (
@@ -421,6 +469,7 @@ mkdir -p "$(dirname "${RECEIPT_PATH}")"
     --argjson shipment "$(jq -c '.[0] | {id, provider_record_id, provider_version_ref, payload_sha256, attachments: [.attachments[] | {id, content_hash, size}]}' <<<"${shipment_record}")" \
     --argjson network_record "$(jq -c '.[0] | {id, provider_record_id, provider_version_ref, payload_sha256}' <<<"${network_record}")" \
     --argjson methods "$(jq -c '[.payload.methods[] | {name, action, mutates_remote, connection_required}] | sort_by(.name)' <<<"${methods_response}")" \
+    --argjson document_write "$(jq -c '{method:"flexport.documents.create", body_bytes, body_sha256, delivered_to:"fake_flexport"}' <<<"${document_request}")" \
     --argjson fake_flexport "${fake_stats}" \
     '{
       contract:"nex_flexport_runtime_cleanroom_v1",
@@ -434,6 +483,7 @@ mkdir -p "$(dirname "${RECEIPT_PATH}")"
       backfill:$backfill,
       records:{shipment_bundle:$shipment,network:$network_record},
       methods:$methods,
+      large_document_write:$document_write,
       fake_flexport:$fake_flexport,
       isolation:{docker_network:"internal",published_ports:false,host_network:false},
       authorities:{

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -125,7 +125,50 @@ test("the built executable backfills, shares one token across processes and guar
       object: { _object: "/booking", id: "BK-1001", name: "S3", status: "submitted" },
     });
     assert.ok(fake.requests.at(-1)!.body.equals(Buffer.from(bodyJson)));
-    for (const output of [health, backfill, ...lists, refused, sent]) {
+
+    // A real commercial invoice is well over 128 KiB once base64'd into body_json: past the Linux
+    // limit on the one argv string the runtime would put an inline --payload-json in. The runtime
+    // writes such a payload to a 0600 file and passes --payload-file because adapter.info says so.
+    const info = await run(["adapter.info"], env);
+    assert.equal(info.code, 0, info.stderr);
+    assert.equal(JSON.parse(info.stdout).supports_payload_file, true);
+    const documentJson = JSON.stringify({
+      shipment_id: "1234567",
+      document_type: "commercial_invoice",
+      file_name: "CI-SWRC26012-S3.pdf",
+      file: randomBytes(160 * 1024).toString("base64"),
+    });
+    const payloadPath = join(root, "payload.json");
+    writeFileSync(
+      payloadPath,
+      JSON.stringify({
+        body_json: documentJson,
+        body_sha256: createHash("sha256").update(documentJson).digest("hex"),
+        go: "Tyler: upload the CI",
+        confirm: "SEND_TO_FLEXPORT",
+      }),
+      { mode: 0o600 },
+    );
+    assert.ok(statSync(payloadPath).size > 200 * 1024, "the payload is over 200 KiB");
+    const uploaded = await run(
+      ["flexport.documents.create", "--connection", CONNECTION_ID, "--payload-file", payloadPath],
+      env,
+    );
+    assert.equal(uploaded.code, 0, uploaded.stderr);
+    assert.deepEqual(JSON.parse(uploaded.stdout), {
+      status: "sent",
+      path: "/documents",
+      flexport_id: "DOC-2001",
+      object: { _object: "/document", id: "DOC-2001", file_name: "CI-SWRC26012-S3.pdf", document_type: "commercial_invoice" },
+    });
+    const upload = fake.requests.at(-1)!;
+    assert.equal(upload.method, "POST");
+    assert.equal(upload.path, "/documents");
+    assert.ok(upload.body.equals(Buffer.from(documentJson)), "the document body is sent byte for byte");
+    assert.ok(!uploaded.stderr.includes(documentJson.slice(200, 260)), "the body is never logged");
+    assert.equal(fake.tokenRequests, 1);
+
+    for (const output of [health, backfill, ...lists, refused, sent, info, uploaded]) {
       assert.ok(!output.stdout.includes(FAKE_CLIENT_SECRET) && !output.stderr.includes(FAKE_CLIENT_SECRET));
       assert.ok(!output.stderr.includes("Bearer"));
     }

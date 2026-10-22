@@ -59,6 +59,9 @@ export type TokenStatus = {
   token_cached: boolean;
   token_expires_at: string | null;
   token_requests_24h: number;
+  token_request_failures: number;
+  token_requests_paused_until: string | null;
+  auth_failed_at: string | null;
 };
 
 export type FlexportClientOptions = {
@@ -83,9 +86,18 @@ export const MAX_RETRIES = 3;
 export const MAX_RETRY_WAIT_MS = 30_000;
 export const FLEXPORT_DAILY_TOKEN_CAP = 10;
 export const RUNTIME_ATTACHMENT_LIMIT_BYTES = 50 * 1024 * 1024;
-const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const TOKEN_REUSE_MARGIN_MS = HOUR_MS;
+// Renewal starts with an hour left; until a new token is in hand the old one is used up to a
+// minute before it expires.
+const TOKEN_EXPIRY_GUARD_MS = MINUTE_MS;
+// A 401 on a token issued this recently is an authentication failure, not an expired token.
+const AUTH_FAILURE_TOKEN_AGE_MS = 10 * MINUTE_MS;
+const AUTH_FAILURE_PAUSE_MS = HOUR_MS;
+// Consecutive failed token requests wait 15 min, then 1 h, then 4 h; a success resets the count.
+const TOKEN_FAILURE_BACKOFF_MS = [15 * MINUTE_MS, HOUR_MS, 4 * HOUR_MS] as const;
 const TOKEN_LOCK_STALE_MS = 120_000;
 const TOKEN_LOCK_WAIT_MS = 130_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
@@ -113,9 +125,19 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 };
 
 export class FlexportError extends Error {
-  constructor(message: string) {
+  /** The HTTP status Flexport answered with, when there was a response. */
+  readonly status: number | undefined;
+  /**
+   * True when the next shipment of a pass would fail the same way and spend another token
+   * request: no usable token, or Flexport refused the token (HTTP 401). The pass stops there.
+   */
+  readonly abortsPass: boolean;
+
+  constructor(message: string, options: { status?: number; abortsPass?: boolean } = {}) {
     super(message);
     this.name = "FlexportError";
+    this.status = options.status;
+    this.abortsPass = options.abortsPass === true;
   }
 }
 
@@ -148,6 +170,11 @@ export function sha256Hex(value: string | Uint8Array): string {
 
 export function credentialFingerprint(clientId: string, clientSecret: string): string {
   return sha256Hex(`${clientId}\0${clientSecret}`);
+}
+
+/** Flexport counts token requests per client id, so the request history follows this, not the secret. */
+export function clientFingerprint(clientId: string): string {
+  return sha256Hex(clientId);
 }
 
 /**
@@ -341,10 +368,20 @@ export function readStateFileIfPresent(stateDir: string, folder: string, connect
 type TokenCache = {
   version: 1;
   credential_fingerprint: string;
+  /** sha256(client_id); null in a cache written before it was recorded. */
+  client_fingerprint: string | null;
   access_token: string | null;
   expires_at: string | null;
+  issued_at: string | null;
   requests: string[];
+  /** Consecutive failed token requests, and the earliest time the next one may be sent. */
+  failed_requests: number;
+  next_request_at: string | null;
+  /** The last 401 on a token younger than 10 min: no new token request for an hour after it. */
+  auth_failed_at: string | null;
 };
+
+type HeldToken = { token: string; expiresAt: number; issuedAt: number | undefined };
 
 function parseTokenCache(value: unknown): TokenCache | undefined {
   if (value === undefined) return undefined;
@@ -352,12 +389,40 @@ function parseTokenCache(value: unknown): TokenCache | undefined {
   if (record.version !== 1 || !Array.isArray(record.requests)) {
     throw new FlexportError("Flexport token cache is malformed");
   }
+  const failed = record.failed_requests;
   return {
     version: 1,
     credential_fingerprint: textValue(record.credential_fingerprint) ?? "",
+    client_fingerprint: textValue(record.client_fingerprint) ?? null,
     access_token: textValue(record.access_token) ?? null,
     expires_at: textValue(record.expires_at) ?? null,
+    issued_at: textValue(record.issued_at) ?? null,
     requests: record.requests.filter((entry): entry is string => typeof entry === "string"),
+    failed_requests: typeof failed === "number" && Number.isSafeInteger(failed) && failed > 0 ? failed : 0,
+    next_request_at: textValue(record.next_request_at) ?? null,
+    auth_failed_at: textValue(record.auth_failed_at) ?? null,
+  };
+}
+
+/**
+ * The cache as this credential sees it. Another credential's token, failure backoff and
+ * authentication pause are discarded; its request history is kept unless the client id changed
+ * (Flexport counts token requests per client). A cache that never recorded its client keeps it too.
+ */
+function cacheForCredential(cache: TokenCache | undefined, fingerprint: string, client: string): TokenCache {
+  if (cache && cache.credential_fingerprint === fingerprint) return { ...cache, client_fingerprint: client };
+  const sameClient = cache !== undefined && (cache.client_fingerprint === null || cache.client_fingerprint === client);
+  return {
+    version: 1,
+    credential_fingerprint: fingerprint,
+    client_fingerprint: client,
+    access_token: null,
+    expires_at: null,
+    issued_at: null,
+    requests: sameClient && cache ? cache.requests : [],
+    failed_requests: 0,
+    next_request_at: null,
+    auth_failed_at: null,
   };
 }
 
@@ -368,11 +433,62 @@ function trailingRequests(requests: string[], nowMs: number): string[] {
   });
 }
 
-function usableToken(cache: TokenCache | undefined, fingerprint: string, nowMs: number) {
-  if (!cache || cache.credential_fingerprint !== fingerprint || !cache.access_token) return undefined;
+function heldToken(cache: TokenCache): HeldToken | undefined {
+  if (!cache.access_token) return undefined;
   const expiresAt = cache.expires_at ? Date.parse(cache.expires_at) : Number.NaN;
-  if (!Number.isFinite(expiresAt) || expiresAt - nowMs <= TOKEN_REUSE_MARGIN_MS) return undefined;
-  return { token: cache.access_token, expiresAt };
+  if (!Number.isFinite(expiresAt)) return undefined;
+  const issuedAt = cache.issued_at ? Date.parse(cache.issued_at) : Number.NaN;
+  return { token: cache.access_token, expiresAt, issuedAt: Number.isFinite(issuedAt) ? issuedAt : undefined };
+}
+
+/** More than an hour left: used as is, no renewal. */
+function isFresh(token: HeldToken, nowMs: number): boolean {
+  return token.expiresAt - nowMs > TOKEN_REUSE_MARGIN_MS;
+}
+
+/** Not expired yet: still used while a renewal is refused or fails. */
+function isLive(token: HeldToken, nowMs: number): boolean {
+  return token.expiresAt - nowMs > TOKEN_EXPIRY_GUARD_MS;
+}
+
+function isoAt(milliseconds: number): string {
+  return new Date(milliseconds).toISOString();
+}
+
+function authPauseEndsAt(cache: TokenCache): number | undefined {
+  const failedAt = Date.parse(cache.auth_failed_at ?? "");
+  return Number.isFinite(failedAt) ? failedAt + AUTH_FAILURE_PAUSE_MS : undefined;
+}
+
+function backoffEndsAt(cache: TokenCache): number | undefined {
+  const nextAt = Date.parse(cache.next_request_at ?? "");
+  return Number.isFinite(nextAt) ? nextAt : undefined;
+}
+
+/** Why a new token request may not be sent now, or undefined when it may. */
+function tokenRequestRefusal(cache: TokenCache, nowMs: number, budget: number): string | undefined {
+  const pausedUntil = authPauseEndsAt(cache);
+  if (pausedUntil !== undefined && nowMs < pausedUntil) {
+    return (
+      `Flexport token requests are paused until ${isoAt(pausedUntil)}: Flexport refused a token issued ` +
+      "minutes earlier (HTTP 401); not requesting another"
+    );
+  }
+  const backoffUntil = backoffEndsAt(cache);
+  if (backoffUntil !== undefined && nowMs < backoffUntil) {
+    return (
+      `Flexport token requests are backing off until ${isoAt(backoffUntil)} after ` +
+      `${cache.failed_requests} failed token request(s); not requesting another`
+    );
+  }
+  const history = trailingRequests(cache.requests, nowMs);
+  if (history.length >= budget) {
+    return (
+      `Flexport token budget exhausted: ${history.length} token requests in the trailing 24 h ` +
+      `(budget ${budget}); not requesting another`
+    );
+  }
+  return undefined;
 }
 
 function jwtExpiryMs(token: string): number | undefined {
@@ -395,13 +511,32 @@ export function readTokenStatus(params: {
   now?: number;
 }): TokenStatus {
   const nowMs = params.now ?? Date.now();
-  if (!params.stateDir) return { token_cached: false, token_expires_at: null, token_requests_24h: 0 };
-  const cache = parseTokenCache(readStateFileIfPresent(params.stateDir, "token-cache", params.connectionId));
-  const usable = usableToken(cache, credentialFingerprint(params.clientId, params.clientSecret), nowMs);
+  const empty: TokenStatus = {
+    token_cached: false,
+    token_expires_at: null,
+    token_requests_24h: 0,
+    token_request_failures: 0,
+    token_requests_paused_until: null,
+    auth_failed_at: null,
+  };
+  if (!params.stateDir) return empty;
+  const stored = parseTokenCache(readStateFileIfPresent(params.stateDir, "token-cache", params.connectionId));
+  if (!stored) return empty;
+  const cache = cacheForCredential(
+    stored,
+    credentialFingerprint(params.clientId, params.clientSecret),
+    clientFingerprint(params.clientId),
+  );
+  const held = heldToken(cache);
+  const live = held && isLive(held, nowMs) ? held : undefined;
+  const pausedUntil = Math.max(authPauseEndsAt(cache) ?? 0, backoffEndsAt(cache) ?? 0);
   return {
-    token_cached: Boolean(usable),
-    token_expires_at: usable ? new Date(usable.expiresAt).toISOString() : null,
-    token_requests_24h: cache ? trailingRequests(cache.requests, nowMs).length : 0,
+    token_cached: Boolean(live),
+    token_expires_at: live ? isoAt(live.expiresAt) : null,
+    token_requests_24h: trailingRequests(cache.requests, nowMs).length,
+    token_request_failures: cache.failed_requests,
+    token_requests_paused_until: pausedUntil > nowMs ? isoAt(pausedUntil) : null,
+    auth_failed_at: cache.auth_failed_at,
   };
 }
 
@@ -577,7 +712,8 @@ export function createFlexportClient(options: FlexportClientOptions) {
   const now = options.now ?? Date.now;
   const requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const fingerprint = credentialFingerprint(clientId, clientSecret);
-  let memoToken: { token: string; expiresAt: number } | undefined;
+  const client = clientFingerprint(clientId);
+  let memoToken: HeldToken | undefined;
 
   function requireStateDir(): string {
     const stateDir = textValue(options.stateDir);
@@ -607,23 +743,33 @@ export function createFlexportClient(options: FlexportClientOptions) {
     return url;
   }
 
-  /** A 401 retires the token it was sent with (not a newer one another process cached since). */
-  function clearCachedToken(rejected: string): void {
-    if (memoToken?.token === rejected) memoToken = undefined;
-    const stateDir = textValue(options.stateDir);
-    if (!stateDir) return;
+  /**
+   * A 401 retires the token it was sent with, once (not a newer one another process cached since).
+   * On a token issued less than 10 min earlier it is an authentication failure, not an expiry:
+   * auth_failed_at then holds back every new token request for an hour.
+   */
+  async function retireToken(rejected: HeldToken, authFailedAt: number | undefined): Promise<void> {
+    if (memoToken?.token === rejected.token) memoToken = undefined;
+    if (!textValue(options.stateDir)) return;
     try {
       const file = paths().tokenCache();
-      const cache = parseTokenCache(readPrivateJson(file));
-      if (cache && cache.access_token === rejected) {
-        writePrivateJson(file, { ...cache, access_token: null, expires_at: null });
-      }
+      await withExclusiveLock(`${file}.lock`, async () => {
+        const cache = parseTokenCache(readPrivateJson(file));
+        if (!cache || cache.credential_fingerprint !== fingerprint) return;
+        const retire = cache.access_token === rejected.token;
+        if (!retire && authFailedAt === undefined) return;
+        writePrivateJson(file, {
+          ...cache,
+          ...(retire ? { access_token: null, expires_at: null, issued_at: null } : {}),
+          ...(authFailedAt !== undefined ? { auth_failed_at: isoAt(authFailedAt) } : {}),
+        } satisfies TokenCache);
+      });
     } catch {
       // The next token read refuses an unsafe cache with its own message.
     }
   }
 
-  async function requestToken(): Promise<{ token: string; expiresAt: number }> {
+  async function requestToken(): Promise<HeldToken> {
     const url = resolveUrl("/oauth/token");
     let response: Response;
     try {
@@ -640,78 +786,103 @@ export function createFlexportClient(options: FlexportClientOptions) {
         signal: requestSignal(),
       });
     } catch (error) {
-      throw new FlexportError(`Flexport token request failed (${error instanceof Error ? error.name : "error"})`);
+      throw new FlexportError(`Flexport token request failed (${error instanceof Error ? error.name : "error"})`, {
+        abortsPass: true,
+      });
     }
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
-      throw new FlexportError(`Flexport token request redirected (HTTP ${response.status}); not followed`);
+      throw new FlexportError(`Flexport token request redirected (HTTP ${response.status}); not followed`, {
+        status: response.status,
+        abortsPass: true,
+      });
     }
     if (!response.ok) {
       const code = await safeErrorCode(response);
-      throw new FlexportError(`Flexport token request failed (HTTP ${response.status}${code ? `, ${code}` : ""})`);
+      throw new FlexportError(`Flexport token request failed (HTTP ${response.status}${code ? `, ${code}` : ""})`, {
+        status: response.status,
+        abortsPass: true,
+      });
     }
     let document: UnknownRecord;
     try {
       const bytes = await readCapped(response, MAX_ERROR_BODY_BYTES, "token response");
       document = asRecord(JSON.parse(bytes.toString("utf8")));
     } catch {
-      throw new FlexportError("Flexport token response is not JSON");
+      throw new FlexportError("Flexport token response is not JSON", { abortsPass: true });
     }
     const token = textValue(document.access_token);
-    if (!token) throw new FlexportError("Flexport token response has no access_token");
+    if (!token) throw new FlexportError("Flexport token response has no access_token", { abortsPass: true });
     const issuedAt = now();
     const expiresIn =
       typeof document.expires_in === "number" && document.expires_in > 0 ? document.expires_in : undefined;
     const expiresAt = jwtExpiryMs(token) ?? (expiresIn ? issuedAt + expiresIn * 1000 : issuedAt + DAY_MS);
-    return { token, expiresAt };
+    return { token, expiresAt, issuedAt };
   }
 
   /**
    * One bearer token per credential, shared by every process through the state-dir cache. A new
    * token request is recorded before it is sent, so a crash mid-request still counts against the
-   * daily budget (Flexport allows 10 token requests a day).
+   * daily budget (Flexport allows 10 token requests a day). Renewal starts with an hour left and
+   * keeps the old token until a new one is in hand: while a renewal is refused (authentication
+   * pause, failure backoff, budget) or fails, the old token is used until it expires.
    */
-  async function bearerToken(): Promise<string> {
-    if (memoToken && memoToken.expiresAt - now() > TOKEN_REUSE_MARGIN_MS) return memoToken.token;
+  async function bearerToken(): Promise<HeldToken> {
+    if (memoToken && isFresh(memoToken, now())) return memoToken;
     const file = paths().tokenCache();
-    const fast = usableToken(parseTokenCache(readPrivateJson(file)), fingerprint, now());
-    if (fast) {
+    const fast = heldToken(cacheForCredential(parseTokenCache(readPrivateJson(file)), fingerprint, client));
+    if (fast && isFresh(fast, now())) {
       memoToken = fast;
-      return fast.token;
+      return fast;
     }
     return await withExclusiveLock(`${file}.lock`, async () => {
-      const cache = parseTokenCache(readPrivateJson(file));
-      const cached = usableToken(cache, fingerprint, now());
-      if (cached) {
-        memoToken = cached;
-        return cached.token;
-      }
+      const cache = cacheForCredential(parseTokenCache(readPrivateJson(file)), fingerprint, client);
       const requestedAt = now();
-      const history = trailingRequests(cache?.requests ?? [], requestedAt);
-      if (history.length >= config.token_budget_per_day) {
-        throw new FlexportError(
-          `Flexport token budget exhausted: ${history.length} token requests in the trailing 24 h ` +
-            `(budget ${config.token_budget_per_day}); not requesting another`,
-        );
+      const current = heldToken(cache);
+      if (current && isFresh(current, requestedAt)) {
+        memoToken = current;
+        return current;
       }
-      const requests = [...history, new Date(requestedAt).toISOString()];
+      const live = current && isLive(current, requestedAt) ? current : undefined;
+      const refusal = tokenRequestRefusal(cache, requestedAt, config.token_budget_per_day);
+      if (refusal) {
+        if (live) {
+          memoToken = live;
+          return live;
+        }
+        throw new FlexportError(refusal, { abortsPass: true });
+      }
+      const requests = [...trailingRequests(cache.requests, requestedAt), isoAt(requestedAt)];
+      writePrivateJson(file, { ...cache, requests } satisfies TokenCache);
+      let issued: HeldToken;
+      try {
+        issued = await requestToken();
+      } catch (error) {
+        const failures = cache.failed_requests + 1;
+        const wait = TOKEN_FAILURE_BACKOFF_MS[Math.min(failures, TOKEN_FAILURE_BACKOFF_MS.length) - 1]!;
+        writePrivateJson(file, {
+          ...cache,
+          requests,
+          failed_requests: failures,
+          next_request_at: isoAt(requestedAt + wait),
+        } satisfies TokenCache);
+        if (live && isLive(live, now())) {
+          memoToken = live;
+          return live;
+        }
+        throw error;
+      }
       writePrivateJson(file, {
-        version: 1,
-        credential_fingerprint: fingerprint,
-        access_token: null,
-        expires_at: null,
+        ...cache,
         requests,
-      } satisfies TokenCache);
-      const issued = await requestToken();
-      writePrivateJson(file, {
-        version: 1,
-        credential_fingerprint: fingerprint,
         access_token: issued.token,
-        expires_at: new Date(issued.expiresAt).toISOString(),
-        requests,
+        expires_at: isoAt(issued.expiresAt),
+        issued_at: isoAt(issued.issuedAt ?? requestedAt),
+        failed_requests: 0,
+        next_request_at: null,
       } satisfies TokenCache);
       memoToken = issued;
-      return issued.token;
+      return issued;
     });
   }
 
@@ -721,7 +892,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
     for (let attempt = 0; ; attempt += 1) {
       const token = await bearerToken();
       const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${token.token}`,
         "Flexport-Version": API_VERSION,
         Accept: requestOptions.accept ?? "application/json",
       };
@@ -740,7 +911,9 @@ export function createFlexportClient(options: FlexportClientOptions) {
       }
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel();
-        throw new FlexportError(`${label} redirected (HTTP ${response.status}); not followed`);
+        throw new FlexportError(`${label} redirected (HTTP ${response.status}); not followed`, {
+          status: response.status,
+        });
       }
       const retryable =
         requestOptions.retry === "read" ? [429, 502, 503, 504].includes(response.status) : response.status === 429;
@@ -751,15 +924,25 @@ export function createFlexportClient(options: FlexportClientOptions) {
           throw new FlexportError(
             `${label} is ${response.status === 429 ? "rate limited" : "unavailable"} (HTTP ${response.status}); ` +
               `retry after ${Math.ceil(wait / 1000)} s`,
+            { status: response.status },
           );
         }
         await sleep(wait);
         continue;
       }
       if (!response.ok) {
-        if (response.status === 401) clearCachedToken(token);
         const code = await safeErrorCode(response);
-        throw new FlexportError(`${label} failed (HTTP ${response.status}${code ? `, ${code}` : ""})`);
+        const failure = `${label} failed (HTTP ${response.status}${code ? `, ${code}` : ""})`;
+        if (response.status === 401) {
+          // A fresh token refused is an authentication failure that a new token will not fix.
+          const authFailure = token.issuedAt !== undefined && now() - token.issuedAt < AUTH_FAILURE_TOKEN_AGE_MS;
+          await retireToken(token, authFailure ? now() : undefined);
+          throw new FlexportError(
+            authFailure ? `${failure}; Flexport refused a fresh token, token requests paused for 1 h` : failure,
+            { status: 401, abortsPass: true },
+          );
+        }
+        throw new FlexportError(failure, { status: response.status });
       }
       return response;
     }
@@ -941,7 +1124,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
     network,
     documentIntoCustody,
     send,
-    bearerToken,
+    bearerToken: async (): Promise<string> => (await bearerToken()).token,
     tokenStatus: (): TokenStatus =>
       readTokenStatus({
         stateDir: options.stateDir,

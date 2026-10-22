@@ -153,6 +153,9 @@ export const AdapterInfoSchema = z.object({
   methods: z.array(AdapterMethodSchema),
   credential_service: z.string().optional(),
   multi_account: z.boolean(),
+  // true when the adapter reads `--payload-file <path>`; the runtime then sends a payload over
+  // 64 KiB as a private file instead of inline `--payload-json` (one argv string, capped on Linux).
+  supports_payload_file: z.boolean().optional(),
   platform_capabilities: ChannelCapabilitiesSchema,
   auth: AdapterAuthManifestSchema.optional(),
   methodCatalog: AdapterMethodCatalogSchema.optional(),

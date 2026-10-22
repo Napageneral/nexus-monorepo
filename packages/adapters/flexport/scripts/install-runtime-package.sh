@@ -54,12 +54,25 @@ install -d -m 0700 "$RECEIPT_DIR"
 ACTUAL_SHA256="$(sha256_of "$ARTIFACT")"
 test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
 ARTIFACT_SIZE="$(size_of "$ARTIFACT")"
-TOKEN="$(cat "$TOKEN_FILE")"
 UPLOAD_RECEIPT="$RECEIPT_DIR/upload-response.json"
 INSTALL_RECEIPT="$RECEIPT_DIR/install-response.json"
 
+# The runtime token never goes on a command line (any local user can read ps and
+# /proc/<pid>/cmdline): curl (7.55+) reads the Authorization header from a private 0600 file,
+# written by the shell's printf builtin and removed on exit.
+TOKEN="$(<"$TOKEN_FILE")"
+if [[ -z "$TOKEN" || "$TOKEN" =~ [[:space:][:cntrl:]] ]]; then
+  echo "runtime token file must hold exactly one token" >&2
+  exit 64
+fi
+AUTH_HEADER_FILE="$(mktemp "${TMPDIR:-/tmp}/flexport-runtime-auth.XXXXXX")"
+trap 'rm -f "$AUTH_HEADER_FILE"' EXIT
+chmod 0600 "$AUTH_HEADER_FILE"
+printf 'Authorization: Bearer %s\n' "$TOKEN" > "$AUTH_HEADER_FILE"
+unset TOKEN
+
 curl --silent --show-error --fail-with-body \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "@$AUTH_HEADER_FILE" \
   -H "Content-Type: application/octet-stream" \
   --data-binary "@$ARTIFACT" \
   "$RUNTIME_URL/api/operator/packages/upload?operation_id=$OPERATION_ID&filename=flexport-0.1.0.tar.gz" \
@@ -81,7 +94,7 @@ REQUEST="$(jq -cn \
   '{kind:"adapter",package_id:"flexport",version:"0.1.0",release_id:$release_id,operation_id:$operation_id,staged_artifact:{server_path:$server_path,sha256:$sha256,size_bytes:$size_bytes}}')"
 
 curl --silent --show-error --fail-with-body \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "@$AUTH_HEADER_FILE" \
   -H "Content-Type: application/json" \
   --data "$REQUEST" \
   "$RUNTIME_URL/api/operator/packages/install" \

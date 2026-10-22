@@ -164,7 +164,7 @@ test("the timestamp falls back to the newest bundle time, then the first-seen ti
 test("the network record follows the contract", () => {
   const network: FlexportNetwork = structuredClone(fixtures.network);
   const snapshot = networkSnapshot(network);
-  const record = buildNetworkRecord({ connectionId: "moonsleep-flexport", network, firstSeenMs: 1_792_000_000_000 });
+  const record = buildNetworkRecord({ connectionId: "moonsleep-flexport", network, timestamp: 1_792_000_000_000 });
   AdapterInboundRecordSchema.parse(record);
   assert.equal(record.routing.container_id, "network");
   assert.equal(record.payload.external_record_id, "network:me");

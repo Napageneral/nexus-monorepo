@@ -9,7 +9,7 @@
 3. Install the exact release into the production runtime with `scripts/install-runtime-package.sh` inside a governed package-install activity.
 4. Create connection `moonsleep-flexport` (account `moonsleep`) with `scripts/register-connection.sh` from a private 0600 request file holding the Flexport client id and secret; print nothing but the status line.
 5. On Tyler's go, run the first live backfill, read the shipment bundle and network Records back, and check `token_requests_24h` in health.
-6. Enable the 30-minute monitor; confirm checkpoints, the status file and that unchanged bundles are not re-emitted.
+6. Enable the 30-minute monitor; confirm checkpoints, the status file (including `document_failures`) and that unchanged bundles are re-emitted only once a day, as byte-identical replays.
 7. Cut the moonsleep-v1 writes over to the four write methods through the runtime, then retire the laptop credential and the old Python client.
 
 ## Exit criteria

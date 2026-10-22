@@ -177,6 +177,8 @@ export function buildShipmentRecord(params: {
   snapshot?: Snapshot;
   attachments: NonNullable<AdapterInboundRecord["payload"]["attachments"]>;
   firstSeenMs: number;
+  /** The emission's timestamp when the caller keeps them monotonic; else bundleTimestamp(). */
+  timestamp?: number;
 }): AdapterInboundRecord {
   const snapshot = params.snapshot ?? bundleSnapshot(params.bundle);
   const shipmentId = shipmentIdOf(params.bundle.shipment);
@@ -188,7 +190,7 @@ export function buildShipmentRecord(params: {
       external_record_id: `shipment:${shipmentId}`,
       source_record_type: BUNDLE_RECORD_TYPE,
       provider_version_ref: `bundle:sha256:${snapshot.sha256}`,
-      timestamp: bundleTimestamp(params.bundle, params.firstSeenMs),
+      timestamp: params.timestamp ?? bundleTimestamp(params.bundle, params.firstSeenMs),
       content: bundleSummary(params.bundle),
       content_type: "text",
       payload: completeProviderSnapshot(snapshot.json, {
@@ -212,7 +214,8 @@ export function buildNetworkRecord(params: {
   connectionId: string;
   network: FlexportNetwork;
   snapshot?: Snapshot;
-  firstSeenMs: number;
+  /** The time this content was first emitted (the network has no updated_at of its own). */
+  timestamp: number;
 }): AdapterInboundRecord {
   const snapshot = params.snapshot ?? networkSnapshot(params.network);
   return {
@@ -222,7 +225,7 @@ export function buildNetworkRecord(params: {
       external_record_id: NETWORK_RECORD_ID,
       source_record_type: NETWORK_RECORD_TYPE,
       provider_version_ref: `network:sha256:${snapshot.sha256}`,
-      timestamp: params.firstSeenMs,
+      timestamp: params.timestamp,
       content: networkSummary(params.network),
       content_type: "text",
       payload: completeProviderSnapshot(snapshot.json, { contract: NETWORK_CONTRACT }),

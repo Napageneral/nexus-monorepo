@@ -7,7 +7,9 @@
 //
 // prints {"ok":true,"url":"http://127.0.0.1:<port>","port":<port>} once listening. The fake
 // accepts only FAKE_CLIENT_ID / FAKE_CLIENT_SECRET (or FAKE_FLEXPORT_CLIENT_ID / _SECRET), and
-// answers GET /__fake/stats (no auth) with its token, API and download counters.
+// answers GET /__fake/stats (no auth) with its token, API and download counters and, for each
+// write it received, the method, path, body size and body sha256 (never the body).
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, resolve } from "node:path";
@@ -133,6 +135,15 @@ export async function startFakeFlexport(options = {}) {
         token_requests: tokenRequests,
         api_requests: requests.filter((entry) => entry.path !== "/oauth/token" && entry.path !== "/__fake/stats").length,
         downloads,
+        writes: requests
+          .filter((entry) => entry.method === "POST" || entry.method === "PATCH")
+          .filter((entry) => entry.path !== "/oauth/token")
+          .map((entry) => ({
+            method: entry.method,
+            path: entry.path,
+            bytes: entry.body.length,
+            sha256: createHash("sha256").update(entry.body).digest("hex"),
+          })),
       });
       return;
     }

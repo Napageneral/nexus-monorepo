@@ -14,8 +14,10 @@ import {
 } from "@nexus-project/adapter-sdk-ts";
 import {
   type CustodyDocument,
+  type CustodyResult,
   type FlexportClient,
   type FlexportConfig,
+  FlexportError,
   createFlexportClient,
   isFinalDocument,
   readFlexportConfig,
@@ -49,10 +51,21 @@ type FlexportAdapterClient = {
 
 type FlexportContext = DefinedAdapterContext<FlexportAdapterClient>;
 
+/**
+ * What was last emitted per Record: its digests, when the line was written, and its timestamp
+ * (null in a state file written before timestamps were kept).
+ */
+type EmittedShipment = {
+  bundle_sha256: string;
+  attachments_sha256: string;
+  emitted_at: string;
+  timestamp: number | null;
+};
+
 type EmittedState = {
   version: 1;
-  shipments: Record<string, { bundle_sha256: string; attachments_sha256: string; emitted_at: string }>;
-  network: { sha256: string; emitted_at: string } | null;
+  shipments: Record<string, EmittedShipment>;
+  network: { sha256: string; emitted_at: string; timestamp: number | null } | null;
   first_seen: Record<string, number>;
 };
 
@@ -76,6 +89,9 @@ const AUTH_METHOD_ID = "flexport_client_credentials";
 const WRITE_CONFIRMATION = "SEND_TO_FLEXPORT";
 const ERROR_DELAY_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// An unchanged Record is written again at least this often (same bytes, a cheap replay in the
+// runtime): a line is not an acknowledgement, so a version the runtime dropped is sent again.
+const REEMIT_AFTER_MS = DAY_MS;
 const MAX_FIRST_SEEN = 512;
 const SHA256 = /^[0-9a-f]{64}$/;
 const PROVIDER_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -104,6 +120,21 @@ function textValue(value: unknown): string | undefined {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** True when nothing was emitted yet or the last emission is older than REEMIT_AFTER_MS. */
+function replayDue(emittedAt: string | undefined, nowMs: number): boolean {
+  const at = Date.parse(emittedAt ?? "");
+  return !Number.isFinite(at) || nowMs - at >= REEMIT_AFTER_MS;
+}
+
+/** No usable token, or Flexport refused the token: the rest of the pass would fail the same way. */
+function abortsPass(error: unknown): boolean {
+  return error instanceof FlexportError && error.abortsPass;
 }
 
 function buildClient(ctx: AdapterContext, connectionIdValue?: string): FlexportAdapterClient {
@@ -159,19 +190,25 @@ function readEmitted(client: FlexportAdapterClient): EmittedState {
         bundle_sha256: bundle,
         attachments_sha256: attachments,
         emitted_at: textValue(row.emitted_at) ?? "",
+        timestamp: nonNegativeInteger(row.timestamp),
       };
     }
   }
   const network = asRecord(record.network);
   const firstSeen: Record<string, number> = {};
   for (const [key, value] of Object.entries(asRecord(record.first_seen))) {
-    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) firstSeen[key] = value;
+    const at = nonNegativeInteger(value);
+    if (at !== null) firstSeen[key] = at;
   }
   return {
     version: 1,
     shipments,
     network: textValue(network.sha256)
-      ? { sha256: String(network.sha256), emitted_at: textValue(network.emitted_at) ?? "" }
+      ? {
+          sha256: String(network.sha256),
+          emitted_at: textValue(network.emitted_at) ?? "",
+          timestamp: nonNegativeInteger(network.timestamp),
+        }
       : null,
     first_seen: firstSeen,
   };
@@ -206,9 +243,13 @@ function statusDetails(client: FlexportAdapterClient): UnknownRecord {
     token_cached: false,
     token_expires_at: null,
     token_requests_24h: 0,
+    token_request_failures: 0,
+    token_requests_paused_until: null,
+    auth_failed_at: null,
     token_budget_per_day: client.config.token_budget_per_day,
     last_success_at: null,
     last_error_at: null,
+    document_failures: null,
     remote_write_methods: [...REMOTE_WRITE_METHODS],
     automatic_writes: false,
   };
@@ -221,6 +262,7 @@ function statusDetails(client: FlexportAdapterClient): UnknownRecord {
     const status = readStatus(client);
     details.last_success_at = textValue(status.last_success_at) ?? null;
     details.last_error_at = textValue(status.last_error_at) ?? null;
+    details.document_failures = nonNegativeInteger(status.document_failures);
     if (textValue(status.last_error)) details.last_error = textValue(status.last_error);
   } catch (error) {
     details.status_error = errorMessage(error);
@@ -240,19 +282,47 @@ function health(ctx: FlexportContext): Omit<AdapterHealth, "connection_id"> {
 
 // --- one pass: list, bundle, custody, emit ------------------------------------------------
 
+/**
+ * A final document's bytes into custody. A download that fails (a non-2xx answer, a refused
+ * redirect, a timeout) leaves that attachment off for this pass only: the bundle still goes out
+ * and the download is tried again on the next pass. A refused token still stops the pass.
+ */
+async function documentCustody(
+  ctx: FlexportContext,
+  client: FlexportAdapterClient,
+  shipmentId: string,
+  document: UnknownRecord,
+): Promise<CustodyResult | "failed"> {
+  try {
+    return await client.api.documentIntoCustody(document);
+  } catch (error) {
+    if (ctx.signal.aborted || abortsPass(error) || !(error instanceof FlexportError)) throw error;
+    ctx.log.error(
+      "Flexport document %s on shipment %s not attached this pass (tried again next pass): %s",
+      textValue(document.id) ?? "unknown",
+      shipmentId,
+      error.message,
+    );
+    return "failed";
+  }
+}
+
 async function readShipmentRecord(
   ctx: FlexportContext,
   client: FlexportAdapterClient,
   shipmentId: string,
   state: EmittedState,
   emitUnchanged: boolean,
-): Promise<{ record: AdapterInboundRecord; emitted: EmittedState["shipments"][string] } | undefined> {
+): Promise<{ read?: { record: AdapterInboundRecord; emitted: EmittedShipment }; documentFailures: number }> {
   const bundle = await client.api.bundle(shipmentId);
   const custody = new Map<string, CustodyDocument>();
+  let documentFailures = 0;
   for (const document of bundle.documents) {
     if (!isFinalDocument(document)) continue;
-    const result = await client.api.documentIntoCustody(document);
-    if ("stored" in result) {
+    const result = await documentCustody(ctx, client, shipmentId, document);
+    if (result === "failed") {
+      documentFailures += 1;
+    } else if ("stored" in result) {
       custody.set(result.stored.document_id, result.stored);
     } else if (result.skipped === "too_large") {
       ctx.log.error(
@@ -266,60 +336,77 @@ async function readShipmentRecord(
   const attachments = bundleAttachments(bundle, custody);
   const attachmentsSha256 = sha256Hex(stableJson(attachments.map((entry) => [entry.id, entry.content_hash])));
   const previous = state.shipments[shipmentId];
-  if (
-    !emitUnchanged &&
-    previous?.bundle_sha256 === snapshot.sha256 &&
-    previous.attachments_sha256 === attachmentsSha256
-  ) {
-    return undefined;
-  }
+  const unchanged =
+    previous?.bundle_sha256 === snapshot.sha256 && previous.attachments_sha256 === attachmentsSha256;
   const nowMs = Date.now();
+  if (unchanged && !emitUnchanged && !replayDue(previous.emitted_at, nowMs)) {
+    return { documentFailures };
+  }
   const needsFirstSeen = bundleTimestamp(bundle, -1) === -1;
+  const observed = bundleTimestamp(
+    bundle,
+    needsFirstSeen ? firstSeen(state, `bundle:${snapshot.sha256}`, nowMs) : nowMs,
+  );
+  // An unchanged Record is re-sent byte for byte (same timestamp). A changed one is strictly newer
+  // than the last one emitted, so a return to an earlier exact state is a new Record, not a replay.
+  const lastTimestamp = previous?.timestamp ?? null;
+  const timestamp =
+    lastTimestamp === null ? observed : unchanged ? lastTimestamp : Math.max(observed, lastTimestamp + 1);
   const record = buildShipmentRecord({
     connectionId: client.connectionId,
     bundle,
     snapshot,
     attachments,
-    firstSeenMs: needsFirstSeen ? firstSeen(state, `bundle:${snapshot.sha256}`, nowMs) : nowMs,
+    firstSeenMs: observed,
+    timestamp,
   });
   return {
-    record,
-    emitted: {
-      bundle_sha256: snapshot.sha256,
-      attachments_sha256: attachmentsSha256,
-      emitted_at: new Date(nowMs).toISOString(),
+    read: {
+      record,
+      emitted: {
+        bundle_sha256: snapshot.sha256,
+        attachments_sha256: attachmentsSha256,
+        emitted_at: new Date(nowMs).toISOString(),
+        timestamp,
+      },
     },
+    documentFailures,
   };
 }
 
-/** One pass. Shipment failures are collected, not thrown, so the rest of the pass still runs. */
+/**
+ * One pass. A shipment's failure is collected, not thrown, so the rest of the pass still runs;
+ * a missing or refused token ends the pass at once instead of costing a token request per shipment.
+ */
 async function runPass(
   ctx: FlexportContext,
   emit: (record: AdapterInboundRecord) => void,
   options: PassOptions,
-): Promise<{ summary: PassSummary; failures: string[] }> {
+): Promise<{ summary: PassSummary; failures: string[]; documentFailures: number }> {
   const client = requireClient(ctx);
   const shipments = await client.api.listShipments();
   const state = readEmitted(client);
   const failures: string[] = [];
   let bundlesRead = 0;
   let recordsEmitted = 0;
+  let documentFailures = 0;
   for (const shipment of shipments.filter(options.select)) {
     if (ctx.signal.aborted) throw new Error("Flexport pass aborted");
     const shipmentId = textValue(shipment.id);
     if (!shipmentId || !PROVIDER_ID.test(shipmentId)) continue;
     try {
-      const read = await readShipmentRecord(ctx, client, shipmentId, state, options.emitUnchanged);
+      const outcome = await readShipmentRecord(ctx, client, shipmentId, state, options.emitUnchanged);
       bundlesRead += 1;
-      if (read) {
-        emit(read.record);
-        // Marked emitted only after the line is written, so a refused Record is tried again.
-        state.shipments[shipmentId] = read.emitted;
+      documentFailures += outcome.documentFailures;
+      if (outcome.read) {
+        emit(outcome.read.record);
+        // A written line is not an acknowledgement: an unchanged bundle is written again once a day.
+        state.shipments[shipmentId] = outcome.read.emitted;
         recordsEmitted += 1;
         writeEmitted(client, state);
       }
     } catch (error) {
-      if (ctx.signal.aborted) throw error;
+      if (ctx.signal.aborted || abortsPass(error)) throw error;
       failures.push(`shipment ${shipmentId}: ${errorMessage(error)}`);
       ctx.log.error("Flexport shipment %s bundle failed: %s", shipmentId, errorMessage(error));
     }
@@ -329,17 +416,19 @@ async function runPass(
     const network = await client.api.network();
     const snapshot = networkSnapshot(network);
     const nowMs = Date.now();
-    if (options.emitUnchanged || state.network?.sha256 !== snapshot.sha256) {
-      emit(
-        buildNetworkRecord({
-          connectionId: client.connectionId,
-          network,
-          snapshot,
-          firstSeenMs: firstSeen(state, `network:${snapshot.sha256}`, nowMs),
-        }),
-      );
+    const previous = state.network;
+    const unchanged = previous?.sha256 === snapshot.sha256;
+    if (!unchanged || options.emitUnchanged || replayDue(previous?.emitted_at, nowMs)) {
+      // The network has no updated_at: a change is stamped with its emission time, kept strictly
+      // after the last one; an unchanged re-emission keeps the timestamp it was first sent with.
+      // (A state file from before timestamps were kept has it as the content's first-seen time.)
+      const keptTimestamp = unchanged
+        ? (previous?.timestamp ?? state.first_seen[`network:${snapshot.sha256}`])
+        : undefined;
+      const timestamp = keptTimestamp ?? Math.max(nowMs, (previous?.timestamp ?? -1) + 1);
+      emit(buildNetworkRecord({ connectionId: client.connectionId, network, snapshot, timestamp }));
       recordsEmitted += 1;
-      state.network = { sha256: snapshot.sha256, emitted_at: new Date(nowMs).toISOString() };
+      state.network = { sha256: snapshot.sha256, emitted_at: new Date(nowMs).toISOString(), timestamp };
       writeEmitted(client, state);
     }
     networkAt = new Date(nowMs).toISOString();
@@ -353,6 +442,7 @@ async function runPass(
       network_at: networkAt,
     },
     failures,
+    documentFailures,
   };
 }
 
@@ -397,7 +487,7 @@ async function monitor(ctx: FlexportContext, emit: (record: AdapterInboundRecord
     const nowMs = Date.now();
     const networkAtMs = Date.parse(networkAt ?? "");
     try {
-      const { summary, failures } = await runPass(ctx, emit, {
+      const { summary, failures, documentFailures } = await runPass(ctx, emit, {
         select: (shipment) => {
           const updated = updatedAtMs(shipment);
           return (
@@ -412,6 +502,7 @@ async function monitor(ctx: FlexportContext, emit: (record: AdapterInboundRecord
         networkAt,
       });
       networkAt = summary.network_at;
+      // Documents that did not download are a detail of a successful pass, not a failure of it.
       if (failures.length > 0) throw failedPass(failures);
       if (hasManagedCheckpoints(ctx.runtime)) {
         emitAdapterCheckpoint({ scope: "monitor", key: "poll", value: summary }, ctx.stdout);
@@ -419,6 +510,7 @@ async function monitor(ctx: FlexportContext, emit: (record: AdapterInboundRecord
       const previous = readStatus(client);
       writeStatus(client, {
         ...summary,
+        document_failures: documentFailures,
         last_error_at: textValue(previous.last_error_at) ?? null,
         last_error: textValue(previous.last_error) ?? null,
       });
@@ -737,6 +829,9 @@ export const flexportAdapter = defineAdapter<FlexportAdapterClient>({
   version: "0.1.0",
   multi_account: true,
   credential_service: SERVICE,
+  // Document bodies are base64 inside body_json and pass 128 KiB, the Linux limit of the one argv
+  // string the runtime would otherwise put them in: over 64 KiB they arrive as a 0600 payload file.
+  supportsPayloadFile: true,
   auth: {
     methods: [
       {

@@ -676,6 +676,8 @@ components:
           type: string
         multi_account:
           type: boolean
+        supports_payload_file:
+          type: boolean
         platform_capabilities:
           type: object
           properties:

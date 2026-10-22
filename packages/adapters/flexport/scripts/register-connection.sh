@@ -47,11 +47,24 @@ fi
 CONNECTION_ID="$(jq -er '.connectionId' "$BODY_FILE")"
 
 install -d -m 0700 "$RECEIPT_DIR"
-TOKEN="$(cat "$TOKEN_FILE")"
 CREATE_RECEIPT="$RECEIPT_DIR/connection-create-response.json"
 
+# The runtime token never goes on a command line (any local user can read ps and
+# /proc/<pid>/cmdline): curl (7.55+) reads the Authorization header from a private 0600 file,
+# written by the shell's printf builtin and removed on exit.
+TOKEN="$(<"$TOKEN_FILE")"
+if [[ -z "$TOKEN" || "$TOKEN" =~ [[:space:][:cntrl:]] ]]; then
+  echo "runtime token file must hold exactly one token" >&2
+  exit 64
+fi
+AUTH_HEADER_FILE="$(mktemp "${TMPDIR:-/tmp}/flexport-runtime-auth.XXXXXX")"
+trap 'rm -f "$AUTH_HEADER_FILE"' EXIT
+chmod 0600 "$AUTH_HEADER_FILE"
+printf 'Authorization: Bearer %s\n' "$TOKEN" > "$AUTH_HEADER_FILE"
+unset TOKEN
+
 curl --silent --show-error --fail-with-body \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "@$AUTH_HEADER_FILE" \
   -H "Content-Type: application/json" \
   --data "@$BODY_FILE" \
   "$RUNTIME_URL/runtime/operations/adapters.connections.create" \

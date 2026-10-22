@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -121,12 +121,38 @@ function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
+function checkpointLines(harness: Harness) {
+  return harness.lines.map((line) => JSON.parse(line)).filter((line) => line.nex === "checkpoint");
+}
+
+/** Runs the monitor until it has written one more checkpoint (one more successful pass). */
+async function monitorOnePass(harness: Harness, records: AdapterInboundRecord[], config: Record<string, unknown> = {}) {
+  const controller = new AbortController();
+  const before = checkpointLines(harness).length;
+  const running = flexportAdapter.operations["adapter.monitor.start"]!(
+    harness.context({ config: { poll_interval_ms: 60_000, ...config }, signal: controller.signal }),
+    { connection_id: CONNECTION_ID },
+    (record) => records.push(AdapterInboundRecordSchema.parse(record)),
+  );
+  try {
+    await waitFor(() => checkpointLines(harness).length > before);
+  } finally {
+    controller.abort();
+    await running;
+  }
+}
+
+function statusFile(harness: Harness) {
+  return JSON.parse(readFileSync(join(harness.dir, "status", `${CONNECTION_ID}.json`), "utf8"));
+}
+
 test("adapter.info declares the api_key auth, ingest operations and exactly eight methods", async () => {
   const reflected = await info();
   assert.equal(reflected.platform, "flexport");
   assert.equal(reflected.name, "flexport-adapter");
   assert.equal(reflected.version, "0.1.0");
   assert.equal(reflected.credential_service, "flexport");
+  assert.equal(reflected.supports_payload_file, true, "document bodies over 64 KiB arrive as a payload file");
   assert.deepEqual(reflected.auth?.methods, [
     {
       id: "flexport_client_credentials",
@@ -243,6 +269,143 @@ test("one failing shipment does not stop the pass, and the backfill still fails 
       /^Error: 1 Flexport shipment bundle\(s\) failed; first: shipment 1234567: Flexport GET \/shipments\/1234567 failed \(HTTP 500\)$/,
     );
     assert.deepEqual(records.map((record) => record.payload.external_record_id), ["shipment:2000002", "network:me"]);
+  });
+});
+
+test("a 401 ends the pass at once instead of spending a token request per shipment", async () => {
+  await withHarness(async (harness) => {
+    const base = harness.fake.fixtures.shipments[0];
+    const ids = [1234567, ...Array.from({ length: 11 }, (_, index) => 2000001 + index)];
+    for (const id of ids.slice(1)) harness.fake.fixtures.shipments.push({ ...base, id, name: `S${id}` });
+    for (const id of ids) {
+      harness.fake.inject({ path: `/shipments/${id}`, status: 401, times: 5, body: { error: { code: "unauthorized" } } });
+    }
+    const records: AdapterInboundRecord[] = [];
+    const run = async () =>
+      await flexportAdapter.operations["records.backfill"]!(
+        harness.context(),
+        { connection_id: CONNECTION_ID, since: new Date("2001-01-01T00:00:00Z") },
+        (record) => records.push(record),
+      );
+    await assert.rejects(run(), /failed \(HTTP 401, unauthorized\); Flexport refused a fresh token, token requests paused for 1 h$/);
+    assert.equal(harness.fake.tokenRequests, 1, "one token request, not one per shipment");
+    assert.equal(harness.fake.requests.filter((request) => /^\/shipments\/\d+$/.test(request.path)).length, 1);
+    assert.deepEqual(records, []);
+    const sent = harness.fake.requests.length;
+    await assert.rejects(run(), /token requests are paused until/);
+    assert.equal(harness.fake.requests.length, sent, "the next pass sends nothing during the pause");
+    const health = await flexportAdapter.operations["adapter.health"]!(harness.context(), { connection_id: CONNECTION_ID });
+    assert.equal(health.connected, true);
+    assert.ok(health.details?.auth_failed_at);
+    assert.ok(health.details?.token_requests_paused_until);
+    assert.equal(health.details?.token_requests_24h, 1);
+  });
+});
+
+test("a document that does not download is left off this pass; the bundle still goes out and the download is retried", async () => {
+  await withHarness(async (harness) => {
+    harness.fake.inject({
+      path: "/documents/D1/download",
+      status: 400,
+      body: { error: { code: "unknown_error", message: "Please try again later." } },
+    });
+    const first = await backfill(harness);
+    assert.deepEqual(first.map((record) => record.payload.external_record_id), ["shipment:1234567", "network:me"]);
+    assert.equal(first[0]!.payload.attachments, undefined);
+    assert.deepEqual(harness.errors, [
+      "Flexport document D1 on shipment 1234567 not attached this pass (tried again next pass): " +
+        "Flexport GET /documents/D1/download failed (HTTP 400, unknown_error)",
+    ]);
+    const second = await backfill(harness);
+    assert.equal(second[0]!.payload.attachments?.[0]?.id, "document:D1");
+    assert.equal(harness.fake.downloads.D1, 1);
+    assert.equal(second[0]!.payload.timestamp, first[0]!.payload.timestamp + 1, "the attachment set changed: a newer Record");
+  });
+});
+
+test("a monitor pass whose only failures are documents is a successful pass", async () => {
+  await withHarness(async (harness) => {
+    harness.fake.inject({
+      path: "/documents/D1/download",
+      status: 302,
+      headers: { location: "https://files.example.com/D1.pdf" },
+      times: 100,
+    });
+    const records: AdapterInboundRecord[] = [];
+    await monitorOnePass(harness, records);
+    assert.deepEqual(records.map((record) => record.payload.external_record_id), ["shipment:1234567", "network:me"]);
+    assert.equal(records[0]!.payload.attachments, undefined);
+    const status = statusFile(harness);
+    assert.ok(status.last_success_at);
+    assert.equal(status.document_failures, 1);
+    assert.equal(status.last_error, null);
+    assert.deepEqual(harness.errors, [
+      "Flexport document D1 on shipment 1234567 not attached this pass (tried again next pass): " +
+        "Flexport GET /documents/D1/download redirected (HTTP 302); not followed",
+    ]);
+    assert.deepEqual(Object.keys(checkpointLines(harness)[0].value).sort(), [
+      "bundles_read",
+      "last_success_at",
+      "network_at",
+      "records_emitted",
+      "shipments_listed",
+    ]);
+    const health = await flexportAdapter.operations["adapter.health"]!(harness.context(), { connection_id: CONNECTION_ID });
+    assert.equal(health.details?.document_failures, 1);
+  });
+});
+
+test("an unchanged bundle and network are written again, byte for byte, once a day", async () => {
+  await withHarness(async (harness) => {
+    const first = await backfill(harness);
+    const records: AdapterInboundRecord[] = [];
+    await monitorOnePass(harness, records);
+    assert.deepEqual(records, [], "nothing is due right after the backfill");
+    const emittedPath = join(harness.dir, "emitted", `${CONNECTION_ID}.json`);
+    const emitted = JSON.parse(readFileSync(emittedPath, "utf8"));
+    const dayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    emitted.shipments["1234567"].emitted_at = dayAgo;
+    emitted.network.emitted_at = dayAgo;
+    writeFileSync(emittedPath, JSON.stringify(emitted));
+    await monitorOnePass(harness, records, { network_interval_ms: 1 });
+    assert.deepEqual(records, first, "a Record the runtime may have dropped is sent again, identical");
+    const replayed = JSON.parse(readFileSync(emittedPath, "utf8"));
+    assert.ok(Date.parse(replayed.shipments["1234567"].emitted_at) > Date.parse(dayAgo));
+  });
+});
+
+test("a return to an earlier exact bundle is a newer Record, never a replay", async () => {
+  await withHarness(async (harness) => {
+    const entry = harness.fake.fixtures.customs_entries.find((row: { id: string }) => row.id === "CE1");
+    const updatedAt = Date.parse(harness.fake.fixtures.shipments[0].updated_at);
+    const [a] = await backfill(harness);
+    entry.release_status = "customs_hold";
+    const [b] = await backfill(harness);
+    entry.release_status = "pending";
+    const [c] = await backfill(harness);
+    const [d] = await backfill(harness);
+    assert.deepEqual([a!.payload.timestamp, b!.payload.timestamp, c!.payload.timestamp], [updatedAt, updatedAt + 1, updatedAt + 2]);
+    assert.equal(c!.payload.provider_version_ref, a!.payload.provider_version_ref, "the same bundle bytes");
+    assert.notDeepEqual(c, a);
+    assert.deepEqual(d, c, "an unchanged re-emission keeps its timestamp");
+  });
+});
+
+test("the network is stamped with its emission time, strictly later for every change", async () => {
+  await withHarness(async (harness) => {
+    const before = Date.now();
+    const n1 = (await backfill(harness))[1]!;
+    assert.ok(n1.payload.timestamp >= before && n1.payload.timestamp <= Date.now());
+    harness.fake.fixtures.network.locations.push({ _object: "/network/location", id: "L-dup", name: "duplicate" });
+    const n2 = (await backfill(harness))[1]!;
+    harness.fake.fixtures.network.locations.pop();
+    const n3 = (await backfill(harness))[1]!;
+    const n4 = (await backfill(harness))[1]!;
+    assert.ok(n2.payload.timestamp > n1.payload.timestamp);
+    assert.ok(n3.payload.timestamp > n2.payload.timestamp);
+    assert.equal(n3.payload.provider_version_ref, n1.payload.provider_version_ref);
+    assert.notDeepEqual(n3, n1, "the deleted location's removal reaches the head");
+    assert.deepEqual(n4, n3);
   });
 });
 

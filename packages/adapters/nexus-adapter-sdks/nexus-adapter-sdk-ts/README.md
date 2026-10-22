@@ -142,3 +142,29 @@ import { discordAdapter } from "./adapter.js";
 const exitCode = await runAdapter(discordAdapter);
 process.exit(exitCode);
 ```
+
+## Payload Files
+
+Method and setup calls take their payload as `--payload-json <json>` or `--payload-file <path>`,
+never both. `runAdapter()` always accepts `--payload-file`: it opens the path once without
+following a link, refuses anything but a regular file, reads that one descriptor and requires a
+JSON object. A malformed file is refused without quoting its content.
+
+The Nex runtime sends a payload over 64 KiB as a private (0600) file only when `adapter.info`
+says `supports_payload_file: true`; otherwise it stays inline in one `--payload-json` argument,
+which Linux caps at 128 KiB per argument. Opt in from the declaration:
+
+```ts
+export const uploadAdapter = defineAdapter({
+  platform: "example",
+  name: "example-adapter",
+  version: "0.1.0",
+  supportsPayloadFile: true,
+  capabilities: { /* ... */ },
+  methods: { /* ... */ },
+});
+```
+
+Without `supportsPayloadFile`, `adapter.info` carries no `supports_payload_file` key and is
+unchanged. Payloads of 64 KiB or less still arrive inline, so an adapter must never assume a body
+is off the process command line.

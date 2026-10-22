@@ -26,6 +26,8 @@ import {
 } from "../testdata/fake-flexport.mjs";
 import {
   type FlexportConfig,
+  FlexportError,
+  clientFingerprint,
   createFlexportClient,
   credentialFingerprint,
   normalizeBaseUrl,
@@ -35,6 +37,8 @@ import {
 } from "./client.ts";
 
 const CONNECTION_ID = "test-flexport";
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 
 function stateDir(): string {
   return mkdtempSync(join(tmpdir(), "nexus-flexport-client-"));
@@ -43,7 +47,7 @@ function stateDir(): string {
 function clientFor(
   fake: FakeFlexport,
   dir: string,
-  options: { config?: Record<string, unknown>; secret?: string; sleeps?: number[] } = {},
+  options: { config?: Record<string, unknown>; secret?: string; sleeps?: number[]; now?: () => number } = {},
 ) {
   const config: FlexportConfig = readFlexportConfig({ base_url: fake.url, ...options.config });
   return createFlexportClient({
@@ -55,7 +59,47 @@ function clientFor(
     sleep: async (milliseconds) => {
       options.sleeps?.push(milliseconds);
     },
+    ...(options.now ? { now: options.now } : {}),
   });
+}
+
+function iso(milliseconds: number): string {
+  return new Date(milliseconds).toISOString();
+}
+
+function readCache(dir: string) {
+  return JSON.parse(readFileSync(tokenCachePath(dir), "utf8"));
+}
+
+/**
+ * A scripted Flexport on a fake clock: the token endpoint is down until `tokenUp`, and every API
+ * call answers an empty page. Nothing listens on the base URL; fetch never leaves the process.
+ */
+function scriptedFlexport(clock: { now: number }) {
+  const calls = { token: 0, api: [] as string[], tokenUp: false };
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/oauth/token") {
+      calls.token += 1;
+      if (!calls.tokenUp) throw new TypeError("fetch failed");
+      const exp = Math.floor((clock.now + 24 * HOUR) / 1000);
+      return Response.json({ access_token: `${part({ alg: "none" })}.${part({ exp, n: calls.token })}.sig` });
+    }
+    calls.api.push(String((init?.headers as Record<string, string>).Authorization));
+    return Response.json({ data: { data: [], next: null } });
+  }) as typeof fetch;
+  const client = (dir: string, options: { clientId?: string; secret?: string } = {}) =>
+    createFlexportClient({
+      connectionId: CONNECTION_ID,
+      clientId: options.clientId ?? FAKE_CLIENT_ID,
+      clientSecret: options.secret ?? FAKE_CLIENT_SECRET,
+      config: readFlexportConfig({ base_url: "http://127.0.0.1:9" }),
+      stateDir: dir,
+      fetch: fetchImpl,
+      now: () => clock.now,
+    });
+  return { calls, client };
 }
 
 function tokenCachePath(dir: string): string {
@@ -263,16 +307,148 @@ test("a token close to expiry is replaced; a fresh one is reused", async () => {
   });
 });
 
-test("a 401 retires the rejected token so the next call requests one new token", async () => {
+test("a 401 on a token older than 10 min retires it once so the next call requests one new token", async () => {
+  await withFake(async (fake, dir) => {
+    await clientFor(fake, dir).listShipments();
+    const later = () => Date.now() + 15 * MINUTE;
+    fake.inject({ path: "/shipments", status: 401, body: { error: { code: "unauthorized", message: "expired" } } });
+    await assert.rejects(clientFor(fake, dir, { now: later }).listShipments(), (error: FlexportError) => {
+      assert.equal(error.message, "Flexport GET /shipments failed (HTTP 401, unauthorized)");
+      assert.equal(error.status, 401);
+      assert.equal(error.abortsPass, true);
+      return true;
+    });
+    const cache = readCache(dir);
+    assert.equal(cache.access_token, null);
+    assert.equal(cache.auth_failed_at, null, "an old token's 401 is an expiry, not an authentication failure");
+    await clientFor(fake, dir, { now: later }).listShipments();
+    assert.equal(fake.tokenRequests, 2);
+  });
+});
+
+test("a 401 on a token issued minutes earlier pauses new token requests for an hour", async () => {
   await withFake(async (fake, dir) => {
     const client = clientFor(fake, dir);
     await client.listShipments();
-    fake.inject({ path: "/shipments", status: 401, body: { error: { code: "unauthorized", message: "expired" } } });
-    await assert.rejects(client.listShipments(), /failed \(HTTP 401, unauthorized\)/);
-    assert.equal(JSON.parse(readFileSync(tokenCachePath(dir), "utf8")).access_token, null);
-    await clientFor(fake, dir).listShipments();
-    assert.equal(fake.tokenRequests, 2);
+    fake.inject({ path: "/shipments", status: 401, body: { error: { code: "unauthorized", message: "no" } } });
+    await assert.rejects(client.listShipments(), (error: FlexportError) => {
+      assert.equal(
+        error.message,
+        "Flexport GET /shipments failed (HTTP 401, unauthorized); Flexport refused a fresh token, token requests paused for 1 h",
+      );
+      assert.equal(error.abortsPass, true);
+      return true;
+    });
+    const cache = readCache(dir);
+    assert.equal(cache.access_token, null);
+    const failedAt = Date.parse(cache.auth_failed_at);
+    assert.ok(failedAt <= Date.now() && failedAt > Date.now() - MINUTE);
+    const sent = fake.requests.length;
+    await assert.rejects(
+      clientFor(fake, dir).listShipments(),
+      /^FlexportError: Flexport token requests are paused until \S+: Flexport refused a token issued minutes earlier \(HTTP 401\); not requesting another$/,
+    );
+    assert.equal(fake.requests.length, sent, "nothing is sent during the pause");
+    const status = readTokenStatus({ stateDir: dir, connectionId: CONNECTION_ID, clientId: FAKE_CLIENT_ID, clientSecret: FAKE_CLIENT_SECRET });
+    assert.equal(status.auth_failed_at, cache.auth_failed_at);
+    assert.equal(status.token_requests_paused_until, iso(failedAt + HOUR));
+    await clientFor(fake, dir, { now: () => Date.now() + 61 * MINUTE }).listShipments();
+    assert.equal(fake.tokenRequests, 2, "one new token request once the hour is over");
   });
+});
+
+test("renewal keeps the old token until a new one is in hand and backs off failed token requests", async () => {
+  const dir = stateDir();
+  try {
+    const clock = { now: Date.parse("2026-10-21T12:00:00.000Z") };
+    const flexport = scriptedFlexport(clock);
+    writeCache(dir, {
+      version: 1,
+      credential_fingerprint: credentialFingerprint(FAKE_CLIENT_ID, FAKE_CLIENT_SECRET),
+      access_token: "old.token.value",
+      expires_at: iso(clock.now + 50 * MINUTE),
+      issued_at: iso(clock.now - 23 * HOUR - 10 * MINUTE),
+      requests: [iso(clock.now - 23 * HOUR - 10 * MINUTE)],
+    });
+    const client = flexport.client(dir);
+    for (let index = 0; index < 3; index += 1) await client.listShipments();
+    assert.equal(flexport.calls.token, 1, "one failed renewal, then a 15 min backoff");
+    assert.deepEqual(flexport.calls.api, Array(3).fill("Bearer old.token.value"), "the old token is still used");
+    let cache = readCache(dir);
+    assert.equal(cache.access_token, "old.token.value", "the old token is kept while the renewal fails");
+    assert.equal(cache.failed_requests, 1);
+    assert.equal(cache.next_request_at, iso(clock.now + 15 * MINUTE));
+    assert.equal(cache.requests.length, 2);
+
+    clock.now += 16 * MINUTE;
+    await client.listShipments();
+    assert.equal(flexport.calls.token, 2);
+    assert.equal(flexport.calls.api.at(-1), "Bearer old.token.value");
+    cache = readCache(dir);
+    assert.equal(cache.failed_requests, 2);
+    assert.equal(cache.next_request_at, iso(clock.now + HOUR));
+
+    clock.now += 35 * MINUTE;
+    await assert.rejects(
+      client.listShipments(),
+      /token requests are backing off until \S+ after 2 failed token request\(s\); not requesting another$/,
+    );
+    assert.equal(flexport.calls.token, 2, "the old token has expired and the backoff holds");
+
+    clock.now += 30 * MINUTE;
+    await assert.rejects(client.listShipments(), /^FlexportError: Flexport token request failed \(TypeError\)$/);
+    assert.equal(flexport.calls.token, 3);
+    cache = readCache(dir);
+    assert.equal(cache.failed_requests, 3);
+    assert.equal(cache.next_request_at, iso(clock.now + 4 * HOUR));
+
+    flexport.calls.tokenUp = true;
+    clock.now += 4 * HOUR + MINUTE;
+    await client.listShipments();
+    assert.equal(flexport.calls.token, 4);
+    cache = readCache(dir);
+    assert.equal(cache.failed_requests, 0, "a success resets the backoff");
+    assert.equal(cache.next_request_at, null);
+    assert.equal(cache.issued_at, iso(clock.now));
+    assert.notEqual(cache.access_token, "old.token.value");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a new secret keeps the client's request history but not its backoff; a new client id starts over", async () => {
+  const dir = stateDir();
+  try {
+    const clock = { now: Date.parse("2026-10-21T12:00:00.000Z") };
+    const flexport = scriptedFlexport(clock);
+    flexport.calls.tokenUp = true;
+    writeCache(dir, {
+      version: 1,
+      credential_fingerprint: credentialFingerprint(FAKE_CLIENT_ID, "mistyped-secret"),
+      client_fingerprint: clientFingerprint(FAKE_CLIENT_ID),
+      access_token: null,
+      expires_at: null,
+      requests: [iso(clock.now - 3 * HOUR), iso(clock.now - 2 * HOUR)],
+      failed_requests: 2,
+      next_request_at: iso(clock.now + 50 * MINUTE),
+      auth_failed_at: iso(clock.now - 5 * MINUTE),
+    });
+    await flexport.client(dir).listShipments();
+    assert.equal(flexport.calls.token, 1, "the corrected secret is not held back by the old secret's failures");
+    let cache = readCache(dir);
+    assert.equal(cache.credential_fingerprint, credentialFingerprint(FAKE_CLIENT_ID, FAKE_CLIENT_SECRET));
+    assert.equal(cache.requests.length, 3, "Flexport counts token requests per client id");
+    assert.equal(cache.failed_requests, 0);
+    assert.equal(cache.auth_failed_at, null);
+
+    await flexport.client(dir, { clientId: "another-client-id" }).listShipments();
+    assert.equal(flexport.calls.token, 2);
+    cache = readCache(dir);
+    assert.equal(cache.client_fingerprint, clientFingerprint("another-client-id"));
+    assert.equal(cache.requests.length, 1, "a new client id starts a new history");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("an unsafe token cache is refused", async () => {
@@ -455,7 +631,14 @@ test("token status for health reads no network and creates no directories", asyn
       clientId: FAKE_CLIENT_ID,
       clientSecret: FAKE_CLIENT_SECRET,
     });
-    assert.deepEqual(status, { token_cached: false, token_expires_at: null, token_requests_24h: 0 });
+    assert.deepEqual(status, {
+      token_cached: false,
+      token_expires_at: null,
+      token_requests_24h: 0,
+      token_request_failures: 0,
+      token_requests_paused_until: null,
+      auth_failed_at: null,
+    });
     assert.equal(existsSync(join(dir, "token-cache")), false);
     assert.equal(fake.requests.length, 0);
   });
