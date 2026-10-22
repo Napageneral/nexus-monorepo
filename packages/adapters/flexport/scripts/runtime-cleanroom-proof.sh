@@ -270,13 +270,13 @@ docker run -d \
   --cpus 1 --memory 1g --pids-limit 256 \
   --security-opt no-new-privileges \
   --user 1000:1000 \
-  --tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=2g \
+  --tmpfs /cleanroom-pgdata:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=2g \
   --tmpfs /run/postgresql:rw,nosuid,nodev,noexec,uid=1000,gid=1000,mode=0775 \
   --entrypoint sh \
   "${POSTGRES_IMAGE}" \
   -c 'set -eu
       B=/usr/lib/postgresql/17/bin
-      D=/var/lib/postgresql/data/pgdata
+      D=/cleanroom-pgdata/pgdata
       "$B/initdb" -D "$D" -U postgres --auth=trust -E UTF8 --locale=C >/dev/null
       printf "host all all all trust\n" >> "$D/pg_hba.conf"
       exec "$B/postgres" -D "$D" -c listen_addresses="*" -c unix_socket_directories=/run/postgresql' >/dev/null
