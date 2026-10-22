@@ -21,8 +21,10 @@
 #     postgres-record-store-migrate.js, the nex-moonsleep user 20042, a runtime on 127.0.0.1:18789
 #     that reads /run/moonsleep-load-credentials/{postgres-dsn,runtime-token,bootstrap-seed.yaml},
 #     curl inside the image, and an org.opencontainers.image.revision label of 40 hex.
-#   - POSTGRES_RELEASE_IMAGE is a PostgreSQL 17 image whose entrypoint honors POSTGRES_DB and
-#     POSTGRES_HOST_AUTH_METHOD.
+#   - POSTGRES_RELEASE_IMAGE is the PostgreSQL 17 image production runs (nex-recovery-postgres:17.9-pgvector-0.8.2-*):
+#     binaries in /usr/lib/postgresql/17/bin, a uid 1000 default user, and the vector, unaccent and pg_trgm
+#     extensions available (the Nex baseline needs them; production's moonsleep_nex has them). The proof runs its
+#     own initdb on a tmpfs and creates the database, the extensions and the production roles.
 #   - The moonsleep-empty-v1 bootstrap seeds entity_moonsleep_tyler, which the runtime binds the
 #     connection's receiver contact to (the adapter's health returns that account contact).
 #   - dist/flexport-<version>.tar.gz was built from this clean worktree (scripts/package-release.sh)
@@ -162,10 +164,15 @@ runtime_post() {
   runtime_curl -sS --fail-with-body -H "Content-Type: application/json" --data "$2" "http://127.0.0.1:18789$1"
 }
 
+PG_BIN=/usr/lib/postgresql/17/bin
+pg_psql() {
+  docker exec -i "${postgres_container}" "${PG_BIN}/psql" -X -h /run/postgresql -U postgres "$@"
+}
+
 wait_for_postgres() {
   local attempt
   for attempt in $(seq 1 90); do
-    if docker exec "${postgres_container}" psql -X -U postgres -d moonsleep_nex -Atqc 'SELECT 1' >/dev/null 2>&1; then
+    if pg_psql -d postgres -Atqc 'SELECT 1' >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -262,16 +269,28 @@ docker run -d \
   --network-alias postgres \
   --cpus 1 --memory 1g --pids-limit 256 \
   --security-opt no-new-privileges \
-  --env POSTGRES_DB=moonsleep_nex \
-  --env POSTGRES_HOST_AUTH_METHOD=trust \
-  --mount "type=volume,src=${postgres_volume},dst=/var/lib/postgresql/data" \
-  --tmpfs /run/postgresql:rw,nosuid,nodev,noexec,mode=0775 \
-  "${POSTGRES_IMAGE}" >/dev/null
+  --user 1000:1000 \
+  --tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700,size=2g \
+  --tmpfs /run/postgresql:rw,nosuid,nodev,noexec,uid=1000,gid=1000,mode=0775 \
+  --entrypoint sh \
+  "${POSTGRES_IMAGE}" \
+  -c 'set -eu
+      B=/usr/lib/postgresql/17/bin
+      D=/var/lib/postgresql/data/pgdata
+      "$B/initdb" -D "$D" -U postgres --auth=trust -E UTF8 --locale=C >/dev/null
+      printf "host all all all trust\n" >> "$D/pg_hba.conf"
+      exec "$B/postgres" -D "$D" -c listen_addresses="*" -c unix_socket_directories=/run/postgresql' >/dev/null
 wait_for_postgres
-postgres_version="$(docker exec -u postgres "${postgres_container}" psql -X -d moonsleep_nex -Atqc 'SHOW server_version')"
+pg_psql -d postgres -v ON_ERROR_STOP=1 -qc 'CREATE DATABASE moonsleep_nex' >/dev/null
+pg_psql -d moonsleep_nex -v ON_ERROR_STOP=1 -q <<'SQL' >/dev/null || fail "POSTGRES_RELEASE_IMAGE lacks an extension the Nex baseline needs (vector, unaccent, pg_trgm)"
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+SQL
+postgres_version="$(pg_psql -d moonsleep_nex -Atqc 'SHOW server_version')"
 [[ "${postgres_version}" == 17.* ]] || fail "POSTGRES_RELEASE_IMAGE is PostgreSQL ${postgres_version}, not 17"
 
-docker exec -i "${postgres_container}" psql -X -U postgres -d moonsleep_nex -v ON_ERROR_STOP=1 <<SQL >/dev/null
+pg_psql -d moonsleep_nex -v ON_ERROR_STOP=1 <<SQL >/dev/null
 CREATE ROLE ${owner_role} NOLOGIN;
 CREATE ROLE ${access_role} NOLOGIN;
 CREATE ROLE ${migrator_role} LOGIN;
