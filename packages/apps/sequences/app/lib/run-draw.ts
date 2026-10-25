@@ -7,7 +7,7 @@ import { entryIdOf, entryListSha256 } from "./draw/rank.js";
 import { compareShadow, diffHashes, nearestRead, type EntriesRows, type ExplainRows, type MacDrawing, type Snapshot } from "./draw/shadow.js";
 import { latestTeamHashes, ledgerAt, loadDrawings, loadSeries } from "./repo.js";
 import { RetryableError, saveSnapshot } from "./run-step.js";
-import { readDrand, readSource, resolveOpsAccess, type SourceDeps } from "./sources.js";
+import { entriesRowsOf, explainOf, readDrand, readSource, resolveOpsAccess, type SourceDeps } from "./sources.js";
 import { isoOrNull, jsonOf, requireStore } from "./store.js";
 import type { JobContext } from "./types.js";
 
@@ -56,7 +56,7 @@ export async function runShadowDraw(ctx: JobContext, deps: SourceDeps = {}): Pro
   const snapshots = (
     await store.query("SELECT phase, as_of, sha256, body FROM source_snapshots WHERE step_instance_id = $1 AND source = 'entries' ORDER BY as_of", [step.id])
   ).rows.map((row) => ({ phase: String(row.phase), as_of: isoOrNull(row.as_of)!, sha256: String(row.sha256), rows: jsonOf<EntriesRows>(row.body, {} as EntriesRows) }));
-  const s2: Snapshot = { phase: "s2", as_of: read.answer.as_of, sha256: read.answer.sha256, rows: read.answer.rows as EntriesRows };
+  const s2: Snapshot = { phase: "s2", as_of: read.answer.as_of, sha256: read.answer.sha256, rows: entriesRowsOf(read.answer) };
   const chosen = nearestRead([...snapshots, s2], mac.commit.committed_at_utc)!;
   const team = await latestTeamHashes(store, step.series_id);
   const ledger = await ledgerAt(store, scope, mac.commit.committed_at_utc);
@@ -67,8 +67,7 @@ export async function runShadowDraw(ctx: JobContext, deps: SourceDeps = {}): Pro
     if (hashes.length > 0) {
       const explained = await readSource("entries", { ...params, explain: hashes.join(",") }, access, { ...deps, abortSignal: ctx.abortSignal });
       if (explained.ok) {
-        const rows = explained.answer.rows as EntriesRows & { explain?: ExplainRows };
-        explain = rows.explain ?? null;
+        explain = explainOf(explained.answer);
         compare = compareShadow({ read: chosen, explain, mac, drawing1: drawing1 ? toMac(drawing1) : null, teamHashes: team, ledgerAtCommit: ledger });
       }
     }

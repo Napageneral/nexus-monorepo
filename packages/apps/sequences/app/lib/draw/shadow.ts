@@ -144,7 +144,8 @@ export function compareShadow(input: {
 export function diffHashes(compare: Compare, mac: MacDrawing, read: Snapshot): string[] {
   const macHashes = new Map(mac.entries.map((entry) => [entry.entry_id, entry.address_sha256]));
   const engineHashes = new Map(read.rows.review_entrants.map((entrant) => [entryIdOf(entrant.address_sha256), entrant.address_sha256]));
-  return [...new Set([...compare.diffs.map((diff) => (diff.side === "mac_only" ? macHashes.get(diff.entry_id) : engineHashes.get(diff.entry_id)) ?? ""), ...compare.needs_explain])].filter(Boolean).sort();
+  // The ops route explains at most 100 hashes a read (MAX_EXPLAIN_HASHES); more than that is itself a finding.
+  return [...new Set([...compare.diffs.map((diff) => (diff.side === "mac_only" ? macHashes.get(diff.entry_id) : engineHashes.get(diff.entry_id)) ?? ""), ...compare.needs_explain])].filter(Boolean).sort().slice(0, 100);
 }
 
 function between(text: string | null | undefined, a: number, b: number): boolean {

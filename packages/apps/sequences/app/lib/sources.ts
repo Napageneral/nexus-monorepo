@@ -6,6 +6,7 @@
 import { RELEASED_SOURCE_ROUTES, SOURCES_BASE_URL, SOURCES_CONTRACT } from "./catalog.js";
 import { asString, errorText, unwrapPayload, type Row } from "./nex.js";
 import { QUICKNET_CHAIN } from "./draw/rank.js";
+import type { EntriesRows, ExplainRows } from "./draw/shadow.js";
 import { jcsSha256, SHA256_RE } from "./sha.js";
 import type { NexClient } from "./types.js";
 
@@ -20,7 +21,57 @@ export const SOURCE_TIMEOUT_MS = 20_000;
 export const SOURCE_RETRIES = 3;
 export const DRAND_BASE_URL = "https://api.drand.sh";
 
-export type SourceAnswer = { contract: string; as_of: string; sha256: string; count: number; rows: unknown };
+export type SourceAnswer = { contract: string; as_of: string; sha256: string; count: number; rows: unknown } & Record<string, unknown>;
+
+/** The ops API's digest: the answer without ok, as_of, in_recovery and sha256 (sequences_sources.py finish_answer). */
+const VOLATILE = new Set(["ok", "as_of", "in_recovery", "sha256"]);
+export function answerSha256(answer: Record<string, unknown>): string {
+  return jcsSha256(Object.fromEntries(Object.entries(answer).filter(([key]) => !VOLATILE.has(key))));
+}
+
+/** What a snapshot keeps: the answer without its volatile keys (hashes and counts only). */
+export function snapshotBody(source: string, answer: SourceAnswer): unknown {
+  if (source === "entries") return entriesRowsOf(answer);
+  return Object.fromEntries(Object.entries(answer).filter(([key]) => !VOLATILE.has(key)));
+}
+
+type ExplainMember = { address_sha256: string; created_at?: string | null; invitation_status?: string | null; last_error?: string | null; updated_at?: string | null };
+
+/**
+ * The `entries` answer (B1 sequences_sources.read_entries) in the shadow compare's shape: entrants in
+ * rows / review_entrants, the group fields beside them, members as the member hashes, and explain
+ * {invitations, reviews} with each invitation's status split from its last_error.
+ */
+export function entriesRowsOf(answer: Record<string, unknown>): EntriesRows & { explain?: ExplainRows } {
+  const nested = answer.rows && typeof answer.rows === "object" && !Array.isArray(answer.rows) ? (answer.rows as Record<string, unknown>) : null;
+  const pick = (key: string) => (answer[key] !== undefined ? answer[key] : nested?.[key]);
+  const entrants = (Array.isArray(answer.review_entrants) ? answer.review_entrants : Array.isArray(answer.rows) ? answer.rows : nested?.review_entrants ?? []) as EntriesRows["review_entrants"];
+  const members = (pick("members") ?? pick("member_hashes")) as string[] | undefined;
+  const out: EntriesRows & { explain?: ExplainRows } = {
+    group_size: Number(pick("group_size") ?? 0),
+    invitation_statuses: (pick("invitation_statuses") ?? {}) as Record<string, number>,
+    group_email_at_utc: (pick("group_email_at_utc") as string | null | undefined) ?? null,
+    reviews_entered: Number(pick("reviews_entered") ?? 0),
+    review_entrants: entrants.map((entrant) => ({ address_sha256: entrant.address_sha256, ...(entrant.entry_id ? { entry_id: entrant.entry_id } : {}), ...(entrant.review_ids ? { review_ids: entrant.review_ids } : {}) })),
+    ...(Array.isArray(members) ? { member_hashes: [...members].sort() } : {}),
+  };
+  const explain = explainOf(answer);
+  if (explain) out.explain = explain;
+  return out;
+}
+
+export function explainOf(answer: Record<string, unknown>): ExplainRows | null {
+  const nested = answer.rows && typeof answer.rows === "object" && !Array.isArray(answer.rows) ? (answer.rows as Record<string, unknown>) : null;
+  const raw = (answer.explain ?? nested?.explain) as { invitations?: ExplainMember[]; members?: ExplainMember[]; reviews?: ExplainRows["reviews"] } | undefined;
+  if (!raw || typeof raw !== "object") return null;
+  const members = (raw.invitations ?? raw.members ?? []).map((row) => {
+    // A combined "cancelled:klaviyo_bounced" status splits at its first ':' (older answers).
+    const combined = !row.last_error && typeof (row as { status?: unknown }).status === "string" ? String((row as { status?: string }).status) : null;
+    const [status, error] = combined ? [combined.split(":")[0]!, combined.includes(":") ? combined.slice(combined.indexOf(":") + 1) : null] : [row.invitation_status ?? null, row.last_error ?? null];
+    return { address_sha256: row.address_sha256, created_at: row.created_at ?? null, invitation_status: status, last_error: error, updated_at: row.updated_at ?? null };
+  });
+  return { members, reviews: raw.reviews ?? [] };
+}
 
 export type SourceRead =
   | { ok: true; answer: SourceAnswer; local_sha256: string; sha_matches: boolean; url_path: string; attempts: number }
@@ -109,7 +160,7 @@ export async function readSource(name: string, params: Record<string, string>, a
         const broken = contractProblem(body);
         if (broken) return { ok: false, code: "hold.source_stale", message: `${urlPath}: ${broken}`, status: 200, attempts: attempt };
         const answer = body as SourceAnswer;
-        const local = jcsSha256(answer.rows);
+        const local = answerSha256(answer);
         return { ok: true, answer, local_sha256: local, sha_matches: local === answer.sha256, url_path: urlPath, attempts: attempt };
       }
       lastMessage = `${urlPath}: HTTP ${response.status}`;

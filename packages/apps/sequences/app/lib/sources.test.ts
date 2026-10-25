@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { fakeFetch } from "../test/fake-runtime.js";
-import { contractProblem, readDrand, readSource, sourcePath } from "./sources.js";
-import { jcsSha256 } from "./sha.js";
+import { answerSha256, contractProblem, entriesRowsOf, readDrand, readSource, sourcePath } from "./sources.js";
 
 const access = { id: "test-id", secret: "test-secret" };
-const rows = { night: { total: 10, not_cancelled: 9 } };
-const good = { contract: "sequences_sources_v1", as_of: "2026-10-27T18:00:00Z", sha256: jcsSha256(rows), count: 1, rows };
+// A real answer from the ops API's own code (sequences_sources.finish_answer, run in Python): its
+// sha256 is over the answer without ok, as_of, in_recovery and sha256, and the engine must agree.
+const good = {
+  ok: true, contract: "sequences_sources_v1", source: "invitations", params: { night: "2026-10-24" }, as_of: "2026-10-27T18:00:00Z", in_recovery: false, window_days: 10,
+  rows: [{ ledger: "night", night: "2026-10-24", made: 2690, posted: 2595, first_created_at: "2026-10-25T00:17:30Z" }],
+  count: 1, sha256: "3a71b2f067cb4b2edc576ceed1c8d29bf8022f02b4d5c13eb838064a8ecb8e35",
+};
 const noSleep = { sleep: async () => {} };
 
 describe("the ops sources client", () => {
@@ -56,5 +60,23 @@ describe("the ops sources client", () => {
     const { fetch, seen } = fakeFetch({ "drand:round": () => ({ status: 200, body: { round: 33290248, randomness: "ab" } }) });
     expect(await readDrand(33290248, { fetch, ...noSleep })).toMatchObject({ ok: true, body: { round: 33290248 } });
     expect(seen).toEqual(["/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/33290248"]);
+  });
+
+  it("reads the ops API's entries layout: entrants in rows, group fields beside them, explain split", () => {
+    const h = (n: number) => n.toString(16).padStart(64, "0");
+    const answer = {
+      ok: true, contract: "sequences_sources_v1", source: "entries", params: { night: "2026-10-24", deadline: "2026-10-25T04:59:59+00:00", explain: [h(2)] },
+      as_of: "2026-10-25T13:00:30Z", in_recovery: true, group_size: 3, invitation_statuses: { sent: 2, "cancelled:klaviyo_bounced": 1 },
+      group_email_at_utc: "2026-10-25T00:17:30Z", reviews_entered: 2, members: [h(3), h(1)],
+      rows: [{ entry_id: `e_${h(1).slice(0, 16)}`, address_sha256: h(1), review_ids: ["rev_a", "rev_b"] }],
+      review_entrants: [{ entry_id: `e_${h(1).slice(0, 16)}`, address_sha256: h(1), review_ids: ["rev_a", "rev_b"] }],
+      explain: { hashes: [h(2)], invitations: [{ address_sha256: h(2), created_at: "2026-10-25T00:20:00Z", status: "cancelled:klaviyo_bounced", updated_at: "2026-10-25T13:10:00Z" }], reviews: [] },
+      count: 1,
+    };
+    const rows = entriesRowsOf(answer);
+    expect(rows).toMatchObject({ group_size: 3, reviews_entered: 2, group_email_at_utc: "2026-10-25T00:17:30Z", member_hashes: [h(1), h(3)] });
+    expect(rows.review_entrants).toEqual([{ entry_id: `e_${h(1).slice(0, 16)}`, address_sha256: h(1), review_ids: ["rev_a", "rev_b"] }]);
+    expect(rows.explain!.members).toEqual([{ address_sha256: h(2), created_at: "2026-10-25T00:20:00Z", invitation_status: "cancelled", last_error: "klaviyo_bounced", updated_at: "2026-10-25T13:10:00Z" }]);
+    expect(answerSha256({ ...answer, ok: false, as_of: "x", in_recovery: false })).toBe(answerSha256(answer));
   });
 });

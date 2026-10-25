@@ -3,7 +3,7 @@
 import { claimRun, finishRun, isFinalPhase } from "./claim.js";
 import { judgeFollowup, judgeNight, parseInvitations } from "./observe.js";
 import { loadSeries } from "./repo.js";
-import { readDrand, readSource, resolveOpsAccess, type SourceDeps, type SourceRead } from "./sources.js";
+import { readDrand, readSource, resolveOpsAccess, snapshotBody, type SourceDeps, type SourceRead } from "./sources.js";
 import { shortId } from "./sha.js";
 import { appendEvent, requireStore } from "./store.js";
 import type { AppStore, JobContext } from "./types.js";
@@ -12,13 +12,13 @@ export class RetryableError extends Error {
   readonly retryable = true;
 }
 
-/** Hashes and counts only: the snapshot body is the route's rows, which carry no addresses. */
+/** Hashes and counts only: the snapshot body is the answer without its volatile keys (no addresses). */
 export async function saveSnapshot(q: AppStore, read: Extract<SourceRead, { ok: true }>, source: string, params: Record<string, string>, stepId: string | null, phase: string | null, by: string): Promise<string> {
   const id = shortId("src", source, JSON.stringify(params), read.answer.as_of, read.answer.sha256, phase ?? "");
   await q.query(
     `INSERT INTO source_snapshots (id, source, params, as_of, sha256, local_sha256, count, body, step_instance_id, phase, fetched_by)
      VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9, $10, $11) ON CONFLICT (id) DO NOTHING`,
-    [id, source, JSON.stringify(params), read.answer.as_of, read.answer.sha256, read.local_sha256, read.answer.count, JSON.stringify(read.answer.rows), stepId, phase, by],
+    [id, source, JSON.stringify(params), read.answer.as_of, read.answer.sha256, read.local_sha256, read.answer.count, JSON.stringify(snapshotBody(source, read.answer)), stepId, phase, by],
   );
   return id;
 }
