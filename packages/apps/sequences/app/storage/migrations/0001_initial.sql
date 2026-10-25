@@ -16,6 +16,7 @@ CREATE TABLE health (
   ticks BIGINT NOT NULL DEFAULT 0,
   last_probe_slot TEXT,
   last_probe_run_id TEXT,
+  last_notify_at TIMESTAMPTZ,
   last_ops_reach_at TIMESTAMPTZ,
   last_ops_reach_ok BOOLEAN,
   last_drand_reach_at TIMESTAMPTZ,

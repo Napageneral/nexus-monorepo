@@ -216,15 +216,16 @@ export async function loadDrawings(q: AppStore, prizeScope: string, mode: "adopt
 }
 
 /**
- * The prize ledger as entry ids at an instant: winners rows at or before `at`, minus the winners a
- * promotion at or before `at` replaced.
+ * The prize ledger as entry ids just before an instant (a drawing's own winners, recorded at its
+ * commit, are not in the ledger its entrants were checked against): winners rows before `at`,
+ * minus the winners a promotion before `at` replaced.
  */
 export async function ledgerAt(q: AppStore, prizeScope: string, at: string): Promise<Set<string>> {
   const held = new Set(
-    (await q.query<{ entry_id: string }>("SELECT entry_id FROM winners WHERE prize_scope = $1 AND at <= $2", [prizeScope, at])).rows.map((row) => row.entry_id),
+    (await q.query<{ entry_id: string }>("SELECT entry_id FROM winners WHERE prize_scope = $1 AND at < $2", [prizeScope, at])).rows.map((row) => row.entry_id),
   );
   const promotions = (await q.query("SELECT promoted FROM drawings WHERE prize_scope = $1 AND mode = 'adopted'", [prizeScope])).rows.flatMap((row) => jsonOf<Promotion[]>(row.promoted, []));
-  for (const promotion of promotions) if (Date.parse(promotion.at_utc) <= Date.parse(at)) held.delete(promotion.replaces);
+  for (const promotion of promotions) if (Date.parse(promotion.at_utc) < Date.parse(at)) held.delete(promotion.replaces);
   return held;
 }
 

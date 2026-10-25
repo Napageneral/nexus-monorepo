@@ -109,10 +109,17 @@ type AlertRow = { id: string; rule: string; subject_ref: string; state: string; 
  * Makes the open alerts of `rules` equal `desired`: opens new ones, resolves ones whose cause
  * cleared, re-opens a told one that got worse (a new code). Returns what changed.
  */
-export async function syncAlerts(q: AppStore, desired: readonly DesiredAlert[], rules: readonly string[], now: Date, actor = "engine:tick"): Promise<{ opened: string[]; resolved: string[]; reopened: string[] }> {
+export async function syncAlerts(
+  q: AppStore,
+  desired: readonly DesiredAlert[],
+  rules: readonly string[],
+  now: Date,
+  actor = "engine:tick",
+  manages: (row: { rule: string; subject_ref: string; detail: Record<string, unknown> }) => boolean = () => true,
+): Promise<{ opened: string[]; resolved: string[]; reopened: string[] }> {
   const current = (
     await q.query<AlertRow>("SELECT id, rule, subject_ref, state, detail, immediate FROM alerts WHERE state <> 'resolved' AND rule = ANY($1::text[])", [rules as string[]])
-  ).rows;
+  ).rows.filter((row) => manages({ rule: row.rule, subject_ref: row.subject_ref, detail: jsonOf<Record<string, unknown>>(row.detail, {}) }));
   const key = (rule: string, subject: string) => `${rule}\u001f${subject}`;
   const wanted = new Map(desired.filter((entry) => rules.includes(entry.rule)).map((entry) => [key(entry.rule, entry.subject_ref), entry]));
   const have = new Map(current.map((row) => [key(row.rule, row.subject_ref), row]));
@@ -150,6 +157,24 @@ export async function syncAlerts(q: AppStore, desired: readonly DesiredAlert[], 
   }
   return changed;
 }
+
+/** Opens one alert unless the same (rule, subject) is already open; never resolves anything. */
+export async function openAlert(q: AppStore, entry: DesiredAlert, now: Date, actor: string): Promise<string | null> {
+  const open = (await q.query<{ id: string }>("SELECT id FROM alerts WHERE rule = $1 AND subject_ref = $2 AND state <> 'resolved'", [entry.rule, entry.subject_ref])).rows[0];
+  if (open) return open.id;
+  const serial = Number((await q.query<{ n: string }>("SELECT nextval('alert_serial') AS n")).rows[0]!.n);
+  const id = `${entry.rule}-${String(serial).padStart(4, "0")}`;
+  const inserted = await q.query(
+    "INSERT INTO alerts (id, rule, subject_ref, immediate, state, opened_at, fix_by, detail) VALUES ($1, $2, $3, $4, 'open', $5, $6, $7::jsonb) ON CONFLICT DO NOTHING",
+    [id, entry.rule, entry.subject_ref, entry.immediate, now.toISOString(), entry.fix_by, JSON.stringify(entry.detail)],
+  );
+  if (inserted.rowCount !== 1) return null;
+  await appendEvent(q, { series_id: entry.detail.series_id, actor, event: "alert.opened", detail: { alert: id, rule: entry.rule, subject_ref: entry.subject_ref, code: entry.detail.code } });
+  return id;
+}
+
+/** The A2 alerts the tick derives from Run states (claim refusals stay until someone is told). */
+export const RUN_STATE_A2_CODES = new Set(["A2.quarantined", "A2.held", "A2.failed", "A2.dead_lettered"]);
 
 /** A lease that ran out hands its alert back to open, so re-sends resume. */
 export async function releaseExpiredTakes(q: AppStore, now: Date): Promise<number> {

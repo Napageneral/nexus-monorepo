@@ -2,14 +2,14 @@ openapi: 3.1.0
 info:
   title: Sequences App API
   version: 0.1.0
-  description: Run approved, time-anchored email and giveaway sequences on the Nex Jobs kernel.
+  description: "Run approved, time-anchored email and giveaway sequences on the Nex Jobs kernel (P1b: read-only toward the world)."
 tags:
   - name: Sequences
 paths:
   /runtime/operations/sequences.health:
     post:
       operationId: sequences.health
-      summary: Report the installed Sequences contract, its store schema and the last recorded tick.
+      summary: "Engine heartbeat and counts for the off-host dead-man: tick age, series, overdue, held, quarantined, open alerts, next due time and the alert delivery rounds (ids and counts only)."
       tags:
         - Sequences
       security:
@@ -18,19 +18,302 @@ paths:
         required: false
         content:
           application/json:
-            schema:
-              type: object
-              properties: {}
-              additionalProperties: false
+            schema: {"type": "object", "properties": {}, "additionalProperties": false}
       responses:
         "200":
-          description: Health.
+          description: The method's payload.
           content:
             application/json:
-              schema:
-                type: object
+              schema: {"type": "object", "description": "sequences_health_v1"}
+  /runtime/operations/sequences.runtime.configure:
+    post:
+      operationId: sequences.runtime.configure
+      summary: "Plan, then apply with the exact plan sha and the literal confirmation, the six job definitions and the one tick schedule; the only method that arms or parks the tick."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"mode": {"enum": ["plan", "apply"]}, "target": {"enum": ["armed", "parked"]}, "expected_plan_sha256": {"type": "string", "description": "From the plan.", "pattern": "^[0-9a-f]{64}$"}, "confirmation": {"const": "CONFIGURE_SEQUENCES_RUNTIME"}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false, "required": ["mode"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.definitions.register:
+    post:
+      operationId: sequences.definitions.register
+      summary: "Compile a sequence definition (PyYAML-normalized JSON) and, with mode apply, store it as an immutable revision."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"definition": {"type": "object"}, "yaml_sha256": {"type": "string", "description": "sha256 of the YAML bytes.", "pattern": "^[0-9a-f]{64}$"}, "source_commit": {"type": "string", "description": "moonsleep-v1 commit.", "pattern": "^[0-9a-f]{7,40}$"}, "mode": {"enum": ["check", "apply"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false, "required": ["definition", "yaml_sha256", "source_commit"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.definitions.get:
+    post:
+      operationId: sequences.definitions.get
+      summary: "Read a registered definition and its revisions."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"name": {"type": "string", "description": "Sequence name."}, "revision": {"type": ["integer", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false, "required": ["name"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.series.import:
+    post:
+      operationId: sequences.series.import
+      summary: "Validate an October import bundle (V1-V10) as a preview with a pt_ token, then apply it idempotently by bundle sha: definitions, the observing series, adopted drawings, the ledger and campaign_only send decisions."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"bundle": {"type": "object", "description": "schema/import-bundle-v1.json"}, "mode": {"enum": ["preview", "apply"]}, "preview_token": {"type": "string", "description": "From the preview.", "pattern": "^pt_[0-9a-f]{32}$"}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false, "required": ["bundle"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.brief.get:
+    post:
+      operationId: sequences.brief.get
+      summary: "How it's going: the two-clause verdict, what finished since the window opened, what is short, what is ahead, and what Tyler already heard."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"series": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "s": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "since": {"type": "string", "description": "last-relay or an ISO time."}, "needs": {"enum": ["tyler", "agent"]}, "digest": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}, "json": {"type": ["boolean", "string"]}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.timeline.get:
+    post:
+      operationId: sequences.timeline.get
+      summary: "The plan laid out: the group grid, or one group's step rows with due time (CT), owner, state and result."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"series": {"type": "string", "description": "<series> or <series>/<instance>."}, "s": {"type": "string", "description": "Alias of series."}, "instance": {"type": "string", "description": "Instance id."}, "from": {"type": "string", "description": "ISO time."}, "to": {"type": "string", "description": "ISO time."}, "owner": {"enum": ["engine", "mac", "review_sender", "task"]}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.explain:
+    post:
+      operationId: sequences.explain
+      summary: "One thing in depth under fixed headings: a step ref, an alert id, msg:<name> or src:<name>."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"ref": {"type": "string", "description": "A full or unique short ref, an alert id, msg:<name>, src:<name>."}, "target": {"type": "string", "description": "Alias of ref."}, "follow": {"type": ["boolean", "string"]}, "no_follow": {"type": ["boolean", "string"]}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.audit.query:
+    post:
+      operationId: sequences.audit.query
+      summary: "Who got what, by step (the person view across programs is P4): the outcome vector, overlap with the winners ledger, and the actions taken."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"step": {"type": "string", "description": "Step ref."}, "ref": {"type": "string", "description": "Alias of step."}, "against": {"enum": ["winners", "team"]}, "actions": {"type": ["boolean", "string"]}, "missing": {"type": ["boolean", "string"]}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.check.run:
+    post:
+      operationId: sequences.check.run
+      summary: "Live check of what the engine depends on: tick and schedule, probe reach, source ages, Mac evidence, drawings and shadows. Reads only."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"series": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "s": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "ref": {"type": "string", "description": "A ref."}, "target": {"enum": ["engine", "capture"]}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.check.file:
+    post:
+      operationId: sequences.check.file
+      summary: "Offline check of sequence and series files (PyYAML-parsed JSON): schema plus every P1b semantic check, with ERROR, PENDING and WARN tiers."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"files": {"type": "array", "items": {"type": "object", "properties": {"path": {"type": "string"}, "body": {"type": "object"}}, "required": ["path", "body"]}, "maxItems": 20}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false, "required": ["files"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.help.get:
+    post:
+      operationId: sequences.help.get
+      summary: "One reference from the server's own tables: code playbooks, step types, sources, refs, times, phases and the output contract."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"topic": {"type": "string", "description": "A code, a do, sources, refs, times, phases or output."}, "code": {"type": "string", "description": "Alias of topic."}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.page.get:
+    post:
+      operationId: sequences.page.get
+      summary: "The read-only Sequences page model (contract sequences_page_v1): answer card, calendar, timelines, drawing cards with the shadow result, notes evidence and health. Hashes only."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"series": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "s": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.events.list:
+    post:
+      operationId: sequences.events.list
+      summary: "Step events after a cursor, for seqctl watch to poll (the ops API caps a call at 10 s, so there is no server long-poll)."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"series": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "s": {"type": "string", "description": "Series slug, e.g. review-giveaway-2026-10.", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"}, "after": {"type": ["integer", "string"]}, "limit": {"type": ["integer", "string"]}, "json": {"type": ["boolean", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}}, "additionalProperties": false}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.items.take:
+    post:
+      operationId: sequences.items.take
+      summary: "Take (or release) an alert, incident or ref for 60 minutes: re-sends to Tyler pause while the lease is live. Coordination only, no customer or provider effect."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"item": {"type": "string", "description": "Alert id, incident id or ref."}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}, "note": {"type": "string", "description": "What you are doing."}, "eta": {"type": "string", "description": "ISO time."}, "release": {"type": ["boolean", "string"]}}, "additionalProperties": false, "required": ["item", "by", "note"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
+  /runtime/operations/sequences.items.told:
+    post:
+      operationId: sequences.items.told
+      summary: "Record that Tyler was told: stops the 6-hourly re-sends for those alerts and shows under TOLD TYLER in every brief. Record only."
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {"type": "object", "properties": {"items": {"type": ["array", "string"], "items": {"type": "string"}}, "item": {"type": "string", "description": "One item."}, "refs": {"type": ["array", "string"]}, "by": {"type": "string", "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).", "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"}, "note": {"type": "string", "description": "What you told him."}, "asked": {"type": "string", "description": "An open question to him."}}, "additionalProperties": false, "required": ["by", "note"]}
+      responses:
+        "200":
+          description: The method's payload.
+          content:
+            application/json:
+              schema: {"$ref": "#/components/schemas/Output"}
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+  schemas:
+    Output: {"title": "The one output contract every sequences.* read and write returns", "type": "object", "additionalProperties": false, "required": ["contract", "command", "ok", "exit", "verdict", "as_of", "subject", "data", "problems", "next", "apply", "relay", "tyler_told", "links", "text"], "properties": {"contract": {"const": "sequences_output_v1"}, "command": {"type": "string"}, "ok": {"type": "boolean"}, "exit": {"enum": [0, 1, 2, 3, 4, 5, 6, 7, 8], "description": "0 ok · 1 usage · 2 file errors · 3 needs Tyler · 4 held · 5 refused · 6 transient · 7 token stale · 8 needs an agent"}, "verdict": {"type": "object", "additionalProperties": false, "required": ["text", "behind", "ahead"], "properties": {"text": {"type": "string"}, "behind": {"type": ["string", "null"]}, "ahead": {"type": ["string", "null"]}}}, "as_of": {"type": "object", "additionalProperties": false, "required": ["ct", "utc"], "properties": {"ct": {"type": "string"}, "utc": {"type": "string"}}}, "subject": {"type": "object", "additionalProperties": false, "required": ["series", "ref", "resolved_from"], "properties": {"series": {"type": ["string", "null"]}, "ref": {"type": ["string", "null"]}, "resolved_from": {"type": ["string", "null"]}}}, "data": {"type": "object", "description": "The command's own payload."}, "problems": {"type": "array", "items": {"type": "object", "required": ["code", "tier", "ref", "message", "impact", "resumes", "fixer", "fix_by", "claimed_by", "tyler_told", "next"], "additionalProperties": false, "properties": {"code": {"type": "string", "description": "A stable code (check.*, sim.*, hold.*, refuse.*, transient.*, alert rules)."}, "tier": {"enum": ["error", "pending", "warn", "hold", "refuse", "transient"]}, "ref": {"type": ["string", "null"]}, "message": {"type": "string"}, "impact": {"type": ["string", "null"]}, "resumes": {"enum": ["auto", "on_resume", "never"]}, "fixer": {"enum": ["none", "agent", "desk", "casey", "tyler", "owner:mac", "owner:review_sender"]}, "fix_by": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["ct", "utc", "reason"], "properties": {"ct": {"type": "string"}, "utc": {"type": "string"}, "reason": {"enum": ["not_after", "copy_window", "promise", "dependent_start"]}}}]}, "claimed_by": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["by", "until", "eta"], "properties": {"by": {"type": "string"}, "until": {"type": "string"}, "eta": {"type": ["string", "null"]}}}]}, "tyler_told": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["emailed_at", "incident", "in_digest", "relayed_by", "relayed_at"], "properties": {"emailed_at": {"type": ["string", "null"]}, "incident": {"type": ["string", "null"]}, "in_digest": {"type": "boolean"}, "relayed_by": {"type": ["string", "null"]}, "relayed_at": {"type": ["string", "null"]}}}]}, "next": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["cmd", "why", "who", "fix_type", "lead_time", "reasks_tyler"], "properties": {"cmd": {"type": "string", "description": "An exact command with ids filled in."}, "why": {"type": "string", "description": "Why."}, "who": {"type": "string", "description": "Who acts."}, "fix_type": {"enum": ["command", "edit", "code_release", "ruling", "human", "tyler_tap"], "description": "The ax draft's `kind`, renamed (NX-P17)."}, "lead_time": {"type": ["string", "null"]}, "reasks_tyler": {"type": "boolean"}}}, "description": "Exact next commands."}, "file": {"type": "string"}, "path": {"type": "string"}, "fix": {"type": "object", "additionalProperties": false, "required": ["text", "fix_type", "who", "lead_time", "safe"], "properties": {"text": {"type": "string"}, "fix_type": {"type": "string"}, "who": {"type": "string"}, "lead_time": {"type": ["string", "null"]}, "safe": {"type": "boolean"}}}}}, "description": "Every problem names its fix, who makes it, the deadline and what is at stake."}, "next": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["cmd", "why", "who", "fix_type", "lead_time", "reasks_tyler"], "properties": {"cmd": {"type": "string", "description": "An exact command with ids filled in."}, "why": {"type": "string", "description": "Why."}, "who": {"type": "string", "description": "Who acts."}, "fix_type": {"enum": ["command", "edit", "code_release", "ruling", "human", "tyler_tap"], "description": "The ax draft's `kind`, renamed (NX-P17)."}, "lead_time": {"type": ["string", "null"]}, "reasks_tyler": {"type": "boolean"}}}, "description": "Exact next commands."}, "apply": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["token", "expires_at", "cmd", "effect_sha"], "properties": {"token": {"type": "string"}, "expires_at": {"anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["ct", "utc"], "properties": {"ct": {"type": "string"}, "utc": {"type": "string"}}}]}, "cmd": {"type": "string"}, "effect_sha": {"type": "string"}}}]}, "relay": {"type": "object", "additionalProperties": false, "required": ["text", "facts"], "properties": {"text": {"type": "string", "description": "2 to 4 sentences for Tyler, or 'none needed'."}, "facts": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["priority", "text", "needs_tyler", "link"], "properties": {"priority": {"type": "integer"}, "text": {"type": "string"}, "needs_tyler": {"type": "boolean"}, "link": {"type": ["string", "null"]}}}, "description": "Ranked relay facts."}}}, "tyler_told": {"anyOf": [{"type": "null"}, {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["emailed_at", "incident", "in_digest", "relayed_by", "relayed_at"], "properties": {"emailed_at": {"type": ["string", "null"]}, "incident": {"type": ["string", "null"]}, "in_digest": {"type": "boolean"}, "relayed_by": {"type": ["string", "null"]}, "relayed_at": {"type": ["string", "null"]}}}, "description": "What Tyler already heard."}]}, "links": {"type": "object", "additionalProperties": false, "required": ["page"], "properties": {"page": {"type": ["string", "null"]}}}, "text": {"type": "string", "description": "The text twin: verdict line, body, next: lines, relay: line."}}}
