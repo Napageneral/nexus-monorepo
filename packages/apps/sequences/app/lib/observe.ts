@@ -2,7 +2,7 @@
 // follow-ups, the Mac's drawings and notes) and judges them by evidence. Unreadable evidence is
 // `unknown`, never success and never "nobody got it" (P6).
 
-export type LedgerCounts = { total: number; not_cancelled: number };
+export type LedgerCounts = { total: number; not_cancelled: number; first_created_at?: string | null };
 export type InvitationCounts = { night: LedgerCounts | null; followup: LedgerCounts | null };
 
 export type Verdict = "ok" | "late" | "short" | "over" | "unknown" | "pending";
@@ -13,7 +13,9 @@ function counts(value: unknown): LedgerCounts | null {
   const row = value as Record<string, unknown>;
   const total = Number(row.total ?? row.made ?? row.rows ?? row.count);
   const notCancelled = Number(row.not_cancelled ?? row.posted ?? row.sent);
-  return Number.isFinite(total) && Number.isFinite(notCancelled) ? { total, not_cancelled: notCancelled } : null;
+  if (!Number.isFinite(total) || !Number.isFinite(notCancelled)) return null;
+  const first = row.first_created_at ?? row.group_email_at_utc;
+  return { total, not_cancelled: notCancelled, ...(typeof first === "string" ? { first_created_at: first } : {}) };
 }
 
 /**

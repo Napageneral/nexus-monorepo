@@ -83,6 +83,16 @@ export async function runObserve(ctx: JobContext, deps: SourceDeps = {}): Promis
     detail: { verdict: judged.verdict },
     also: async (q) => {
       if (read.ok) await saveSnapshot(q, read, "invitations", params, step.id, run.phase, `job:${ctx.run.id}`);
+      // V10: the night's first invitation as the engine reads it, against each adopted drawing's
+      // recorded group_email_at_utc (only when the route returns the first-created time).
+      const first = counts?.night?.first_created_at;
+      if (first && step.expected.ledger === "night" && series.prize_scope) {
+        const drawings = (await q.query("SELECT drawing_no, commit_body->>'group_email_at_utc' AS recorded FROM drawings WHERE prize_scope = $1 AND night = $2::date AND mode = 'adopted'", [series.prize_scope, night])).rows;
+        for (const drawing of drawings) {
+          const v10 = { id: "V10", status: Date.parse(String(drawing.recorded)) === Date.parse(first) ? "PASS" : "DIFF", detail: `recorded ${String(drawing.recorded)} · engine read ${first}` };
+          await q.query("UPDATE drawings SET replay = COALESCE(replay, '{}'::jsonb) || jsonb_build_object('v10', $4::jsonb) WHERE prize_scope = $1 AND night = $2::date AND drawing_no = $3 AND mode = 'adopted'", [series.prize_scope, night, drawing.drawing_no, JSON.stringify(v10)]);
+        }
+      }
     },
   });
   return { contract_id: "sequences_step_v1", run_id: ctx.run.id, ref: step.ref, phase: run.phase, verdict: judged.verdict };

@@ -148,13 +148,18 @@ describe.runIf(HAS_DATABASE)("step, observe and shadow Runs", () => {
     const { fetch } = fakeFetch({ invitations: () => invitationsAnswer(2701, 2650) });
     const done = await runObserve(jobCtx(store, runtime.nexFor(run.id), run.input, now, "sequences", run.id), { fetch, sleep: async () => {} });
     expect(done).toMatchObject({ verdict: "ok", phase: "o2" });
+    // V10 is compared when the invitations route returns the first-created time (g1 here).
+    const g1run0 = runtime.runs.find((entry) => entry.idempotency_key === `seq:${SERIES}:g1:night_ask:o2:a1`)!;
+    const withFirst = fakeFetch({ invitations: () => ({ status: 200, body: { ...invitationsAnswer(2700, 2629).body, rows: { night: { total: 2700, not_cancelled: 2629, first_created_at: "2026-10-21T00:30:00Z" } } } }) });
+    await runObserve(jobCtx(store, runtime.nexFor(g1run0.id), g1run0.input, now, "sequences", g1run0.id), { fetch: withFirst.fetch, sleep: async () => {} });
+    expect((await store.query("SELECT replay->'v10'->>'status' AS v10 FROM drawings WHERE night = '2026-10-21'")).rows).toEqual([{ v10: "PASS" }]);
     const observed = (await loadStepByRef(store, `${SERIES}/g4.night_ask`))!;
     expect([observed.state, observed.result.verdict, observed.result.summary]).toEqual(["adopted", "ok", "2,650 of 2,690 posted"]);
     const duplicate = await runObserve(jobCtx(store, runtime.nexFor("jobrun_dupe"), run.input, now, "sequences", "jobrun_dupe"), { fetch, sleep: async () => {} });
     expect(duplicate).toMatchObject({ noop: "already finished" });
     // A Run that holds no claim while another Run has it in flight is refused and alerted.
-    await store.query("UPDATE step_runs SET state = 'claimed', nex_run_id = 'jobrun_other' WHERE run_key = $1", [`seq:${SERIES}:g1:night_ask:o2:a1`]);
-    const g1run = runtime.runs.find((entry) => entry.idempotency_key === `seq:${SERIES}:g1:night_ask:o2:a1`)!;
+    await store.query("UPDATE step_runs SET state = 'claimed', nex_run_id = 'jobrun_other' WHERE run_key = $1", [`seq:${SERIES}:g5:night_ask:o2:a1`]);
+    const g1run = runtime.runs.find((entry) => entry.idempotency_key === `seq:${SERIES}:g5:night_ask:o2:a1`)!;
     const refused = await runObserve(jobCtx(store, runtime.nexFor(g1run.id), g1run.input, now, "sequences", g1run.id), { fetch, sleep: async () => {} });
     expect(refused).toMatchObject({ noop: expect.stringContaining("claim refused") });
     const alerts = (await store.query("SELECT rule, detail->>'code' AS code FROM alerts")).rows;
