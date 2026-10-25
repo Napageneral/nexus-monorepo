@@ -155,7 +155,8 @@ export function replayAll(drawings: readonly DrawingInput[], ledger: Record<stri
     const usedHere = used.get(drawing)!;
     const expected = drawing.receipt.alternates.find((id) => !usedHere.has(id) && !held.has(id)) ?? null;
     if (promotion.entry_id !== expected) issues.push(`expected ${expected ?? "no alternate left (prize not awarded)"}, receipt has ${promotion.entry_id ?? "none"}`);
-    held.delete(promotion.replaces);
+    // A replaced winner stays in the ledger (draw_group.py never deletes a winners.json key), so
+    // they can never be picked again anywhere; only the promoted alternate is added.
     current.set(drawing, winners.filter((id) => id !== promotion.replaces).concat(promotion.entry_id ? [promotion.entry_id] : []));
     if (promotion.entry_id) {
       usedHere.add(promotion.entry_id);
@@ -176,7 +177,9 @@ export function replayAll(drawings: readonly DrawingInput[], ledger: Record<stri
     const leftOut = v8.get(drawing) ?? [];
     result.checks.push({ id: "V8.ledger", status: leftOut.length === 0 ? "PASS" : "FAIL", detail: leftOut.length === 0 ? "no entry was already in the ledger at commit" : `${leftOut.length} entries were already winners at commit` });
     result.final_winners = current.get(drawing)!;
-    result.final_winners.forEach((id) => finals.add(id));
+    // The ledger is every drawing's original winners plus every promoted alternate (replaced winners included).
+    drawing.receipt.winners.forEach((id) => finals.add(id));
+    drawing.receipt.promoted.forEach((promotion) => promotion.entry_id && finals.add(promotion.entry_id));
     result.pass = result.checks.every((check) => check.status !== "FAIL");
   }
 
@@ -194,7 +197,7 @@ export function replayAll(drawings: readonly DrawingInput[], ledger: Record<stri
       }
     }
   }
-  const ledgerCheck: Check = { id: "V7", status: mismatch.length === 0 ? "PASS" : "FAIL", detail: mismatch.length === 0 ? `ledger ${ledgerKeys.length} = the union of every final winner set` : mismatch.slice(0, 3).join("; ") };
+  const ledgerCheck: Check = { id: "V7", status: mismatch.length === 0 ? "PASS" : "FAIL", detail: mismatch.length === 0 ? `ledger ${ledgerKeys.length} = every drawing's winners plus every promoted alternate` : mismatch.slice(0, 3).join("; ") };
   const out = ordered.map((drawing) => results.get(drawing)!);
   return { drawings: out, ledger: ledgerCheck, pass: ledgerCheck.status === "PASS" && out.every((result) => result.pass), final_ledger: expectedKeys };
 }

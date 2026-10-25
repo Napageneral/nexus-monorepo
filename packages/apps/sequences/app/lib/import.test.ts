@@ -82,7 +82,7 @@ describe.runIf(HAS_DATABASE)("sequences.series.import on a real store", () => {
     await importBundle(store, repush, { mode: "apply", preview_token: repushPreview.token!, actor, now });
     const ledgerAfter = await ledgerAt(store, "review-giveaway-2026-10", "2026-10-31T00:00:00Z");
     expect(ledgerAfter.has(alternate)).toBe(true);
-    expect(ledgerAfter.has(replaced)).toBe(false);
+    expect(ledgerAfter.has(replaced)).toBe(true); // a replaced winner stays in the ledger, as in draw_group.py's winners.json
     expect((await ledgerAt(store, "review-giveaway-2026-10", "2026-10-29T00:00:00Z")).has(replaced)).toBe(true);
     expect((await adminQuery(`SELECT role FROM ${schema}.winners WHERE entry_id = $1`, [alternate])).rows).toEqual([{ role: "promoted" }]);
   });

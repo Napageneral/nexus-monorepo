@@ -72,11 +72,9 @@ export function ledgerOf(drawings: DrawingInput[]): Record<string, string> {
   const ledger: Record<string, string> = {};
   for (const drawing of drawings) {
     const addresses = new Map(drawing.entries.map((entry) => [entry.entry_id, entry.address_sha256]));
+    // draw_group.py's winners.json: every winner stays, even one a promotion replaced.
     const finals = new Set(drawing.receipt.winners);
-    for (const promotion of drawing.receipt.promoted) {
-      finals.delete(promotion.replaces);
-      if (promotion.entry_id) finals.add(promotion.entry_id);
-    }
+    for (const promotion of drawing.receipt.promoted) if (promotion.entry_id) finals.add(promotion.entry_id);
     for (const id of finals) ledger[id] = addresses.get(id)!;
   }
   return ledger;
