@@ -494,8 +494,8 @@ export async function importBundle(store: AppStore, raw: unknown, options: { mod
         const current = steps.get(adoption.id);
         const result = { ...(current?.result ?? {}), ...adoption.result };
         await q.query(
-          "UPDATE step_instances SET state = $2, mode = COALESCE($3, mode), waiting_because = NULL, result = $4::jsonb, updated_at = now() WHERE id = $1",
-          [adoption.id, adoption.state, adoption.mode ?? null, JSON.stringify(result)],
+          "UPDATE step_instances SET state = $2, mode = COALESCE($3, mode), waiting_because = NULL, result = $4::jsonb, updated_at = $5 WHERE id = $1",
+          [adoption.id, adoption.state, adoption.mode ?? null, JSON.stringify(result), options.now.toISOString()],
         );
         await appendEvent(q, { series_id: bundle.series, step_instance_id: adoption.id, actor: options.actor, event: adoption.state === "observing" ? "step.evidence" : "step.adopted", detail: { ref: adoption.ref, verdict: adoption.result.verdict ?? null, bundle_sha256: bundleSha } });
       }

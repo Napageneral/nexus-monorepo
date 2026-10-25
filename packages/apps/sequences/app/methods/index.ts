@@ -100,7 +100,7 @@ export async function health(ctx: MethodContext) {
   const series = (await store.query<{ state: string; n: string }>("SELECT state, count(*) AS n FROM series GROUP BY state")).rows;
   const byState = Object.fromEntries(series.map((entry) => [entry.state, Number(entry.n)]));
   const alerts = await loadAlerts(store, { states: ["open", "taken", "told"] });
-  const steps = (await store.query("SELECT state, step_do, work, result FROM step_instances s JOIN series r ON r.id = s.series_id WHERE r.state IN ('observing', 'active')")).rows;
+  const steps = (await store.query("SELECT s.state, s.step_do, s.work, s.result FROM step_instances s JOIN series r ON r.id = s.series_id WHERE r.state IN ('observing', 'active')")).rows;
   const dueTimes = steps.flatMap((step) => jsonOf<Array<{ due_at: string | null }>>(step.work, []).map((item) => item.due_at)).filter((time): time is string => Boolean(time) && Date.parse(time!) > now.getTime());
   const lastTick = isoOrNull(row.last_tick_at);
   const deliveries = alerts.filter((alert) => alert.immediate && alert.state === "open" && alert.deliveries > 0);

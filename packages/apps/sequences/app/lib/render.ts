@@ -32,7 +32,7 @@ export function shortRef(ref: string): string {
 export function resultText(step: StepRow): string {
   const summary = typeof step.result.summary === "string" ? step.result.summary : "";
   if (summary) return summary;
-  if (step.state === "waiting") return step.waiting_because ? `waits: ${step.waiting_because}` : "waits";
+  if (step.state === "waiting") return ""; // the state label already says what it waits for
   if (step.expected.evidence === "import" && typeof step.expected.import_by === "string") return `import by ${formatCt(step.expected.import_by)}`;
   if (typeof step.expected.sent_by === "string") return `sent by ${formatCtShort(step.expected.sent_by)}, received by ${formatCtShort(String(step.expected.received_by))}`;
   if (typeof step.expected.count === "number") return `${Number(step.expected.count).toLocaleString("en-US")} expected (±${String(step.expected.within)})`;
@@ -102,9 +102,13 @@ export function renderBrief(input: BriefInput): { verdict: { text: string; behin
   const ahead = allSteps
     .filter((step) => !FINAL_STEP_STATES.has(step.state as StepState) || step.mode === "shadow")
     .flatMap((step) => {
-      const times = [step.due_at, ...step.work.map((item) => item.due_at)].filter((time): time is string => Boolean(time)).map((time) => Date.parse(time));
-      const nextAt = times.filter((time) => time >= now && time <= until).sort((a, b) => a - b)[0];
-      return nextAt === undefined || step.state === "waiting" ? [] : [{ step, at: nextAt }];
+      // The next thing that happens: the owner's due time, or an engine Run of the step (S0, o2…).
+      const times = [
+        ...(step.due_at ? [{ at: Date.parse(step.due_at), what: null as string | null }] : []),
+        ...step.work.filter((item) => item.due_at).map((item) => ({ at: Date.parse(item.due_at!), what: `engine ${item.phase}: ${item.purpose}` })),
+      ];
+      const nextUp = times.filter((time) => time.at >= now && time.at <= until).sort((a, b) => a.at - b.at)[0];
+      return nextUp === undefined || step.state === "waiting" ? [] : [{ step, at: nextUp.at, what: nextUp.what }];
     })
     .sort((a, b) => a.at - b.at || a.step.ref.localeCompare(b.step.ref));
 
@@ -130,7 +134,7 @@ export function renderBrief(input: BriefInput): { verdict: { text: string; behin
   }
   if (ahead.length > 0) {
     body.push("");
-    body.push(...table([["AHEAD", "STEP", "OWNER", "STATE", "WHAT"], ...ahead.slice(0, 20).map(({ step, at }) => [formatCtShort(new Date(at)), shortRef(step.ref), OWNER_WORDS[step.owner] ?? step.owner, stepState(step), resultText(step)])]));
+    body.push(...table([["AHEAD", "STEP", "OWNER", "STATE", "WHAT"], ...ahead.slice(0, 20).map(({ step, at, what }) => [formatCtShort(new Date(at)), shortRef(step.ref), OWNER_WORDS[step.owner] ?? step.owner, stepState(step), what ?? resultText(step)])]));
   }
   const waiting = allSteps.filter((step) => step.state === "waiting");
   if (waiting.length > 0) body.push(`WAITING ${waiting.length} engine steps (claims, codes, half-off note): ${waiting[0]!.waiting_because ?? "P2 not released"} (${PHASE_DATES.P2})`);

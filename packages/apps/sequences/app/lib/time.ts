@@ -46,8 +46,8 @@ function formatter(tz: string): Intl.DateTimeFormat {
   return found;
 }
 
-export function utcToWall(instant: Date | number, tz = DEFAULT_TZ): WallParts {
-  const ms = typeof instant === "number" ? instant : instant.getTime();
+export function utcToWall(instant: Date | number | string, tz = DEFAULT_TZ): WallParts {
+  const ms = typeof instant === "number" ? instant : typeof instant === "string" ? Date.parse(instant) : instant.getTime();
   const parts: Record<string, string> = {};
   for (const part of formatter(tz).formatToParts(new Date(ms))) parts[part.type] = part.value;
   const hour = parts.hour === "24" ? "00" : parts.hour;
