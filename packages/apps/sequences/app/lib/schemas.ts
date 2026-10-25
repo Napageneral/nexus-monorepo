@@ -444,8 +444,11 @@ const campaignSchema: JsonSchema = {
   required: ["name", "trust", "source"],
   properties: {
     campaign_id: { type: ["string", "null"], pattern: "^[0-9A-Z]{8,40}$" },
-    campaign_id_prefix: str("A truncated id as the LOG has it (resolved by exact name later).", { pattern: "^[0-9A-Z]{4,40}$" }),
-    name: str("Exact Klaviyo campaign name."),
+    campaign_id_prefix: { type: ["string", "null"], pattern: "^[0-9A-Z]{4,40}$", description: "A truncated id as the LOG has it (resolved by exact name later)." },
+    name: { type: ["string", "null"], description: "Exact Klaviyo campaign name; null for a resend whose name was never recorded." },
+    resend_no: { type: "integer", minimum: 0, description: "0 for the first send, 1.. for a resend to the ones Klaviyo skipped." },
+    want: { type: ["integer", "null"], minimum: 0, description: "Recipients the send meant to reach (the list's exact count)." },
+    overrides: { type: ["object", "null"], description: "What a LOG.md reading replaced on this row: the earlier received, trust, read time and source." },
     list_id: { type: ["string", "null"] },
     template: { type: ["string", "null"] },
     status: { type: ["string", "null"] },

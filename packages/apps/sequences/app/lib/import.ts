@@ -199,11 +199,20 @@ async function stateDigest(q: AppStore, seriesId: string): Promise<string> {
   return jcsSha256({ plan: series?.plan_sha256 ?? null, updated_at: series ? String(series.updated_at) : null, bundles: Number(bundles?.n ?? 0), last: bundles?.last ?? null });
 }
 
+/**
+ * The bundle's identity: RFC 8785 JSON without built_at, so the client rebuilding the same evidence
+ * (sequences_import.py --apply rebuilds before it posts) gets the same sha and a replay is idempotent.
+ */
+export function bundleSha256(bundle: Record<string, unknown>): string {
+  const { built_at: _builtAt, ...rest } = bundle;
+  return jcsSha256(rest);
+}
+
 export function previewToken(bundleSha: string, digest: string): string {
   return `pt_${sha256Hex(`sequences.import|${bundleSha}|${digest}`).slice(0, 32)}`;
 }
 
-export async function importBundle(store: AppStore, raw: unknown, options: { mode: "preview" | "apply"; preview_token?: string; actor: string; now: Date }): Promise<ImportReport> {
+export async function importBundle(store: AppStore, raw: unknown, options: { mode: "preview" | "apply"; preview_token?: string; bundle_sha256?: string; actor: string; now: Date }): Promise<ImportReport> {
   const problems: Problem[] = [];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, problems: [refuse("usage.params", "bundle must be the JSON object scripts/sequences_import.py writes")], data: {}, token: null, bundle_sha256: null };
@@ -244,8 +253,11 @@ export async function importBundle(store: AppStore, raw: unknown, options: { mod
     };
   }
   const bundle = raw as Bundle;
-  const bundleSha = jcsSha256(bundle);
+  const bundleSha = bundleSha256(bundle);
 
+  if (options.bundle_sha256 && options.bundle_sha256 !== bundleSha) {
+    return { ok: false, problems: [refuse("refuse.bundle_sha_mismatch", `the client's bundle_sha256 ${options.bundle_sha256.slice(0, 12)} is not the server's ${bundleSha.slice(0, 12)} (RFC 8785 without built_at)`, "sequences_import.py computes the sha the same way")], data: { bundle_sha256: bundleSha }, token: null, bundle_sha256: bundleSha };
+  }
   const replayed = (await store.query<{ result: unknown; applied_at: unknown; applied_by: string }>("SELECT result, applied_at, applied_by FROM import_bundles WHERE bundle_sha256 = $1", [bundleSha])).rows[0];
   if (replayed) {
     return { ok: true, problems: [], data: { ...jsonOf<Json>(replayed.result, {}), replayed: true, bundle_sha256: bundleSha }, token: null, bundle_sha256: bundleSha };
@@ -340,9 +352,9 @@ export async function importBundle(store: AppStore, raw: unknown, options: { mod
         result: { evidence: "import", verdict: judged.verdict, summary: judged.summary, receipt_kind: "campaign_only", planned: audience.length, ...judged.detail },
       });
       for (const campaign of note.campaigns) {
-        campaigns.push({ id: shortId("pc", campaign.name, campaign.campaign_id ?? "", campaign.campaign_id_prefix ?? "", campaign.source), step, row: campaign });
+        campaigns.push({ id: shortId("pc", campaign.name ?? `resend ${campaign.resend_no ?? 0}`, campaign.campaign_id ?? "", campaign.campaign_id_prefix ?? "", campaign.source), step, row: campaign });
       }
-      const firstSent = note.campaigns.find((campaign) => campaign.trust !== "untrusted" && campaign.campaign_id && !campaign.resend_of)?.campaign_id ?? null;
+      const firstSent = note.campaigns.find((campaign) => campaign.trust !== "untrusted" && campaign.campaign_id && !campaign.resend_of && !(campaign.resend_no ?? 0))?.campaign_id ?? null;
       for (const hash of audience) {
         decisions.push({ send_id: sendIdOf(resolved.series.series, found.instance, step.step_id, 0, hash), step, message: String(resolved.def.steps.find((entry) => entry.id === step.step_id)?.message ?? note.note), hash, campaign_id: firstSent });
       }
@@ -475,11 +487,12 @@ export async function importBundle(store: AppStore, raw: unknown, options: { mod
       for (const campaign of campaigns) {
         const row = campaign.row;
         await q.query(
-          `INSERT INTO provider_campaigns (id, campaign_id, campaign_id_prefix, name, list_id, template, status, sent_at, list_exact, received, received_read_at, resend_of, trust, step_instance_id, source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          `INSERT INTO provider_campaigns (id, campaign_id, campaign_id_prefix, name, list_id, template, status, sent_at, list_exact, received, received_read_at, resend_of, trust, step_instance_id, source, resend_no, want, overrides)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
            ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, received = EXCLUDED.received, received_read_at = EXCLUDED.received_read_at, list_exact = EXCLUDED.list_exact, trust = EXCLUDED.trust`,
           [campaign.id, row.campaign_id ?? null, row.campaign_id_prefix ?? null, row.name, row.list_id ?? null, row.template ?? null, row.status ?? null, row.sent_at ?? null, row.list_exact ?? null,
-            row.received ?? null, row.received_read_at ?? null, row.resend_of ?? null, row.trust, campaign.step.id, row.source],
+            row.received ?? null, row.received_read_at ?? null, row.resend_of ?? null, row.trust, campaign.step.id, row.source, row.resend_no ?? 0, row.want ?? null,
+            row.overrides ? JSON.stringify(row.overrides) : null],
         );
       }
       for (const decision of decisions) {

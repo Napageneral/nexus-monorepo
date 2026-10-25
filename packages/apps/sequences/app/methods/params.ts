@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 // Methods validate their own params (Nex runs no schema validation on app methods). A bad param is
 // a usage output (exit 1) inside the payload, never a thrown error: the ops API's Nex client would
 // flatten a throw to "unavailable" and hide the fix.
@@ -17,6 +19,35 @@ export const SERIES_ID_RE = /^[a-z0-9][a-z0-9-]{1,62}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 type Params = Record<string, unknown>;
+
+/** The ops API's stamp on a relayed call: the route, the Access-verified caller, and the agent session. */
+export type Via = { route: string | null; operator_ref: string | null; operator_role: string | null; session: string | null };
+const VIA_KEYS = new Set(["route", "operator_ref", "operator_role", "session"]);
+const ROLE_RE = /^[a-z][a-z0-9_]{0,30}$/;
+
+export function parseVia(raw: unknown): Via | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new ParamError("via", "'via' must be the ops API's object {route, operator_ref, operator_role, session}");
+  const via = raw as Record<string, unknown>;
+  for (const key of Object.keys(via)) if (!VIA_KEYS.has(key)) throw new ParamError("via", `unknown via key '${key}'`);
+  const text = (key: string, max: number, pattern?: RegExp): string | null => {
+    const value = via[key];
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string" || value.length > max || (pattern && !pattern.test(value))) throw new ParamError("via", `via.${key} is malformed`);
+    return value;
+  };
+  return { route: text("route", 120), operator_ref: text("operator_ref", 254), operator_role: text("operator_role", 40, ROLE_RE), session: text("session", 90, ACTOR_RE) };
+}
+
+/** An actor id for the stamp, never an address: the agent session, else `<name>@ops` / `<role>@ops#<sha10>`. */
+export function viaActor(via: Via | null): string | null {
+  if (!via) return null;
+  if (via.session) return via.session;
+  const ref = via.operator_ref;
+  if (!ref) return null;
+  if (ref.startsWith("service:")) return `${ref.slice(8).toLowerCase().replace(/[^a-z0-9_-]/g, "_").slice(0, 40) || "service"}@ops`;
+  return `${via.operator_role ?? "person"}@ops#${createHash("sha256").update(ref.trim().toLowerCase()).digest("hex").slice(0, 10)}`;
+}
 
 export function allowOnly(params: Params, allowed: readonly string[]): void {
   for (const key of Object.keys(params)) {

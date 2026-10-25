@@ -72,7 +72,7 @@ describe.runIf(HAS_DATABASE)("P1b methods on a real store", () => {
   it("health reads the tick, counts and delivery rounds, with no address anywhere", async () => {
     const { store } = await imported();
     const before = (await call("sequences.health", { store })) as unknown as Record<string, unknown>;
-    expect(before).toMatchObject({ contract_id: "sequences_health_v1", ticks: 0, last_tick_at: null, series: { observing: 1 }, provider_write_authority: false });
+    expect(before).toMatchObject({ ok: true, contract: "sequences_health_v1", ticks: 0, last_tick_at: null, series: { observing: 1 }, provider_write_authority: false });
     const runtime = fakeRuntime();
     for (const job of runtime.jobs) await store.query("INSERT INTO runtime_jobs (name, job_id, revision_id, status) VALUES ($1, $2, $3, $4)", [job.name, job.id, job.default_revision_id, job.status]);
     const now = new Date("2026-10-27T15:00:00Z");
@@ -80,11 +80,19 @@ describe.runIf(HAS_DATABASE)("P1b methods on a real store", () => {
     await runTick({ job: { id: "jobdef_1", name: "sequences.tick", description: null, config: {} }, app: { id: "sequences", version: "0.1.0", dataDir: "", packageDir: APP, store }, run: { id: "jobrun_tick", trigger_source: "schedule", created_at: now.toISOString() }, input: {}, nex: runtime.nexFor("jobrun_tick"), abortSignal: new AbortController().signal, log: console, now });
     const { default: notify } = await import("../jobs/notify.js");
     await notify({ job: { id: "jobdef_5", name: "sequences.notify", description: null, config: {} }, app: { id: "sequences", version: "0.1.0", dataDir: "", packageDir: APP, store }, run: { id: "jobrun_notify", trigger_source: "sequences", created_at: now.toISOString() }, input: { notify: "x" }, nex: runtime.nexFor("jobrun_notify"), abortSignal: new AbortController().signal, log: console, now });
-    const after = (await call("sequences.health", { store })) as unknown as { ticks: number; tick_age_s: number; alerts_to_deliver: Array<{ id: string; delivery_key: string; text: string }>; open_alerts: number };
+    const after = (await call("sequences.health", { store })) as unknown as { ticks: number; tick_age_s: number; alerts_to_deliver: Array<{ id: string; delivery_key: string; text: string }>; alerts: Array<{ id: string; immediate: boolean; state: string; subject: string; relay: string }>; open_alerts: number };
     expect(after.ticks).toBe(1);
     expect(after.tick_age_s).toBe(30);
     expect(after.open_alerts).toBeGreaterThan(0);
     expect(after.alerts_to_deliver[0]!.delivery_key).toBe(`${after.alerts_to_deliver[0]!.id}#1`);
+    // The dead-man's shape (workers/offhost-deadman/src/sequences.mjs parseSequencesHealth).
+    expect(after.alerts.length).toBeGreaterThan(0);
+    for (const alert of after.alerts) {
+      expect(typeof alert.immediate).toBe("boolean");
+      expect(["open", "taken", "told"]).toContain(alert.state);
+      expect(alert.subject.length).toBeGreaterThan(0);
+      expect(alert.relay.startsWith(alert.subject)).toBe(true);
+    }
     expect(JSON.stringify(after)).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+/);
   });
 
@@ -183,11 +191,17 @@ describe.runIf(HAS_DATABASE)("P1b methods on a real store", () => {
     expect(page1).toHaveLength(5);
     const more = await call("sequences.events.list", { store, params: { series: SERIES, after: String(events.data.next_after) } });
     expect((more.data.events as Array<{ id: number }>)[0]!.id).toBeGreaterThan(page1[4]!.id);
-    const page = await call("sequences.page.get", { store, params: { s: SERIES } });
-    assertContract(page);
-    expect(page.data).toMatchObject({ contract: "sequences_page_v1", series: { id: SERIES, state: "observing" } });
-    expect((page.data.drawings as unknown[]).length).toBe(2);
-    expect((page.data.notes as Array<{ label: string }>)[0]!.label).toBe("on the list, can't confirm it reached them");
+    // The page's own contract (apps/ops-ui/src/sequencesClient.ts), not the agent output.
+    const page = (await call("sequences.page.get", { store, params: { s: SERIES } })) as unknown as Record<string, unknown>;
+    expect(page).toMatchObject({ ok: true, contract: "sequences_page_v1", series: { id: SERIES, state: "observing" }, verdict: "Observing · nothing needs you" });
+    expect((page.drawings as Array<{ mode: string; replay: { ok: boolean } }>).map((drawing) => [drawing.mode, drawing.replay.ok])).toEqual([["adopted", true], ["adopted", true]]);
+    const notes = page.notes as Array<{ note: string; receipt_kind: string }>;
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes.every((note) => note.receipt_kind === "campaign_only" && ["winner", "still_entered"].includes(note.note))).toBe(true);
+    const steps = page.steps as Array<Record<string, unknown>>;
+    expect(steps.every((step) => typeof step.step_type === "string" && !("kind" in step) && typeof step.label === "string")).toBe(true);
+    expect((page.instances as Array<{ label: string }>)[0]!.label).toBe("Group 1");
+    expect(await call("sequences.page.get", { store, params: { s: "no-such-series" } })).toMatchObject({ ok: false, problems: [{ code: "check.unknown_ref" }] });
   });
 
   it("take leases an alert (re-sends pause) and told stops its re-sends and moves the brief window", async () => {

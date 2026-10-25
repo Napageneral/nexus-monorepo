@@ -8,15 +8,16 @@ import { CONFIGURE_CONFIRMATION, ConfigureRefusal, applyRuntimePlan, runtimePlan
 import { helpTopic } from "../lib/help.js";
 import { importBundle } from "../lib/import.js";
 import { asArray, asString, isEnabled, listAll } from "../lib/nex.js";
-import { EXIT, assertNoAddress, buildOutput, next, pageLink, problem, refusal, usage, type Output, type Problem } from "../lib/output.js";
+import { EXIT, assertNoAddress, buildOutput, next, problem, refusal, usage, type Output, type Problem } from "../lib/output.js";
 import { alertProblem, countsByState, outcomeVector, renderBrief, renderGrid, renderStepRows, resultText, shortRef, stepState, type AlertView } from "../lib/render.js";
+import { PAGE_CONTRACT, buildPage } from "../lib/page.js";
 import { resolveRef } from "../lib/refs.js";
 import { allRefs, definitionRevisions, listSeries, loadDefinition, loadDrawings, loadRuns, loadSeries, loadStepByRef, loadSteps, type SeriesRow, type StepRow } from "../lib/repo.js";
 import { PHASE_DATES } from "../lib/states.js";
 import { appendEvent, isoOrNull, jsonOf, requireStore, tx } from "../lib/store.js";
 import { DEFAULT_TZ, addDays, formatCt, formatCtShort, utcToWall, wallToUtc } from "../lib/time.js";
 import type { AppStore, MethodContext } from "../lib/types.js";
-import { ACTOR_RE, ParamError, SERIES_ID_RE, allowOnly, flag, int, isoTime, oneOf, refuseAddresses, str, stringList } from "./params.js";
+import { ACTOR_RE, ParamError, SERIES_ID_RE, allowOnly, flag, int, isoTime, oneOf, parseVia, refuseAddresses, str, stringList, viaActor, type Via } from "./params.js";
 
 const APP_PHASE = "P1b";
 let clock: () => Date = () => new Date();
@@ -26,14 +27,20 @@ export function setClockForTests(fn: (() => Date) | null): void {
 }
 
 type Handler = (ctx: MethodContext) => Promise<unknown>;
+/** A call relayed by the ops API (http/sequences.py) carries who it came from as `via`. */
+type Ctx = MethodContext & { via: Via | null };
 
 /** Bad params and refusals become outputs; only infrastructure failures throw. */
-function guarded(command: string, fn: (ctx: MethodContext, now: Date) => Promise<Output>): Handler {
+function guarded(command: string, fn: (ctx: Ctx, now: Date) => Promise<Output>): Handler {
   return async (ctx) => {
     const now = clock();
     try {
-      refuseAddresses(ctx.params ?? {});
-      const out = await fn({ ...ctx, params: ctx.params ?? {} }, now);
+      // `via` is the ops API's stamp and may hold a person's own address (their operator ref):
+      // it is read for the actor here and never stored or echoed, so the address scan skips it.
+      const { via: viaRaw, ...params } = (ctx.params ?? {}) as Record<string, unknown>;
+      const via = parseVia(viaRaw);
+      refuseAddresses(params);
+      const out = await fn({ ...ctx, params, via }, now);
       assertNoAddress(JSON.stringify(out));
       return out;
     } catch (error) {
@@ -44,9 +51,15 @@ function guarded(command: string, fn: (ctx: MethodContext, now: Date) => Promise
   };
 }
 
-const actorOf = (ctx: MethodContext, required = false): string => {
-  const by = str(ctx.params, "by", { pattern: ACTOR_RE, max: 90, required });
-  return by ?? `entity:${ctx.user?.userId || "unknown"}`;
+/**
+ * Who acted: an explicit `by`, else the agent session the ops API relayed (X-Sequences-Actor), else
+ * the ops caller itself. A person's operator ref is an address, so it becomes `<role>@ops#<sha10>`.
+ */
+const actorOf = (ctx: Ctx, required = false): string => {
+  const by = str(ctx.params, "by", { pattern: ACTOR_RE, max: 90 }) ?? viaActor(ctx.via);
+  if (by) return by;
+  if (required) throw new ParamError("by", "'by' is required (or a call relayed by the ops API, which names the caller)");
+  return `entity:${ctx.user?.userId || "unknown"}`;
 };
 
 async function loadAlerts(q: AppStore, filter: { series?: string | null; states?: string[] } = {}): Promise<AlertView[]> {
@@ -75,7 +88,7 @@ async function loadAlerts(q: AppStore, filter: { series?: string | null; states?
   }));
 }
 
-async function pickSeries(q: AppStore, ctx: MethodContext, command: string, now: Date): Promise<{ series: SeriesRow[]; refused: Output | null; named: string | null }> {
+async function pickSeries(q: AppStore, ctx: Ctx, command: string, now: Date): Promise<{ series: SeriesRow[]; refused: Output | null; named: string | null }> {
   const named = str(ctx.params, "series", { pattern: SERIES_ID_RE, aliases: ["s"] }) ?? null;
   if (named) {
     const series = await loadSeries(q, named);
@@ -105,7 +118,9 @@ export async function health(ctx: MethodContext) {
   const lastTick = isoOrNull(row.last_tick_at);
   const deliveries = alerts.filter((alert) => alert.immediate && alert.state === "open" && alert.deliveries > 0);
   return {
-    contract_id: "sequences_health_v1",
+    // The off-host dead-man (workers/offhost-deadman/src/sequences.mjs) parses exactly this shape.
+    ok: true,
+    contract: "sequences_health_v1",
     app_id: ctx.app.id,
     app_version: ctx.app.version,
     phase: APP_PHASE,
@@ -130,7 +145,22 @@ export async function health(ctx: MethodContext) {
     open_alerts: alerts.filter((alert) => alert.state === "open" || alert.state === "taken").length,
     next_due_at: dueTimes.sort()[0] ?? null,
     alert_delivery: String(row.alert_delivery ?? "deadman"),
-    // The dead-man emails each delivery_key once (R2 state); a new round every 6 h until told.
+    // Every open, taken or told alert; the dead-man mails the open immediate ones once and every 6 h after
+    // (its own R2 state), with the server's relay text (subject = its first line).
+    alerts: alerts.map((alert) => {
+      const relay = renderAlert({ id: alert.id, rule: alert.rule, subject_ref: alert.subject_ref, opened_at: alert.opened_at, detail: alert.detail });
+      return {
+        id: alert.id,
+        rule: alert.rule,
+        subject_ref: alert.subject_ref,
+        series: typeof alert.detail.series_id === "string" ? alert.detail.series_id : null,
+        immediate: alert.immediate,
+        state: alert.state,
+        subject: relay.split("\n")[0]!.slice(0, 160),
+        relay,
+        opened_at: alert.opened_at,
+      };
+    }),
     alerts_to_deliver: deliveries.map((alert) => ({
       id: alert.id,
       delivery_key: `${alert.id}#${alert.deliveries}`,
@@ -249,11 +279,12 @@ const definitionsGet = guarded("definitions.get", async (ctx, now) => {
 // ---- sequences.series.import --------------------------------------------------------------------
 
 const seriesImport = guarded("series.import", async (ctx, now) => {
-  allowOnly(ctx.params, ["bundle", "mode", "preview_token", "by"]);
+  allowOnly(ctx.params, ["bundle", "mode", "preview_token", "plan_token", "bundle_sha256", "by"]);
   const mode = oneOf(ctx.params, "mode", ["preview", "apply"] as const, "preview");
-  const token = str(ctx.params, "preview_token", { pattern: /^pt_[0-9a-f]{32}$/ });
+  const token = str(ctx.params, "preview_token", { pattern: /^pt_[0-9a-f]{32}$/, aliases: ["plan_token"] });
+  const bundleSha = str(ctx.params, "bundle_sha256", { pattern: /^[0-9a-f]{64}$/ });
   const actor = actorOf(ctx);
-  const report = await importBundle(requireStore(ctx.app), ctx.params.bundle, { mode, preview_token: token, actor, now });
+  const report = await importBundle(requireStore(ctx.app), ctx.params.bundle, { mode, preview_token: token, bundle_sha256: bundleSha, actor, now });
   const data = report.data;
   const validation = data.validation as { drawings?: Array<{ night: string; drawing_no: number; pass: boolean; checks: Array<{ id: string; status: string; detail: string }> }>; ledger?: { status: string; detail: string } } | undefined;
   const body: string[] = [];
@@ -305,7 +336,7 @@ const briefGet = guarded("brief.get", async (ctx, now) => {
   const store = requireStore(ctx.app);
   const picked = await pickSeries(store, ctx, "brief.get", now);
   if (picked.refused) return picked.refused;
-  const by = str(ctx.params, "by", { pattern: ACTOR_RE, max: 90 });
+  const by = str(ctx.params, "by", { pattern: ACTOR_RE, max: 90 }) ?? viaActor(ctx.via);
   const sinceParam = str(ctx.params, "since", { max: 40 });
   let since = yesterdayFive(now);
   let sinceFrom = "17:00 CT yesterday";
@@ -530,7 +561,10 @@ const auditQuery = guarded("audit.query", async (ctx, now) => {
 const checkRun = guarded("check.run", async (ctx, now) => {
   allowOnly(ctx.params, ["series", "s", "ref", "target", "json", "by"]);
   const store = requireStore(ctx.app);
-  const target = str(ctx.params, "target", { pattern: /^(engine|capture)$/ });
+  // seqctl sends `check engine` / `check capture` / `check <ref>` as ref=…; a step ref checks its series.
+  const refParam = str(ctx.params, "ref", { max: 200, pattern: /^[A-Za-z0-9_.\/-]+$/ });
+  const target = str(ctx.params, "target", { pattern: /^(engine|capture)$/ }) ?? (refParam === "engine" || refParam === "capture" ? refParam : undefined);
+  if (refParam && !target && ctx.params.series === undefined && ctx.params.s === undefined) ctx.params.series = refParam.split("/")[0]!;
   if (target === "capture") return refusal("check.run", now, problem({ code: "refuse.not_engine_owned", tier: "refuse", message: "the mailbox capture arrives with P3 (about 11/6)", fixer: "agent" }));
   const healthRow = (await store.query("SELECT * FROM health WHERE id = 'singleton'")).rows[0] ?? {};
   const lastTick = isoOrNull(healthRow.last_tick_at);
@@ -625,70 +659,89 @@ const helpGet = guarded("help.get", async (ctx, now) => {
   return buildOutput({ command: "help.get", now, verdict: found.title, body: found.lines, data: found.data, exit: EXIT.ok });
 });
 
-const pageGet = guarded("page.get", async (ctx, now) => {
-  allowOnly(ctx.params, ["series", "s", "by"]);
-  const store = requireStore(ctx.app);
-  const picked = await pickSeries(store, ctx, "page.get", now);
-  if (picked.refused) return picked.refused;
-  const series = picked.series[0];
-  if (!series) return buildOutput({ command: "page.get", now, verdict: "not imported yet", data: { contract: "sequences_page_v1", series: null }, exit: EXIT.ok });
-  const steps = await loadSteps(store, series.id);
-  const alerts = await loadAlerts(store, { series: series.id });
-  const drawings = await loadDrawings(store, series.prize_scope ?? series.id, "adopted");
-  const shadows = await loadDrawings(store, series.prize_scope ?? series.id, "shadow");
-  const open = alerts.filter((alert) => alert.state === "open" || alert.state === "taken");
-  const days = [...new Set(steps.map((step) => step.due_at).filter((time): time is string => Boolean(time)).map((time) => utcToWall(time).date))].sort();
-  const instances = series.plan.instances ?? [];
-  const page = {
-    contract: "sequences_page_v1",
-    as_of: now.toISOString(),
-    series: { id: series.id, state: series.state, definition: `${series.definition_name}@${series.definition_revision}`, plan_sha256: series.plan_sha256, prize_scope: series.prize_scope, created_at: series.created_at },
-    answer_card: { text: open.length === 0 ? "Observing · nothing needs you" : `${open.length} open alert${open.length === 1 ? "" : "s"}`, alerts: open.map((alert) => ({ id: alert.id, rule: alert.rule, subject_ref: alert.subject_ref, message: String(alert.detail.message ?? ""), state: alert.state, opened_at: alert.opened_at })) },
-    calendar: {
-      days,
-      groups: instances.map((instance) => ({
-        instance: instance.id,
-        night: instance.params.night ?? null,
-        chips: steps.filter((step) => step.instance_id === instance.id && step.due_at).map((step) => ({ day: utcToWall(step.due_at!).date, ref: step.ref, step: step.step_id, owner: step.owner, state: step.state, label: `${formatCtShort(step.due_at!).slice(-5)} ${step.step_id}`, outlined: step.owner === "mac" || step.owner === "review_sender" })),
-      })),
-    },
-    timelines: Object.fromEntries(instances.map((instance) => [instance.id, steps.filter((step) => step.instance_id === instance.id).map((step) => ({ ref: step.ref, due_at: step.due_at, due_ct: step.due_at ? formatCt(step.due_at) : null, step: step.step_id, owner: step.owner, mode: step.mode, state: step.state, state_text: stepState(step), result: resultText(step) }))])),
-    drawings: drawings.map((drawing) => {
-      const shadow = shadows.find((entry) => entry.night === drawing.night && entry.drawing_no === drawing.drawing_no);
-      return {
-        night: drawing.night,
-        drawing_no: drawing.drawing_no,
-        adopted: { entries: drawing.receipt.entry_ids.length, winners: drawing.receipt.winners.length, alternates: drawing.receipt.alternates.length, promoted: drawing.receipt.promoted.length, entry_list_sha256: drawing.receipt.commit.entry_list_sha256, drand_round: drawing.receipt.commit.drand_round, committed_at: drawing.committed_at, replay_pass: (drawing.replay as { pass?: boolean } | null)?.pass ?? null, beacon_check: drawing.beacon_check },
-        shadow: shadow ? { pass: (shadow.compare as { pass?: boolean } | null)?.pass ?? null, entry_list_sha256: shadow.receipt.commit.entry_list_sha256, mismatched: (shadow.compare as { mismatched?: string[] } | null)?.mismatched ?? [], unexplained: (shadow.compare as { unexplained?: number } | null)?.unexplained ?? 0 } : null,
-      };
-    }),
-    notes: steps.filter((step) => step.expected.note).map((step) => ({ ref: step.ref, note: step.expected.note, drawing_no: step.expected.drawing_no, state: step.state, verdict: step.result.verdict ?? null, received: step.result.received ?? null, planned: step.result.planned ?? null, receipt_kind: "campaign_only", label: "on the list, can't confirm it reached them" })),
-    health: await health(ctx),
-  };
-  return buildOutput({ command: "page.get", now, verdict: `${series.id} · ${series.state} · ${page.answer_card.text}`, subject: { series: series.id }, data: page, page: pageLink(series.id), exit: EXIT.ok });
-});
+// The page's own read (sequences_page_v1), not the agent output contract: the ops-ui page parses it
+// fail-closed and draws it as is. Bad params and an unknown series come back as ok:false + problems.
+async function pageGet(ctx: MethodContext) {
+  const now = clock();
+  const { via: _via, ...params } = (ctx.params ?? {}) as Record<string, unknown>;
+  const fail = (code: string, text: string) => ({ ok: false, contract: PAGE_CONTRACT, problems: [{ code, text }] });
+  try {
+    allowOnly(params, ["series", "s", "by", "json"]);
+    refuseAddresses(params);
+    const named = str(params, "series", { pattern: SERIES_ID_RE, aliases: ["s"] }) ?? null;
+    const store = requireStore(ctx.app);
+    const series = named ? await loadSeries(store, named) : (await listSeries(store, ["observing", "active", "paused", "awaiting_ok", "draft"]))[0] ?? null;
+    if (named && !series) return fail("check.unknown_ref", `no series '${named}' is registered (it arrives with the October import)`);
+    const steps = series ? await loadSteps(store, series.id) : [];
+    const scope = series ? series.prize_scope ?? series.id : null;
+    const campaigns = series ? (await store.query("SELECT c.* FROM provider_campaigns c JOIN step_instances s ON s.id = c.step_instance_id WHERE s.series_id = $1 ORDER BY c.sent_at NULLS LAST, c.id", [series.id])).rows : [];
+    const page = buildPage({
+      series,
+      steps,
+      alerts: series ? await loadAlerts(store, { series: series.id }) : [],
+      drawings: scope ? await loadDrawings(store, scope, "adopted") : [],
+      shadows: scope ? await loadDrawings(store, scope, "shadow") : [],
+      campaigns,
+      health: (await health(ctx)) as Record<string, unknown>,
+      now,
+    });
+    assertNoAddress(JSON.stringify(page));
+    return page;
+  } catch (error) {
+    if (error instanceof ParamError) return fail("usage.params", error.message);
+    throw error;
+  }
+}
 
+// seqctl watch polls this every 20 s (the ops API's Nex client caps a call at 10 s, so no long-poll):
+// events after the cursor, plus the current state of every step the filter names.
 const eventsList = guarded("events.list", async (ctx, now) => {
-  allowOnly(ctx.params, ["series", "s", "after", "limit", "json", "by"]);
+  allowOnly(ctx.params, ["series", "s", "ref", "after", "limit", "json", "by"]);
   const store = requireStore(ctx.app);
   const series = str(ctx.params, "series", { pattern: SERIES_ID_RE, aliases: ["s"] }) ?? null;
+  const ref = str(ctx.params, "ref", { max: 200, pattern: /^[a-z0-9][a-z0-9-]{1,62}(\/[A-Za-z0-9_.*\/-]*)?$/ }) ?? null;
   const after = int(ctx.params, "after", { min: 0, max: Number.MAX_SAFE_INTEGER, fallback: 0 });
   const limit = int(ctx.params, "limit", { min: 1, max: 500, fallback: 100 });
+  const seriesOf = series ?? (ref ? ref.split("/")[0]! : null);
+  // A ref filter is a prefix (a series, an instance or one step); `*` is a wildcard within it.
+  const refLike = ref ? `${ref.replace(/[%_]/g, "\\$&").replace(/\*/g, "%")}%` : null;
   const rows = (
     await store.query(
-      `SELECT e.id, e.at, e.series_id, s.ref, e.actor, e.event, e.detail FROM step_events e LEFT JOIN step_instances s ON s.id = e.step_instance_id
-        WHERE e.id > $1 AND ($2::text IS NULL OR e.series_id = $2) ORDER BY e.id LIMIT $3`,
-      [after, series, limit],
+      `SELECT e.id, e.at, e.series_id, s.ref, s.state, s.hold_code, s.waiting_because, e.actor, e.event, e.detail
+         FROM step_events e LEFT JOIN step_instances s ON s.id = e.step_instance_id
+        WHERE e.id > $1 AND ($2::text IS NULL OR e.series_id = $2) AND ($4::text IS NULL OR s.ref LIKE $4)
+        ORDER BY e.id LIMIT $3`,
+      [after, seriesOf, limit, refLike],
     )
-  ).rows.map((row) => ({ id: Number(row.id), at: isoOrNull(row.at), series_id: row.series_id ?? null, ref: row.ref ?? null, actor: String(row.actor), event: String(row.event), detail: jsonOf(row.detail, {}) }));
+  ).rows.map((row) => {
+    const detail = jsonOf<Record<string, unknown>>(row.detail, {});
+    const text = `${formatCtShort(isoOrNull(row.at)!)} ${String(row.event)}${row.ref ? ` ${shortRef(String(row.ref))}` : ""} · ${String(row.actor)}`;
+    return {
+      id: Number(row.id),
+      at: isoOrNull(row.at),
+      series_id: row.series_id ?? null,
+      ref: row.ref ?? null,
+      actor: String(row.actor),
+      event: String(row.event),
+      state: (row.state as string | null) ?? null,
+      hold_code: (row.hold_code as string | null) ?? null,
+      needs: null as string | null,
+      text,
+      relay: typeof detail.relay === "string" ? detail.relay : null,
+      detail,
+    };
+  });
+  const current = refLike
+    ? (await store.query("SELECT ref, state, hold_code FROM step_instances WHERE ref LIKE $1 ORDER BY ref LIMIT 200", [refLike])).rows.map((row) => ({ ref: String(row.ref), state: String(row.state), hold_code: (row.hold_code as string | null) ?? null }))
+    : [];
   const last = rows.length > 0 ? rows[rows.length - 1]!.id : after;
   return buildOutput({
     command: "events.list",
     now,
-    verdict: `${rows.length} event${rows.length === 1 ? "" : "s"} after ${after}${series ? ` in ${series}` : ""}`,
-    subject: { series },
-    body: rows.map((row) => `${formatCtShort(row.at!)} ${row.event}${row.ref ? ` ${shortRef(String(row.ref))}` : ""} · ${row.actor}`),
-    data: { events: rows, next_after: last },
+    verdict: `${rows.length} event${rows.length === 1 ? "" : "s"} after ${after}${ref ? ` for ${ref}` : seriesOf ? ` in ${seriesOf}` : ""}`,
+    subject: { series: seriesOf, ref },
+    body: rows.map((row) => row.text),
+    data: { events: rows, cursor: last, next_after: last, current },
     exit: EXIT.ok,
   });
 });
@@ -700,7 +753,7 @@ const ITEM_RE = /^(A\d{1,2}-\d{4,}|inc_[a-z0-9]{1,40}|[a-z0-9][a-z0-9-]{1,62}(\/
 const itemsTake = guarded("items.take", async (ctx, now) => {
   allowOnly(ctx.params, ["item", "by", "note", "eta", "release"]);
   const item = str(ctx.params, "item", { required: true, pattern: ITEM_RE, max: 200 })!;
-  const by = str(ctx.params, "by", { required: true, pattern: ACTOR_RE, max: 90 })!;
+  const by = actorOf(ctx, true);
   const note = str(ctx.params, "note", { required: true, max: 500 })!;
   const eta = isoTime(ctx.params, "eta");
   const release = flag(ctx.params, "release");
@@ -736,7 +789,7 @@ const itemsTold = guarded("items.told", async (ctx, now) => {
   allowOnly(ctx.params, ["items", "item", "refs", "by", "note", "asked"]);
   const items = stringList(ctx.params, "items", { pattern: ITEM_RE, max: 50, aliases: ["item", "refs"] });
   if (items.length === 0) throw new ParamError("items", "'items' names at least one alert, ref or series");
-  const by = str(ctx.params, "by", { required: true, pattern: ACTOR_RE, max: 90 })!;
+  const by = actorOf(ctx, true);
   const note = str(ctx.params, "note", { required: true, max: 1000 })!;
   const asked = str(ctx.params, "asked", { max: 500 });
   const store = requireStore(ctx.app);

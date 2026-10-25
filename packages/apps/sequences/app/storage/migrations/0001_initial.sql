@@ -225,7 +225,10 @@ CREATE TABLE provider_campaigns (
   id TEXT PRIMARY KEY,
   campaign_id TEXT,
   campaign_id_prefix TEXT,
-  name TEXT NOT NULL,
+  name TEXT,                     -- null for a resend whose exact name was never recorded
+  resend_no INT NOT NULL DEFAULT 0,
+  want INT,
+  overrides JSONB,
   list_id TEXT,
   template TEXT,
   status TEXT,

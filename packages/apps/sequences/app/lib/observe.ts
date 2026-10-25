@@ -81,7 +81,10 @@ export function judgeFollowup(read: InvitationCounts | null, phase: string): Jud
 export type CampaignEvidence = {
   campaign_id: string | null;
   campaign_id_prefix?: string | null;
-  name: string;
+  name: string | null;
+  resend_no?: number;
+  want?: number | null;
+  overrides?: Record<string, unknown> | null;
   status: string | null;
   sent_at: string | null;
   list_exact: number | null;
@@ -99,7 +102,7 @@ const TRUST_RANK = { aggregate: 3, log_only: 2, early_read: 1, untrusted: 0 } as
 export function bestPerCampaign(campaigns: readonly CampaignEvidence[]): CampaignEvidence[] {
   const best = new Map<string, CampaignEvidence>();
   for (const campaign of campaigns) {
-    const key = campaign.campaign_id ?? campaign.campaign_id_prefix ?? campaign.name;
+    const key = campaign.campaign_id ?? campaign.campaign_id_prefix ?? campaign.name ?? `resend ${campaign.resend_no ?? 0}`;
     const held = best.get(key);
     if (!held || TRUST_RANK[campaign.trust] > TRUST_RANK[held.trust]) best.set(key, campaign);
   }
