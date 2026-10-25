@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import methods from "../methods/index.js";
 import { HAS_DATABASE, adminQuery, cleanup, fixture } from "./pg-store.js";
 import { importBundle } from "../lib/import.js";
 import { loadStepByRef } from "../lib/repo.js";
@@ -36,5 +37,12 @@ describe.runIf(HAS_DATABASE && BUNDLE !== "")("the real October bundle", () => {
     }
     const again = await importBundle(store, bundle, { mode: "apply", preview_token: preview.token!, actor, now });
     expect(again.data.replayed).toBe(true);
+    // SEQUENCES_PAGE_OUT: write the page and health answers for the ops-ui and dead-man parsers to read.
+    if (process.env.SEQUENCES_PAGE_OUT) {
+      const ctx = (params: Record<string, unknown>) => ({ app: { id: "sequences", version: "0.1.0", store } as never, params, nex: {} as never, user: null } as never);
+      const page = await methods["sequences.page.get"](ctx({ s: "review-giveaway-2026-10", via: { route: "page", operator_ref: "service:machine", operator_role: "machine", session: null } }));
+      const health = await methods["sequences.health"](ctx({}));
+      writeFileSync(process.env.SEQUENCES_PAGE_OUT, JSON.stringify({ page, health }), { mode: 0o600 });
+    }
   });
 });
