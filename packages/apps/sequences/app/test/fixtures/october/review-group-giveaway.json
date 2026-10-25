@@ -1,0 +1,459 @@
+{
+ "defaults": {
+  "late": {
+   "grace": "10m",
+   "then": "hold"
+  },
+  "owner": "engine",
+  "send": {
+   "consent_check": "klaviyo",
+   "fence": {
+    "sequence_email": "24h"
+   },
+   "settle": [
+    "5m",
+    "30m",
+    "2h",
+    "24h"
+   ],
+   "settle_gate": "30m",
+   "shard": 250,
+   "window": "09:00-21:00"
+  }
+ },
+ "exclude_sets": {
+  "giveaway": [
+   "standing_negatives",
+   "survey",
+   "refunds",
+   "desk_complaints",
+   "team",
+   "winners"
+  ]
+ },
+ "messages": {
+  "alternate_win": {
+   "consent": "transactional",
+   "metric": "group_alternate_winner",
+   "sha256": "<sha>",
+   "template": "group-alternate-winner"
+  },
+  "followup": {
+   "consent": "review_reach",
+   "metric": "review_group_followup",
+   "promises": [
+    {
+     "by": "night+4 12:00",
+     "step": "draw_2"
+    }
+   ],
+   "sha256": "observed",
+   "states": [
+    {
+     "needs": "draw_1",
+     "says": "we've picked the winners of our first drawing"
+    }
+   ],
+   "template": "review-group-followup"
+  },
+  "half_off": {
+   "consent": "marketing",
+   "fills": [
+    "code",
+    "expires_on"
+   ],
+   "metric": "group_half_off",
+   "sha256": "<sha>",
+   "template": "group-half-off-thanks"
+  },
+  "night_ask": {
+   "consent": "review_reach",
+   "metric": "review_group_night",
+   "promises": [
+    {
+     "by": "night+1 12:00",
+     "says": "pick the 10 winners tomorrow morning",
+     "step": "draw_1"
+    }
+   ],
+   "sha256": "observed",
+   "template": "review-group-night"
+  },
+  "still_entered": {
+   "campaign_name": "Review group still entered · {night} · drawing 1",
+   "consent": "transactional",
+   "fills": [
+    "close_day",
+    "pick_day"
+   ],
+   "late": "still_entered_today",
+   "metric": "group_still_entered",
+   "promises": [
+    {
+     "by": "night+4 12:00",
+     "step": "draw_2"
+    }
+   ],
+   "says": {
+    "this morning": "07:00-11:59"
+   },
+   "sha256": "observed",
+   "template": "group-still-entered"
+  },
+  "still_entered_today": {
+   "consent": "transactional",
+   "fills": [
+    "close_day",
+    "pick_day"
+   ],
+   "metric": "group_still_entered_today",
+   "says": {
+    "today": "12:00-18:00"
+   },
+   "sha256": "observed",
+   "template": "group-still-entered-today"
+  },
+  "winner_note": {
+   "campaign_name": "Review group winners · {night} · drawing {n}",
+   "consent": "transactional",
+   "late": "winner_note_today",
+   "metric": "group_winner_note",
+   "says": {
+    "this morning": "07:00-11:59"
+   },
+   "sha256": "observed",
+   "template": "group-winner-note"
+  },
+  "winner_note_today": {
+   "consent": "transactional",
+   "metric": "group_winner_note_today",
+   "says": {
+    "today": "12:00-17:00"
+   },
+   "sha256": "observed",
+   "template": "group-winner-note-today"
+  }
+ },
+ "needs": {
+  "entry_window_utc": [
+   "2026-10-16T05:00:00Z",
+   "2026-11-01T05:00:00Z"
+  ],
+  "last_night": "2026-10-28",
+  "prize_scope": "review-giveaway-2026-10",
+  "rules_page": {
+   "content_sha256": "<sha>",
+   "url": "https://moonsleep.co/reviews/group-drawings/"
+  }
+ },
+ "params": {
+  "group": "int",
+  "limit": "int",
+  "night": "date"
+ },
+ "program": "reviews",
+ "sequence": "review-group-giveaway",
+ "sources": {
+  "desk_complaints": {
+   "from": "desk_complaints",
+   "max_age": "2h",
+   "warn_before_due": "2h"
+  },
+  "refunds": {
+   "from": "refunds",
+   "max_age": "1h"
+  },
+  "standing_negatives": {
+   "from": "standing_exclusions",
+   "max_age": "24h"
+  },
+  "survey": {
+   "from": "survey_respondents_and_ask_lists",
+   "max_age": "24h"
+  },
+  "team": {
+   "from": "team_addresses",
+   "max_age": "24h"
+  },
+  "winners": {
+   "from": "ledger",
+   "scope": "prize_scope"
+  }
+ },
+ "steps": [
+  {
+   "at": "night 17:00",
+   "checks": [
+    "rules_page_live",
+    "flows_live_and_match_copy",
+    "night <= last_night"
+   ],
+   "do": "assert",
+   "id": "preflight"
+  },
+  {
+   "after": "preflight",
+   "at": "night 19:30",
+   "audience": {
+    "band": "group of 5",
+    "limit": "limit",
+    "rule": "backfill",
+    "us_only": true
+   },
+   "do": "send_flow_event",
+   "exclude": "giveaway",
+   "expect": {
+    "count": "limit",
+    "within": "5%"
+   },
+   "fence": {
+    "never_after": [
+     "day7",
+     "day14"
+    ],
+    "quiet_days": 7,
+    "review_email": "24h"
+   },
+   "fills": {
+    "deadline": "night 23:59:59"
+   },
+   "id": "night_ask",
+   "message": "night_ask",
+   "on_partial": "continue",
+   "target": {
+    "accepted": "95%"
+   },
+   "window": "19:17-23:00"
+  },
+  {
+   "at": "night+1 00:15",
+   "between": [
+    "night 19:00",
+    "night 23:59:59"
+   ],
+   "do": "free_entry_intake",
+   "from_members_of": "night_ask",
+   "id": "entries_1",
+   "subject_has": "review drawing"
+  },
+  {
+   "after": "entries_1",
+   "at": "night+1 08:00",
+   "beacon": {
+    "drand": "quicknet",
+    "round_after": "90s"
+   },
+   "closes": "night 23:59:59",
+   "do": "draw",
+   "entrants": {
+    "free_entries": [
+     "entries_1"
+    ],
+    "members_of": "night_ask",
+    "reviews": "first_submission_after_own_invitation"
+   },
+   "exclude": [
+    "winners",
+    "team"
+   ],
+   "id": "draw_1",
+   "late": {
+    "grace": "15m",
+    "then": "run"
+   },
+   "pick": {
+    "alternates": 10,
+    "winners": 10
+   }
+  },
+  {
+   "after": "draw_1",
+   "audience": "draw_1.winners",
+   "do": "send_flow_event",
+   "exclude": "consent_only",
+   "id": "winner_note_1",
+   "late": {
+    "after_that": "hold",
+    "then": "late_copy"
+   },
+   "message": "winner_note",
+   "on_partial": "block",
+   "target": {
+    "delivered": "all"
+   }
+  },
+  {
+   "after": "winner_note_1 settled",
+   "audience": "draw_1.non_winners",
+   "do": "send_flow_event",
+   "exclude": "giveaway",
+   "fills": {
+    "close_day": "night+3",
+    "pick_day": "night+4"
+   },
+   "id": "still_entered_1",
+   "late": {
+    "after_that": "hold",
+    "then": "late_copy"
+   },
+   "message": "still_entered",
+   "target": {
+    "delivered": "99%"
+   }
+  },
+  {
+   "do": "spawn",
+   "each": "draw_1.winners",
+   "id": "claims_1",
+   "params": {
+    "notice": "winner_note_1"
+   },
+   "sequence": "prize-claim"
+  },
+  {
+   "after": [
+    "night_ask",
+    "draw_1"
+   ],
+   "at": "night+1 19:30",
+   "audience": {
+    "has_review": false,
+    "members_of": "night_ask"
+   },
+   "do": "send_flow_event",
+   "exclude": "giveaway",
+   "fence": {
+    "review_email": "24h"
+   },
+   "fills": {
+    "deadline": "night+3 23:59:59"
+   },
+   "id": "followup",
+   "message": "followup",
+   "not_after": "night+3 23:59:59",
+   "not_before": "night_ask.first_post + 24h",
+   "on_partial": "continue",
+   "window": "19:17-23:00"
+  },
+  {
+   "at": "night+4 00:15",
+   "between": [
+    "night 19:00",
+    "night+3 23:59:59"
+   ],
+   "do": "free_entry_intake",
+   "from_members_of": "night_ask",
+   "id": "entries_2",
+   "subject_has": "review drawing"
+  },
+  {
+   "after": [
+    "draw_1",
+    "entries_2"
+   ],
+   "at": "night+4 08:00",
+   "beacon": {
+    "drand": "quicknet",
+    "round_after": "90s"
+   },
+   "closes": "night+3 23:59:59",
+   "do": "draw",
+   "entrants": {
+    "free_entries": [
+     "entries_1",
+     "entries_2"
+    ],
+    "members_of": "night_ask",
+    "reviews": "first_submission_after_own_invitation"
+   },
+   "exclude": [
+    "winners",
+    "team"
+   ],
+   "id": "draw_2",
+   "late": {
+    "grace": "15m",
+    "then": "run"
+   },
+   "pick": {
+    "alternates": 10,
+    "winners": 10
+   }
+  },
+  {
+   "after": "draw_2",
+   "audience": "draw_2.winners",
+   "do": "send_flow_event",
+   "exclude": "consent_only",
+   "id": "winner_note_2",
+   "late": {
+    "after_that": "hold",
+    "then": "late_copy"
+   },
+   "message": "winner_note",
+   "on_partial": "block",
+   "target": {
+    "delivered": "all"
+   }
+  },
+  {
+   "do": "spawn",
+   "each": "draw_2.winners",
+   "id": "claims_2",
+   "params": {
+    "notice": "winner_note_2"
+   },
+   "sequence": "prize-claim"
+  },
+  {
+   "after": "draw_2",
+   "ask_by": "night+4 09:00",
+   "do": "approval",
+   "for": "money",
+   "id": "code_go",
+   "shows": {
+    "codes": "entrants(draw_1, draw_2) minus winners, after exclusions",
+    "expires": "14d",
+    "max_face_value": "computed",
+    "off": "50%",
+    "on": "lunair_cover",
+    "single_use": true,
+    "tag": "giveaway-2026-10"
+   },
+   "who": "tyler"
+  },
+  {
+   "after": "code_go",
+   "code": {
+    "expires": "14d",
+    "off": "50%",
+    "on": "lunair_cover",
+    "single_use": true,
+    "tag": "giveaway-2026-10"
+   },
+   "do": "issue_codes",
+   "exclude": "giveaway",
+   "for": "entrants(draw_1, draw_2) minus winners",
+   "id": "codes",
+   "via": "ops_api"
+  },
+  {
+   "after": "codes",
+   "at": "night+4 10:00",
+   "audience": "codes.holders",
+   "do": "send_flow_event",
+   "exclude": "giveaway",
+   "fills": {
+    "code": "codes.code",
+    "expires_on": "codes.expires_on"
+   },
+   "id": "half_off_note",
+   "message": "half_off",
+   "target": {
+    "delivered": "99%"
+   }
+  }
+ ],
+ "timezone": "America/Chicago",
+ "title": "Review group giveaway, two drawings per group"
+}

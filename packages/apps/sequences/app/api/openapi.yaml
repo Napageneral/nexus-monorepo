@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Sequences App API
+  version: 0.1.0
+  description: Run approved, time-anchored email and giveaway sequences on the Nex Jobs kernel.
+tags:
+  - name: Sequences
+paths:
+  /runtime/operations/sequences.health:
+    post:
+      operationId: sequences.health
+      summary: Report the installed Sequences contract, its store schema and the last recorded tick.
+      tags:
+        - Sequences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+      responses:
+        "200":
+          description: Health.
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

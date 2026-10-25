@@ -1,0 +1,36 @@
+{
+  "id": "sequences",
+  "version": "0.1.0",
+  "displayName": "Sequences",
+  "description": "Run approved, time-anchored email and giveaway sequences on the Nex Jobs kernel.",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "storage": {
+    "postgres": {
+      "schema": "sequences",
+      "migrations": "./storage/migrations"
+    }
+  },
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  },
+  "methods": {
+    "sequences.health": {
+      "description": "Report the installed Sequences contract, its store schema and the last recorded tick.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": { "type": "object", "properties": {}, "additionalProperties": false },
+      "response": { "type": "object" }
+    }
+  }
+}
