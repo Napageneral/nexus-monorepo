@@ -265,16 +265,21 @@ describe.runIf(HAS_DATABASE)("the tick", () => {
     expect(second.system).toEqual([]); // probe slot taken; no new delivery round for 6 h
     const ticks = (await store.query("SELECT ticks FROM health")).rows[0];
     expect(Number(ticks.ticks)).toBe(2);
-    // A quarantined sequences Run raises A2; once it is no longer quarantined, the A2 resolves.
+    // A quarantined sequences Run raises A2 at the next 5-minute read; once it is no longer
+    // quarantined, the next read resolves it.
     runtime.runs[0]!.status = "quarantined";
     runtime.runs[0]!.created_at = "2026-10-27T15:00:00Z";
     await tick(jobCtx(store, runtime.nexFor("t3"), {}, new Date("2026-10-27T15:02:00Z"), "schedule", "t3"));
+    expect((await store.query("SELECT state FROM alerts WHERE rule = 'A2'")).rows).toEqual([]);
+    await tick(jobCtx(store, runtime.nexFor("t4"), {}, new Date("2026-10-27T15:05:00Z"), "schedule", "t4"));
     expect((await store.query("SELECT state FROM alerts WHERE rule = 'A2'")).rows).toEqual([{ state: "open" }]);
     runtime.runs[0]!.status = "completed";
-    await tick(jobCtx(store, runtime.nexFor("t4"), {}, new Date("2026-10-27T15:03:00Z"), "schedule", "t4"));
+    await tick(jobCtx(store, runtime.nexFor("t5"), {}, new Date("2026-10-27T15:06:00Z"), "schedule", "t5"));
+    expect((await store.query("SELECT state FROM alerts WHERE rule = 'A2'")).rows).toEqual([{ state: "open" }]);
+    // A 4-minute gap is recorded as A13, and that tick's run read resolves the A2.
+    const gap = await tick(jobCtx(store, runtime.nexFor("t6"), {}, new Date("2026-10-27T15:10:00Z"), "schedule", "t6"));
+    expect(gap.tick_gap_minutes).toBe(4);
     expect((await store.query("SELECT state FROM alerts WHERE rule = 'A2'")).rows).toEqual([{ state: "resolved" }]);
-    // A 5-minute gap is recorded as A13.
-    const gap = await tick(jobCtx(store, runtime.nexFor("t5"), {}, new Date("2026-10-27T15:09:00Z"), "schedule", "t5"));
-    expect(gap.tick_gap_minutes).toBe(6);
+    expect((await store.query("SELECT state FROM alerts WHERE rule = 'A13'")).rows).toEqual([{ state: "open" }]);
   });
 });

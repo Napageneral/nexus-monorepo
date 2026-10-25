@@ -12,6 +12,7 @@ export const TICK_STALE_MS = 3 * 60 * 1000;
 export const NOTIFY_SPACING_MS = 5 * 60 * 1000;
 const A2_STATUSES = ["quarantined", "held", "failed", "dead_lettered"];
 const A2_WINDOW_MS = 48 * 60 * 60 * 1000;
+const A2_EVERY_MINUTES = 5;
 
 export async function runTick(ctx: JobContext): Promise<Record<string, unknown>> {
   const store = requireStore(ctx.app);
@@ -94,9 +95,11 @@ export async function runTick(ctx: JobContext): Promise<Record<string, unknown>>
       perSeries[entry.id] = { ...(perSeries[entry.id] as object), alerts_error: errorText(error).slice(0, 200) };
     }
   }
+  // A2 lists Run states every 5 minutes (24 reads), not every minute; between reads its alerts stand.
   const runRows: Array<{ id: string; job_name: string; status: string; error?: string | null }> = [];
-  let runsReadable = true;
-  for (const [name, job] of jobs) {
+  const readRuns = now.getUTCMinutes() % A2_EVERY_MINUTES === 0;
+  let runsReadable = readRuns;
+  for (const [name, job] of readRuns ? jobs : new Map()) {
     for (const status of A2_STATUSES) {
       try {
         const runs = asArray(unwrapPayload(await ctx.nex.jobs.runs.list({ job_definition_id: job.job_id, status, limit: 100 })).runs);

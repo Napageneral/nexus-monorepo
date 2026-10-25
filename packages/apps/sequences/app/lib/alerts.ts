@@ -79,6 +79,17 @@ export function evaluateStepAlerts(steps: readonly StepView[], now: Date, import
     if (shadow && shadow.pass === false) {
       out.push({ rule: "A4", subject_ref: `${step.ref}#shadow`, immediate: true, fix_by: null, detail: { code: "shadow.mismatch", message: `shadow mismatch: ${String(shadow.unexplained ?? 0)} unexplained of ${String((shadow.diffs as unknown[] | undefined)?.length ?? 0)} differences`, ...base } });
     }
+    // A Mac note owes its evidence by 09:00 (sent) and 10:30 (received): no import at all, or an
+    // import that still read 'pending' past received_by, is late too (unknown is never success).
+    if (step.owner === "mac" && typeof step.expected.note === "string" && typeof step.expected.sent_by === "string") {
+      const sentBy = Date.parse(step.expected.sent_by) + GRACE_MS;
+      const receivedBy = Date.parse(String(step.expected.received_by)) + GRACE_MS;
+      if (!verdict && at > Math.max(sentBy, ownedFrom + GRACE_MS)) {
+        out.push({ rule: "A1", subject_ref: step.ref, immediate: true, fix_by: null, detail: { code: "A1.evidence_missing", message: `no ${String(step.expected.note).replace("_", "-")} note evidence imported (due sent by ${formatCt(step.expected.sent_by)})`, ...base } });
+      } else if (verdict === "pending" && at > Math.max(receivedBy, ownedFrom + GRACE_MS)) {
+        out.push({ rule: "A1", subject_ref: step.ref, immediate: true, fix_by: null, detail: { code: "A1.receipt_unconfirmed", message: `${summary || "sent"}; received not confirmed by ${formatCt(String(step.expected.received_by))}`, ...base } });
+      }
+    }
     // A11: an expected Mac drawing not imported by 09:30 on its morning (this week only).
     if (step.owner === "mac" && step.expected.evidence === "import" && typeof step.expected.import_by === "string" && typeof step.expected.drawing_no === "number") {
       const key = `${String(step.expected.night)}#${step.expected.drawing_no}`;

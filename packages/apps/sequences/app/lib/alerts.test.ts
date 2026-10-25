@@ -61,6 +61,18 @@ describe("A11: a Mac drawing not imported by 09:30", () => {
   });
 });
 
+describe("A1 on a Mac note's evidence", () => {
+  const note: StepView = { ...base, ref: "s/g4.winner_note_1", owner: "mac", work: [], expected: { evidence: "import", note: "winner", sent_by: "2026-10-26T14:00:00Z", received_by: "2026-10-26T15:30:00Z" } };
+  it("fires when nothing was imported by 09:00 + grace, or receipts are still pending past 10:30 + grace", () => {
+    expect(evaluateStepAlerts([note], at("2026-10-26T14:09:00Z"), new Set())).toEqual([]);
+    expect(evaluateStepAlerts([note], at("2026-10-26T14:11:00Z"), new Set()).map((alert) => String(alert.detail.code))).toEqual(["A1.evidence_missing"]);
+    const pending = { ...note, result: { verdict: "pending", summary: "7 received of 10 (campaign aggregate)" } };
+    expect(evaluateStepAlerts([pending], at("2026-10-26T15:39:00Z"), new Set())).toEqual([]);
+    expect(evaluateStepAlerts([pending], at("2026-10-26T15:41:00Z"), new Set()).map((alert) => String(alert.detail.code))).toEqual(["A1.receipt_unconfirmed"]);
+    expect(evaluateStepAlerts([{ ...note, result: { verdict: "ok" } }], at("2026-10-26T18:00:00Z"), new Set())).toEqual([]);
+  });
+});
+
 describe("A2 and the words", () => {
   it("raises A2 for quarantined, held, failed and dead-lettered sequences Runs only", () => {
     const alerts = evaluateRunAlerts([

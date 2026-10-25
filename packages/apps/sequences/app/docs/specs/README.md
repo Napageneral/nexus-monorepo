@@ -106,6 +106,10 @@ login needs `sequences_app` with SET.
   phase: one step has several engine Runs, o1/o2 observe reads and s0/s1/c shadow Runs); Run input
   is `{step_instance_id, run_key}`, ids only. System Runs: `seq:_system:probe:<yyyymmddhhmm>`
   (every 30 min) and `seq:_system:notify:<yyyymmddhhmm>`.
+- **Batch keys** are `seq:batch:<yyyymmddhhmm>:<sha12 of the item keys>` (one minute can only
+  re-send the same item set under one key); the probe and notify Runs ride the same partial batch.
+- **The live check never fetches**: methods hold no network path; sources are re-read by step
+  Runs (the 30-minute probe, observe and shadow phases) and the check reports their ages.
 - **Claim** is a compare-and-set on `step_runs` (not `step_instances`), because a step has
   several phases.
 - **The tick reads job ids and revisions from `runtime_jobs`**, which the hooks and configure

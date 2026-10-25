@@ -46,21 +46,23 @@ export function stepState(step: StepRow): string {
 }
 
 function fixerFor(alert: AlertView, step: StepRow | undefined): Fixer {
+  if (alert.rule === "A9") return "tyler";
   if (alert.rule === "A2" || alert.rule === "A13") return "agent";
   if (step?.owner === "mac") return "owner:mac";
   if (step?.owner === "review_sender") return "owner:review_sender";
   return "agent";
 }
 
-// P1b alerts are warn-tier facts: the engine only observes, so nothing here holds a step.
 export function alertProblem(alert: AlertView, step: StepRow | undefined): Problem {
   const ref = typeof alert.detail.ref === "string" ? alert.detail.ref : null;
   const commands: Next[] = [next(`seqctl explain ${alert.id}`, "what happened and what fixes it", "agent")];
   if (alert.state !== "told") commands.push(next(`seqctl told ${alert.id} --note '<what you told Tyler>'`, "stops the 6-hourly re-sends", "agent"));
   if (alert.rule === "A11") commands.unshift(next("on the Mac: python3 -I scripts/sequences_import.py --drawing <night>-<n> --push, then --apply <pt_…>", "the drawing's evidence is not on the server", "agent", "command", "~5 min"));
+  // An open alert is an item someone must act on (brief exits 8, or 3 for Tyler's); once it is
+  // taken or Tyler was told it is a fact to show, not a reason to page again.
   return problem({
     code: String(alert.detail.code ?? alert.rule),
-    tier: "warn",
+    tier: alert.state === "open" ? "error" : "warn",
     ref,
     message: `${alert.id} · ${RULE_WORDS[alert.rule as Rule] ?? alert.rule} · ${String(alert.detail.message ?? "")}`,
     impact: step?.owner === "mac" || step?.owner === "review_sender" ? "another owner's step: the engine only observes it this week" : null,
