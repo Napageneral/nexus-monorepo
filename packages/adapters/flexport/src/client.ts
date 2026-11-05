@@ -102,6 +102,7 @@ const TOKEN_LOCK_STALE_MS = 120_000;
 const TOKEN_LOCK_WAIT_MS = 130_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
+const MAX_REFUSAL_CHARS = 300;
 const MAX_JSON_BODY_BYTES = 64 * 1024 * 1024;
 const CONNECTION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ERROR_CODE = /^[a-z_]{1,64}$/;
@@ -622,15 +623,37 @@ async function readCapped(response: Response, limit: number, label: string): Pro
   return Buffer.concat(chunks, total);
 }
 
-/** The envelope's error.code is reported only when it is a plain slug; nothing else of a body is. */
-async function safeErrorCode(response: Response): Promise<string | undefined> {
+/** The envelope's error.code, kept only when it is a plain slug, and its error.message, unread until cleaned. */
+async function errorEnvelope(response: Response): Promise<{ code?: string; message?: string }> {
   try {
     const bytes = await readCapped(response, MAX_ERROR_BODY_BYTES, "error body");
-    const code = asRecord(asRecord(JSON.parse(bytes.toString("utf8"))).error).code;
-    return typeof code === "string" && ERROR_CODE.test(code) ? code : undefined;
+    const { code, message } = asRecord(asRecord(JSON.parse(bytes.toString("utf8"))).error);
+    return {
+      ...(typeof code === "string" && ERROR_CODE.test(code) ? { code } : {}),
+      ...(typeof message === "string" ? { message } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+/**
+ * Flexport's words on a write it refused: they name the field, which its error code does not.
+ * One printable line, capped, with every credential this client holds and any bearer value removed.
+ */
+function refusalDetail(message: string | undefined, secrets: readonly (string | undefined)[]): string | undefined {
+  if (!message) return undefined;
+  let redacted = message;
+  for (const secret of secrets) {
+    if (secret) redacted = redacted.split(secret).join("<redacted>");
+  }
+  const line = redacted
+    .replace(/\bbearer\s+\S+/gi, "Bearer <redacted>")
+    .replace(/[^\x20-\x7e]+/g, " ")
+    .replace(/ +/g, " ")
+    .trim();
+  if (!line) return undefined;
+  return line.length > MAX_REFUSAL_CHARS ? `${line.slice(0, MAX_REFUSAL_CHARS)}...` : line;
 }
 
 function sanitizeMimeType(value: string | null | undefined): string | undefined {
@@ -798,7 +821,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
       });
     }
     if (!response.ok) {
-      const code = await safeErrorCode(response);
+      const { code } = await errorEnvelope(response);
       throw new FlexportError(`Flexport token request failed (HTTP ${response.status}${code ? `, ${code}` : ""})`, {
         status: response.status,
         abortsPass: true,
@@ -931,8 +954,10 @@ export function createFlexportClient(options: FlexportClientOptions) {
         continue;
       }
       if (!response.ok) {
-        const code = await safeErrorCode(response);
-        const failure = `${label} failed (HTTP ${response.status}${code ? `, ${code}` : ""})`;
+        const { code, message } = await errorEnvelope(response);
+        const refused = requestOptions.retry === "write" && response.status >= 400 && response.status < 500;
+        const detail = refused ? refusalDetail(message, [token.token, clientId, clientSecret]) : undefined;
+        const failure = `${label} failed (HTTP ${response.status}${code ? `, ${code}` : ""})${detail ? `: ${detail}` : ""}`;
         if (response.status === 401) {
           // A fresh token refused is an authentication failure that a new token will not fix.
           const authFailure = token.issuedAt !== undefined && now() - token.issuedAt < AUTH_FAILURE_TOKEN_AGE_MS;
@@ -956,7 +981,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
       if (error instanceof FlexportError) throw error;
       throw new FlexportError(`${label} returned invalid JSON`);
     }
-    // Response text is never echoed: an error body can repeat what it was sent.
+    // Success text is never echoed: only a refused write's error message reaches an error (refusalDetail).
     if (!isRecord(document) || !Object.hasOwn(document, "data")) {
       throw new FlexportError(`${label} returned no data`);
     }

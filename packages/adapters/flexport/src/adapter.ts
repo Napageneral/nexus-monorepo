@@ -827,7 +827,7 @@ export const __test__ = {
 export const flexportAdapter = defineAdapter<FlexportAdapterClient>({
   platform: PLATFORM,
   name: "flexport-adapter",
-  version: "0.1.0",
+  version: "0.1.1",
   multi_account: true,
   credential_service: SERVICE,
   // Document bodies are base64 inside body_json and pass 128 KiB, the Linux limit of the one argv

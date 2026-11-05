@@ -1,6 +1,6 @@
 {
   "id": "flexport",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Flexport",
   "description": "Flexport API v2 adapter: shipment bundles, final documents and the network as Records, plus four guarded writes.",
   "platform": "flexport",
