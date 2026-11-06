@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { NexClient } from "../../../../../nex/src/runtime/internal-runtime-client.js";
+import { listEveryPage } from "../jobs/nex-runtime-lists.js";
 import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 type RuntimeRow = Record<string, unknown>;
@@ -289,7 +290,17 @@ function sourceJobHasConfiguredConnection(existing: RuntimeRow, expectedFamily: 
 }
 
 async function listJobs(runtime: NexClient): Promise<RuntimeRow[]> {
-  return asArray(unwrapPayload(await runtime.jobs.list({})).jobs);
+  return listEveryPage("jobs.list", async (page) => unwrapPayload(await runtime.jobs.list(page)));
+}
+
+// Find-or-create needs one answer per name: with two definitions of one owned
+// job, updating either would leave the other running under the old contract.
+function findOwnedJob(jobs: RuntimeRow[], name: string): RuntimeRow | undefined {
+  const matches = jobs.filter((row) => asString(row.name) === name);
+  if (matches.length > 1) {
+    throw new Error(`MoonSleep commerce job ${name} has duplicate definitions`);
+  }
+  return matches[0];
 }
 
 async function listSubscriptions(
@@ -307,11 +318,13 @@ async function listSubscriptions(
 }
 
 async function listSchedules(runtime: NexClient): Promise<RuntimeRow[]> {
-  return asArray(unwrapPayload(await runtime.schedules.list({})).schedules);
+  return listEveryPage("schedules.list", async (page) =>
+    unwrapPayload(await runtime.schedules.list(page)),
+  );
 }
 
 async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec): Promise<string> {
-  const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
+  const existing = findOwnedJob(await listJobs(runtime), spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
   const isPaidOrderEffects = spec.name === PAID_ORDER_EFFECTS_JOB_NAME;
   const laneId =
@@ -542,9 +555,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   const sourceJobDefinitionIds: string[] = [];
   const sourceScheduleIds: string[] = [];
   for (const spec of JOB_SPECS.slice(2)) {
-    const existing = (await listJobs(params.runtime)).find(
-      (row) => asString(row.name) === spec.name,
-    );
+    const existing = findOwnedJob(await listJobs(params.runtime), spec.name);
     const preserveEnabled = existing
       ? sourceJobHasConfiguredConnection(existing, spec.config.family)
       : false;
