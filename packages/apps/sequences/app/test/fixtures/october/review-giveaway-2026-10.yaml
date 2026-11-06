@@ -1,0 +1,26 @@
+# Test fixture: the design's sequences/series/review-giveaway-2026-10.yaml plus the build manual's
+# P1b blocks (§2b: modes, evidence, ask).
+series: review-giveaway-2026-10
+sequence: review-group-giveaway@1
+instances:
+  - {id: g1, group: 1, night: 2026-10-21, limit: 2690}
+  - {id: g2, group: 2, night: 2026-10-23, limit: 2690}
+  - {id: g3, group: 3, night: 2026-10-24, limit: 2690}
+  - {id: g4, group: 4, night: 2026-10-25, limit: 2690}
+  - {id: g5, group: 5, night: 2026-10-26, limit: 2690}
+owners:
+  review_sender: [night_ask, followup]
+  mac: [entries_1, entries_2, draw_1, draw_2, winner_note_1, winner_note_2, still_entered_1]
+  engine: [claims_1, claims_2, code_go, codes, half_off_note]
+adopt: "steps finished outside the engine, with evidence: drawings/*.json, winners.json, Klaviyo campaign receipts, review_invitation counts"
+replan: {code_go: {ask_by: "2026-11-02 09:00"}, half_off_note: {at: "2026-11-02 10:00"}}
+approvals: {go: tyler, words: casey, money: tyler_each_step, reconfirm: on_change, about_to_send: 2h}
+modes:
+  shadow: [g3.draw_2, g4.draw_2, g5.draw_2]
+  observe_live: [g5.followup]
+  adopt_from_import: true
+evidence:
+  mac: {track_dir: moonsleep-review-sender-campaigns-20261017, files: [drawings/winners.json, drawings/group-*-drawing-*.json,
+        private/winner-notes-receipts.jsonl, private/free-entries-*.txt], heartbeat: private/morning-done}
+  review_sender: {settings: [PRODUCT_REVIEW_GROUP_NIGHTS, PRODUCT_REVIEW_GROUP_LIMIT], files: [group-exclusions.hashes]}
+ask: {text: "Yeah, let's do this, please. Set this all up. Build it. ...", by: tyler, at: '2026-10-24 20:45', via: chat}

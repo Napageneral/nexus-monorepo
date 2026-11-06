@@ -1,0 +1,734 @@
+{
+  "id": "sequences",
+  "version": "0.1.0",
+  "displayName": "Sequences",
+  "description": "Run approved, time-anchored email and giveaway sequences on the Nex Jobs kernel. P1b: import, observe, replay and shadow, read-only toward the world.",
+  "skill": "./SKILL.md",
+  "handler": "./methods/index.ts",
+  "hosting": {
+    "required_server_class": "standard",
+    "deployment_class": "customer_server"
+  },
+  "storage": {
+    "postgres": {
+      "schema": "sequences",
+      "migrations": "./storage/migrations"
+    }
+  },
+  "hooks": {
+    "onInstall": "./hooks/install.ts",
+    "onActivate": "./hooks/activate.ts",
+    "onDeactivate": "./hooks/deactivate.ts",
+    "onUpgrade": "./hooks/upgrade.ts",
+    "onUninstall": "./hooks/uninstall.ts"
+  },
+  "methods": {
+    "sequences.health": {
+      "description": "Engine heartbeat and counts for the off-host dead-man: tick age, series, overdue, held, quarantined, open alerts, next due time and the alert delivery rounds (ids and counts only).",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object"
+      }
+    },
+    "sequences.runtime.configure": {
+      "description": "Plan, then apply with the exact plan sha and the literal confirmation, the six job definitions and the one tick schedule; the only method that arms or parks the tick.",
+      "action": "write",
+      "access": "admin",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "enum": [
+              "plan",
+              "apply"
+            ]
+          },
+          "target": {
+            "enum": [
+              "armed",
+              "parked"
+            ]
+          },
+          "expected_plan_sha256": {
+            "type": "string",
+            "description": "From the plan.",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "confirmation": {
+            "const": "CONFIGURE_SEQUENCES_RUNTIME"
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "mode"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.definitions.register": {
+      "description": "Compile a sequence definition (PyYAML-normalized JSON) and, with mode apply, store it as an immutable revision.",
+      "action": "write",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "definition": {
+            "type": "object"
+          },
+          "yaml_sha256": {
+            "type": "string",
+            "description": "sha256 of the YAML bytes.",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_commit": {
+            "type": "string",
+            "description": "moonsleep-v1 commit.",
+            "pattern": "^[0-9a-f]{7,40}$"
+          },
+          "mode": {
+            "enum": [
+              "check",
+              "apply"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "definition",
+          "yaml_sha256",
+          "source_commit"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.definitions.get": {
+      "description": "Read a registered definition and its revisions.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Sequence name."
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.series.import": {
+      "description": "Validate an October import bundle (V1-V10) as a preview with a pt_ token, then apply it idempotently by bundle sha: definitions, the observing series, adopted drawings, the ledger and campaign_only send decisions.",
+      "action": "write",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "bundle": {
+            "type": "object",
+            "description": "schema/import-bundle-v1.json"
+          },
+          "mode": {
+            "enum": [
+              "preview",
+              "apply"
+            ]
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "From the preview.",
+            "pattern": "^pt_[0-9a-f]{32}$"
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "bundle"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.brief.get": {
+      "description": "How it's going: the two-clause verdict, what finished since the window opened, what is short, what is ahead, and what Tyler already heard.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "s": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "since": {
+            "type": "string",
+            "description": "last-relay or an ISO time."
+          },
+          "needs": {
+            "enum": [
+              "tyler",
+              "agent"
+            ]
+          },
+          "digest": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.timeline.get": {
+      "description": "The plan laid out: the group grid, or one group's step rows with due time (CT), owner, state and result.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "description": "<series> or <series>/<instance>."
+          },
+          "s": {
+            "type": "string",
+            "description": "Alias of series."
+          },
+          "instance": {
+            "type": "string",
+            "description": "Instance id."
+          },
+          "from": {
+            "type": "string",
+            "description": "ISO time."
+          },
+          "to": {
+            "type": "string",
+            "description": "ISO time."
+          },
+          "owner": {
+            "enum": [
+              "engine",
+              "mac",
+              "review_sender",
+              "task"
+            ]
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.explain": {
+      "description": "One thing in depth under fixed headings: a step ref, an alert id, msg:<name> or src:<name>.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "A full or unique short ref, an alert id, msg:<name>, src:<name>."
+          },
+          "target": {
+            "type": "string",
+            "description": "Alias of ref."
+          },
+          "follow": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "no_follow": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.audit.query": {
+      "description": "Who got what, by step (the person view across programs is P4): the outcome vector, overlap with the winners ledger, and the actions taken.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "description": "Step ref."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Alias of step."
+          },
+          "against": {
+            "enum": [
+              "winners",
+              "team"
+            ]
+          },
+          "actions": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "missing": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.check.run": {
+      "description": "Live check of what the engine depends on: tick and schedule, probe reach, source ages, Mac evidence, drawings and shadows. Reads only.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "s": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "ref": {
+            "type": "string",
+            "description": "A ref."
+          },
+          "target": {
+            "enum": [
+              "engine",
+              "capture"
+            ]
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.check.file": {
+      "description": "Offline check of sequence and series files (PyYAML-parsed JSON): schema plus every P1b semantic check, with ERROR, PENDING and WARN tiers.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "path",
+                "body"
+              ]
+            },
+            "maxItems": 20
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "files"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.help.get": {
+      "description": "One reference from the server's own tables: code playbooks, step types, sources, refs, times, phases and the output contract.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "A code, a do, sources, refs, times, phases or output."
+          },
+          "code": {
+            "type": "string",
+            "description": "Alias of topic."
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.page.get": {
+      "description": "The read-only Sequences page model (contract sequences_page_v1): answer card, calendar, timelines, drawing cards with the shadow result, notes evidence and health. Hashes only.",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "s": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.events.list": {
+      "description": "Step events after a cursor, for seqctl watch to poll (the ops API caps a call at 10 s, so there is no server long-poll).",
+      "action": "read",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "series": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "s": {
+            "type": "string",
+            "description": "Series slug, e.g. review-giveaway-2026-10.",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+          },
+          "after": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "json": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.items.take": {
+      "description": "Take (or release) an alert, incident or ref for 60 minutes: re-sends to Tyler pause while the lease is live. Coordination only, no customer or provider effect.",
+      "action": "write",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Alert id, incident id or ref."
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          },
+          "note": {
+            "type": "string",
+            "description": "What you are doing."
+          },
+          "eta": {
+            "type": "string",
+            "description": "ISO time."
+          },
+          "release": {
+            "type": [
+              "boolean",
+              "string"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "by",
+          "note"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    },
+    "sequences.items.told": {
+      "description": "Record that Tyler was told: stops the 6-hourly re-sends for those alerts and shows under TOLD TYLER in every brief. Record only.",
+      "action": "write",
+      "access": "authenticated",
+      "connection_required": false,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "item": {
+            "type": "string",
+            "description": "One item."
+          },
+          "refs": {
+            "type": [
+              "array",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "description": "Who acts: claude@tyler-mac#<session>, luna@team1 (no dots, never an address).",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,40}@[a-z0-9][a-z0-9_-]{0,40}(#[A-Za-z0-9_-]{1,40})?$"
+          },
+          "note": {
+            "type": "string",
+            "description": "What you told him."
+          },
+          "asked": {
+            "type": "string",
+            "description": "An open question to him."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "by",
+          "note"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "description": "sequences_output_v1 (schema/output-v1.json)"
+      }
+    }
+  }
+}

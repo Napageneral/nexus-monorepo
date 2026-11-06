@@ -1,0 +1,74 @@
+{
+ "params": {
+  "notice": "step_ref",
+  "winner": "entry_ref"
+ },
+ "sequence": "prize-claim",
+ "steps": [
+  {
+   "at": "notice.delivered_at(winner)",
+   "do": "wait_until",
+   "id": "opens"
+  },
+  {
+   "after": "opens",
+   "closes": "opens + 7 days 23:59:59",
+   "do": "desk_handoff",
+   "id": "desk_row",
+   "row": "prize_claim"
+  },
+  {
+   "at": "desk_row.closes - 24h",
+   "do": "notify",
+   "id": "remind",
+   "when": "desk_row.state == open"
+  },
+  {
+   "deadline": "desk_row.closes",
+   "do": "wait_for",
+   "id": "settle",
+   "on_deadline": "expired",
+   "poll": "15m",
+   "until": [
+    "order_tagged",
+    "desk_ineligible",
+    "desk_declined"
+   ]
+  },
+  {
+   "after_any": [
+    "settle.expired",
+    "settle.ineligible",
+    "settle.declined",
+    "opens.bounced"
+   ],
+   "do": "promote_alternates",
+   "gate": "tyler",
+   "id": "promote"
+  },
+  {
+   "after": "promote",
+   "audience": [
+    "promote.alternate"
+   ],
+   "do": "send_flow_event",
+   "exclude": "consent_only",
+   "id": "alternate_note",
+   "message": "alternate_win",
+   "target": {
+    "delivered": "all"
+   },
+   "when": "promote.alternate != null"
+  },
+  {
+   "after": "alternate_note",
+   "do": "spawn",
+   "id": "alternate_claim",
+   "params": {
+    "notice": "alternate_note",
+    "winner": "promote.alternate"
+   },
+   "sequence": "prize-claim"
+  }
+ ]
+}

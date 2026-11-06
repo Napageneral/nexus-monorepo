@@ -88,3 +88,4 @@ Examples in this workspace:
 - [dispatch](/Users/tyler/nexus/home/projects/nexus/packages/apps/dispatch)
 - [glowbot](/Users/tyler/nexus/home/projects/nexus/packages/apps/glowbot)
 - [spike](/Users/tyler/nexus/home/projects/nexus/packages/apps/spike)
+- [sequences](/Users/tyler/nexus/home/projects/nexus/packages/apps/sequences/app): MoonSleep's approved email series and giveaways on the Jobs kernel (v0.1.0, P1b: import, observe, replay and shadow; read-only toward the world)

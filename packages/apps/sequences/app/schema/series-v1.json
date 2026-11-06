@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.moonsleep.co/apps/sequences/schema/series-v1.json",
+  "title": "Series file (sequences/series/<slug>.yaml, normalized to JSON)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "series",
+    "instances"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "sequence"
+      ]
+    },
+    {
+      "required": [
+        "from"
+      ]
+    }
+  ],
+  "properties": {
+    "series": {
+      "type": "string",
+      "description": "The series slug.",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "sequence": {
+      "type": "string",
+      "description": "<sequence>@<revision>",
+      "pattern": "^[a-z][a-z0-9-]{1,62}@\\d+$"
+    },
+    "from": {
+      "type": "string",
+      "description": "<template>@<version> (templates arrive with seqctl new).",
+      "pattern": "^[a-z][a-z0-9-]{1,62}@\\d+$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Words for people."
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Instance id, e.g. g1.",
+            "pattern": "^[a-z][a-z0-9_]{0,30}$"
+          }
+        },
+        "additionalProperties": {
+          "type": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ]
+        }
+      },
+      "description": "One instance per group; every other key is a param.",
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "owners": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "description": "Steps this owner runs."
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "A step id.",
+                    "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                  },
+                  "description": "Steps."
+                },
+                "runbook": {
+                  "type": "string",
+                  "description": "The owner's exact hand mechanism, printed by explain and repair."
+                }
+              }
+            }
+          ]
+        },
+        "review_sender": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "description": "Steps this owner runs."
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "A step id.",
+                    "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                  },
+                  "description": "Steps."
+                },
+                "runbook": {
+                  "type": "string",
+                  "description": "The owner's exact hand mechanism, printed by explain and repair."
+                }
+              }
+            }
+          ]
+        },
+        "mac": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "description": "Steps this owner runs."
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "A step id.",
+                    "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                  },
+                  "description": "Steps."
+                },
+                "runbook": {
+                  "type": "string",
+                  "description": "The owner's exact hand mechanism, printed by explain and repair."
+                }
+              }
+            }
+          ]
+        },
+        "task": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "description": "Steps this owner runs."
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "steps"
+              ],
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "A step id.",
+                    "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                  },
+                  "description": "Steps."
+                },
+                "runbook": {
+                  "type": "string",
+                  "description": "The owner's exact hand mechanism, printed by explain and repair."
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "adopt": {
+      "type": "string",
+      "description": "What the import adopts, in words."
+    },
+    "replan": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "type": "string",
+              "description": "Absolute CT time."
+            },
+            "ask_by": {
+              "type": "string",
+              "description": "Absolute CT time."
+            },
+            "not_before": {
+              "type": "string",
+              "description": "Absolute CT time."
+            },
+            "not_after": {
+              "type": "string",
+              "description": "Absolute CT time."
+            }
+          }
+        }
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "description": "Who approves what (P2 rulings decide).",
+      "additionalProperties": true
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shadow": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<instance>.<step>",
+            "pattern": "^[a-z][a-z0-9_]{0,30}\\.[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Mac steps the engine shadows (it computes the same result and compares)."
+        },
+        "observe_live": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<instance>.<step>",
+            "pattern": "^[a-z][a-z0-9_]{0,30}\\.[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Owner steps still ahead that the engine observes as they run."
+        },
+        "adopt_from_import": {
+          "type": "boolean",
+          "description": "A step whose evidence arrives in an import bundle becomes adopted."
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Outside files and settings the observed steps depend on (ax principle 13).",
+      "additionalProperties": true
+    },
+    "ask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "by",
+        "at",
+        "via"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Tyler's exact words."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who asked."
+        },
+        "at": {
+          "type": "string",
+          "description": "When (CT)."
+        },
+        "via": {
+          "type": "string",
+          "description": "chat, slack…"
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "about",
+          "set",
+          "why",
+          "source"
+        ],
+        "properties": {
+          "about": {
+            "type": "string",
+            "description": "What."
+          },
+          "set": {
+            "type": "string",
+            "description": "What we set."
+          },
+          "why": {
+            "type": "string",
+            "description": "Why."
+          },
+          "source": {
+            "type": "string",
+            "description": "Whose words, when."
+          }
+        }
+      },
+      "description": "Each reading of the ask, with its source."
+    },
+    "params": {
+      "type": "object",
+      "description": "Series-wide params.",
+      "additionalProperties": true
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "late_copy": {
+          "enum": [
+            "auto",
+            "ask"
+          ]
+        },
+        "resend": {
+          "enum": [
+            "never",
+            "once_after_settle_confirmed_missing"
+          ]
+        },
+        "alternates": {
+          "enum": [
+            "auto",
+            "gated"
+          ]
+        },
+        "stale_source": {
+          "enum": [
+            "wait",
+            "hold"
+          ]
+        },
+        "intake_fallback": {
+          "enum": [
+            "none",
+            "post_close_snapshot"
+          ]
+        },
+        "copy_drift": {
+          "enum": [
+            "hold",
+            "restore_before_send"
+          ]
+        }
+      }
+    },
+    "slip": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "slip"
+          ],
+          "properties": {
+            "slip": {
+              "type": "string",
+              "description": "e.g. 2d",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+            }
+          }
+        }
+      }
+    },
+    "material": {
+      "type": "object",
+      "description": "May only tighten the ruled material-change table (P2).",
+      "additionalProperties": true
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "owner",
+          "what"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Task id.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$"
+          },
+          "owner": {
+            "enum": [
+              "casey",
+              "tyler",
+              "agent",
+              "desk"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "description": "Hand tasks (do: task)."
+    },
+    "audience": {
+      "type": "object",
+      "description": "Template audience (seqctl new).",
+      "additionalProperties": true
+    },
+    "entrants": {
+      "type": "object",
+      "description": "Template entrants.",
+      "additionalProperties": true
+    },
+    "giveaway": {
+      "type": "object",
+      "description": "Template giveaway block.",
+      "additionalProperties": true
+    },
+    "consolation": {
+      "type": "object",
+      "description": "Template consolation block.",
+      "additionalProperties": true
+    },
+    "code": {
+      "type": "object",
+      "description": "Template code terms.",
+      "additionalProperties": true
+    },
+    "expect": {
+      "type": "object",
+      "description": "Expected audience: {count, within} or {at_most}. Outside it the step holds and asks (A9).",
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "string",
+              "description": "A param name, e.g. limit.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            }
+          ]
+        },
+        "within": {
+          "type": "string",
+          "description": "Tolerance, e.g. 5%.",
+          "pattern": "^\\d{1,3}(\\.\\d+)?%$"
+        },
+        "at_most": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "For audiences derived from entrants or drawings; anything up to N never re-asks."
+        }
+      }
+    },
+    "fence": {
+      "type": "object",
+      "description": "Series-wide fences.",
+      "additionalProperties": true
+    }
+  }
+}

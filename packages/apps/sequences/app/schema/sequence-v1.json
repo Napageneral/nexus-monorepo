@@ -1,0 +1,3048 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.moonsleep.co/apps/sequences/schema/sequence-v1.json",
+  "title": "Sequence definition (sequences/<name>.yaml, normalized to JSON)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sequence",
+    "steps"
+  ],
+  "properties": {
+    "sequence": {
+      "type": "string",
+      "description": "The sequence name.",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Set at registration; revision n+1 for an edit."
+    },
+    "title": {
+      "type": "string",
+      "description": "Words for people."
+    },
+    "description": {
+      "type": "string",
+      "description": "Notes."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "IANA zone for every time in the file.",
+      "default": "America/Chicago"
+    },
+    "program": {
+      "type": "string",
+      "description": "The rules owner, e.g. reviews.",
+      "pattern": "^[a-z][a-z0-9_]{0,62}$"
+    },
+    "needs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules_page": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "The public rules page.",
+              "pattern": "^https://"
+            },
+            "content_sha256": {
+              "type": "string",
+              "description": "Filled by `seqctl check --fill`."
+            }
+          }
+        },
+        "entry_window_utc": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "string",
+              "description": "opens",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+            },
+            {
+              "type": "string",
+              "description": "closes",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "last_night": {
+          "type": "string",
+          "description": "The last group night the rules allow.",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "prize_scope": {
+          "type": "string",
+          "description": "One prize per person across this scope.",
+          "pattern": "^[a-z][a-z0-9-]{1,62}$"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Instance params and their types.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "enum": [
+            "date",
+            "datetime",
+            "int",
+            "string",
+            "entry_ref",
+            "step_ref"
+          ]
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "description": "Named ops sources routes; sha + count + as_of are kept on every step that reads one.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from"
+          ],
+          "properties": {
+            "from": {
+              "type": "string",
+              "description": "The ops sources route name (never SQL).",
+              "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+            },
+            "max_age": {
+              "type": "string",
+              "description": "e.g. 24h",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+            },
+            "warn_before_due": {
+              "type": "string",
+              "description": "e.g. 2h",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+            },
+            "scope": {
+              "type": "string",
+              "description": "e.g. prize_scope",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            }
+          }
+        }
+      }
+    },
+    "exclude_sets": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A source name.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Sources whose people are excluded.",
+          "minItems": 1
+        }
+      }
+    },
+    "messages": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,62}$": {
+          "$ref": "#/$defs/message"
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "enum": [
+            "engine",
+            "review_sender",
+            "mac",
+            "task"
+          ],
+          "default": "engine"
+        },
+        "send": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "window": {
+              "type": "string",
+              "description": "Default send window.",
+              "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$",
+              "default": "09:00-21:00"
+            },
+            "consent_check": {
+              "enum": [
+                "klaviyo"
+              ]
+            },
+            "settle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Read offsets.",
+                "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+              },
+              "description": "Delivery reads after a send."
+            },
+            "settle_gate": {
+              "type": "string",
+              "description": "The read that `X settled` waits for.",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "30m"
+            },
+            "shard": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 250
+            },
+            "fence": {
+              "type": "object",
+              "description": "Default contact fences.",
+              "additionalProperties": true
+            }
+          }
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "message": {
+      "type": "object",
+      "description": "One approved email: Casey's words, its own metric and its own one-email flow.",
+      "additionalProperties": false,
+      "required": [
+        "template",
+        "sha256",
+        "metric",
+        "consent"
+      ],
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "The template key in email-templates/flows.",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,80}$"
+        },
+        "sha256": {
+          "type": "string",
+          "description": "The approved copy sha256; `observed` for a message only the Mac or the review sender sends; filled by `seqctl check --fill`."
+        },
+        "campaign_name": {
+          "type": "string",
+          "description": "For an observed Mac message: its exact Klaviyo campaign name, with {night} and {n} fills."
+        },
+        "flow": {
+          "type": "string",
+          "description": "For an observed review-sender message: its Klaviyo flow id."
+        },
+        "metric": {
+          "type": "string",
+          "description": "The message's own Klaviyo metric.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "consent": {
+          "enum": [
+            "transactional",
+            "marketing",
+            "review_reach",
+            "consent_only"
+          ]
+        },
+        "says": {
+          "type": "object",
+          "description": "Time words in the copy and the wall-clock window each is true in.",
+          "additionalProperties": {
+            "type": "string",
+            "description": "HH:MM-HH:MM",
+            "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+          }
+        },
+        "late": {
+          "type": "string",
+          "description": "The message used past the says-window (its own metric and flow).",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "promises": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "step",
+              "by"
+            ],
+            "properties": {
+              "says": {
+                "type": "string",
+                "description": "The promise in the copy."
+              },
+              "step": {
+                "type": "string",
+                "description": "The step that keeps it.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "by": {
+                "type": "string",
+                "description": "Time expression."
+              }
+            }
+          },
+          "description": "Customer promises the plan must keep."
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "needs"
+            ],
+            "properties": {
+              "says": {
+                "type": "string",
+                "description": "The stated fact."
+              },
+              "needs": {
+                "type": "string",
+                "description": "The step that makes it true.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              }
+            }
+          },
+          "description": "Facts the copy states (EM-1 / P7)."
+        },
+        "fills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Fill name.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Typed fills the copy takes."
+        },
+        "description": {
+          "type": "string",
+          "description": "Notes."
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "do": {
+          "enum": [
+            "assert",
+            "send_flow_event",
+            "free_entry_intake",
+            "draw",
+            "spawn",
+            "approval",
+            "issue_codes",
+            "wait_until",
+            "wait_for",
+            "desk_handoff",
+            "notify",
+            "promote_alternates",
+            "task",
+            "arm_flows",
+            "agent"
+          ],
+          "description": "The step type (never `kind`, NX-P17)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "assert"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_assert"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "send_flow_event"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_send_flow_event"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "free_entry_intake"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_free_entry_intake"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "draw"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_draw"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "spawn"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_spawn"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "approval"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_approval"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "issue_codes"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_issue_codes"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "wait_until"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_wait_until"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "wait_for"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_wait_for"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "desk_handoff"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_desk_handoff"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "notify"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_notify"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "promote_alternates"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_promote_alternates"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "task"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_task"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "arm_flows"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_arm_flows"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "do": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "do"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/do_agent"
+          }
+        }
+      ]
+    },
+    "do_assert": {
+      "type": "object",
+      "description": "Preconditions that fail closed (dependents hold, A8).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "checks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "assert"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A named check or an expression like 'night <= last_night'."
+          },
+          "description": "Checks.",
+          "minItems": 1
+        }
+      },
+      "x-outputs": [
+        "passed",
+        "evidence"
+      ]
+    },
+    "do_send_flow_event": {
+      "type": "object",
+      "description": "One approved email to every person in a frozen audience, one Klaviyo event each to the message's own one-email flow.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "message"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "send_flow_event"
+        },
+        "message": {
+          "type": "string",
+          "description": "A key of messages.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Another step's output, e.g. draw_1.winners.",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "<step>.<output>"
+              },
+              "description": "Explicit people from step outputs."
+            },
+            {
+              "type": "object",
+              "description": "An audience rule (rule, members_of, has_review, us_only, band, limit…), resolved by an ops sources route.",
+              "additionalProperties": true
+            }
+          ],
+          "description": "Who receives the message."
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Every send declares exclude."
+        },
+        "fence": {
+          "type": "object",
+          "description": "Contact fences, e.g. {review_email: 24h, quiet_days: 7}.",
+          "additionalProperties": true
+        },
+        "fills": {
+          "type": "object",
+          "description": "Per-person or per-send fills: a time expression, a step output or a literal.",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        },
+        "expect": {
+          "type": "object",
+          "description": "Expected audience: {count, within} or {at_most}. Outside it the step holds and asks (A9).",
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "string",
+                  "description": "A param name, e.g. limit.",
+                  "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                }
+              ]
+            },
+            "within": {
+              "type": "string",
+              "description": "Tolerance, e.g. 5%.",
+              "pattern": "^\\d{1,3}(\\.\\d+)?%$"
+            },
+            "at_most": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "For audiences derived from entrants or drawings; anything up to N never re-asks."
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "description": "What counts as done, from provider or database truth.",
+          "additionalProperties": false,
+          "properties": {
+            "accepted": {
+              "type": "string",
+              "description": "e.g. 95%",
+              "pattern": "^(\\d{1,3}(\\.\\d+)?%|all)$"
+            },
+            "delivered": {
+              "type": "string",
+              "description": "e.g. 99% or all",
+              "pattern": "^(\\d{1,3}(\\.\\d+)?%|all)$"
+            }
+          }
+        },
+        "on_partial": {
+          "enum": [
+            "continue",
+            "block"
+          ],
+          "description": "continue lets dependents run on a partial result; block holds them."
+        }
+      },
+      "x-outputs": [
+        "first_post",
+        "posted",
+        "received",
+        "winners_reached",
+        "delivered_at"
+      ]
+    },
+    "do_free_entry_intake": {
+      "type": "object",
+      "description": "Free (AMOE) entries for a drawing window from the server's mailbox capture (P3; the Mac this week).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "free_entry_intake"
+        },
+        "subject_has": {
+          "type": "string",
+          "description": "Subject filter."
+        },
+        "between": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "string",
+              "description": "start"
+            },
+            {
+              "type": "string",
+              "description": "end"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "The intake window, two time expressions."
+        },
+        "from_members_of": {
+          "type": "string",
+          "description": "Only members of this step's audience count.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        }
+      },
+      "x-outputs": [
+        "free_hashes",
+        "count"
+      ]
+    },
+    "do_draw": {
+      "type": "object",
+      "description": "Commit-reveal drand quicknet drawing of winners and alternates (the draw_group.py v3 method).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "closes",
+        "entrants",
+        "pick"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "draw"
+        },
+        "closes": {
+          "type": "string",
+          "description": "Entries close (must be before `at`)."
+        },
+        "entrants": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "members_of": {
+              "type": "string",
+              "description": "The step whose audience may enter.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            },
+            "reviews": {
+              "enum": [
+                "first_submission_after_own_invitation"
+              ]
+            },
+            "free_entries": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A free_entry_intake step.",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "description": "Intake steps whose entries count (drawing-1 free entrants carry over)."
+            }
+          }
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Every send declares exclude."
+        },
+        "pick": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "winners"
+          ],
+          "properties": {
+            "winners": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "alternates": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "beacon": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "drand": {
+              "enum": [
+                "quicknet"
+              ]
+            },
+            "round_after": {
+              "type": "string",
+              "description": "e.g. 90s",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+            }
+          }
+        }
+      },
+      "x-outputs": [
+        "winners",
+        "alternates",
+        "non_winners",
+        "entries",
+        "entry_list_sha256"
+      ]
+    },
+    "do_spawn": {
+      "type": "object",
+      "description": "One child sequence per item (for example a prize claim per winner).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "sequence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "spawn"
+        },
+        "sequence": {
+          "type": "string",
+          "description": "The child sequence name.",
+          "pattern": "^[a-z][a-z0-9-]{1,62}$"
+        },
+        "each": {
+          "type": "string",
+          "description": "<step>.<output> giving the items.",
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "x-outputs": [
+        "children"
+      ]
+    },
+    "do_approval": {
+      "type": "object",
+      "description": "Waits for an identity-bound decision on an exact digest (series go, money, resend, promotion).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "who"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "approval"
+        },
+        "who": {
+          "enum": [
+            "tyler",
+            "casey"
+          ]
+        },
+        "for": {
+          "enum": [
+            "go",
+            "money",
+            "resend",
+            "promotion",
+            "reconfirm",
+            "words"
+          ]
+        },
+        "shows": {
+          "type": "object",
+          "description": "What the approval prints.",
+          "additionalProperties": true
+        },
+        "ask_by": {
+          "type": "string",
+          "description": "Reminder time; A6 follows from it."
+        }
+      },
+      "x-outputs": [
+        "decision",
+        "decided_at"
+      ]
+    },
+    "do_issue_codes": {
+      "type": "object",
+      "description": "Single-use Shopify discount codes through the ops API (P2).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "code"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "issue_codes"
+        },
+        "via": {
+          "enum": [
+            "ops_api"
+          ]
+        },
+        "for": {
+          "type": "string",
+          "description": "Who gets a code."
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "An exclude set name, a source name, or consent_only (unsubscribed and suppressed only; ruled for winner notes).",
+                "pattern": "^[a-z][a-z0-9_]{0,62}$"
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Every send declares exclude."
+        },
+        "code": {
+          "type": "object",
+          "description": "Code terms: off, on, single_use, expires, tag…",
+          "additionalProperties": true
+        }
+      },
+      "x-outputs": [
+        "holders",
+        "code",
+        "expires_on"
+      ]
+    },
+    "do_wait_until": {
+      "type": "object",
+      "description": "Waits for a clock time or another step's result.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "wait_until"
+        }
+      },
+      "x-outputs": [
+        "at",
+        "bounced"
+      ]
+    },
+    "do_wait_for": {
+      "type": "object",
+      "description": "Waits for a condition until a deadline, evaluated by the tick at the declared poll.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "until"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "wait_for"
+        },
+        "poll": {
+          "type": "string",
+          "description": "e.g. 15m",
+          "pattern": "^\\d+\\s*(s|m|h|d|days?)$"
+        },
+        "until": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A named condition."
+          },
+          "description": "Any of these ends the wait.",
+          "minItems": 1
+        },
+        "deadline": {
+          "type": "string",
+          "description": "Time expression."
+        },
+        "on_deadline": {
+          "type": "string",
+          "description": "The outcome at the deadline, e.g. expired.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        }
+      },
+      "x-outputs": [
+        "outcome"
+      ]
+    },
+    "do_desk_handoff": {
+      "type": "object",
+      "description": "Opens a Customer Service row (prize claim) carrying a printed $0 draft order for Tyler's approval (P2).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "row"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "desk_handoff"
+        },
+        "row": {
+          "enum": [
+            "prize_claim"
+          ]
+        },
+        "closes": {
+          "type": "string",
+          "description": "Time expression."
+        }
+      },
+      "x-outputs": [
+        "state",
+        "closes"
+      ]
+    },
+    "do_notify": {
+      "type": "object",
+      "description": "An internal alert or reminder to Tyler (or Casey for copy and flow issues). Never to customers.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "notify"
+        }
+      },
+      "x-outputs": []
+    },
+    "do_promote_alternates": {
+      "type": "object",
+      "description": "Hands an unclaimed, ineligible or bounced prize to the next alternate (gated).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "promote_alternates"
+        }
+      },
+      "x-outputs": [
+        "alternate"
+      ]
+    },
+    "do_task": {
+      "type": "object",
+      "description": "Hand work with a verify read, so everything that gates a send is on the timeline.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do",
+        "owner",
+        "what"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "task"
+        },
+        "owner": {
+          "enum": [
+            "casey",
+            "tyler",
+            "agent",
+            "desk"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "description": "Time expression."
+        },
+        "what": {
+          "type": "string",
+          "description": "What the person does."
+        },
+        "evidence": {
+          "enum": [
+            "url",
+            "text",
+            "read"
+          ]
+        },
+        "verify": {
+          "type": "string",
+          "description": "The read route that proves it is done."
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A step id.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Steps this task gates."
+        }
+      },
+      "x-outputs": [
+        "done_at",
+        "evidence"
+      ]
+    },
+    "do_arm_flows": {
+      "type": "object",
+      "description": "Turns each message's flow live once per series at activation (P2).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "arm_flows"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A message key.",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$"
+          },
+          "description": "Messages to arm."
+        }
+      },
+      "x-outputs": [
+        "armed"
+      ]
+    },
+    "do_agent": {
+      "type": "object",
+      "description": "A bounded agent step that only proposes (P5).",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "do"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short snake_case step id, unique in the sequence.",
+          "pattern": "^[a-z][a-z0-9_]{0,62}$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional words for people."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional notes."
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+              "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+              "examples": [
+                "draw_1",
+                "winner_note_1 settled"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "A step id, optionally followed by ' settled' (the step reached its settle gate).",
+                "pattern": "^[a-z][a-z0-9_]*( settled)?$",
+                "examples": [
+                  "draw_1",
+                  "winner_note_1 settled"
+                ]
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "Steps that must meet their target first (or end partial with on_partial: continue)."
+        },
+        "after_any": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "<step>.<outcome>",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"
+          },
+          "description": "An OR over outcomes."
+        },
+        "when": {
+          "type": "string",
+          "description": "A guard on upstream outputs, e.g. \"promote.alternate != null\"."
+        },
+        "at": {
+          "type": "string",
+          "description": "When the step is due, in the sequence's timezone: 'night+N HH:MM[:SS]', 'YYYY-MM-DD HH:MM', '<step>.first_post + 24h' or '<instant> + N days HH:MM:SS'.",
+          "examples": [
+            "night 19:30",
+            "night+1 08:00",
+            "notice.delivered_at(winner)"
+          ]
+        },
+        "not_before": {
+          "type": "string",
+          "description": "Earliest start, same time grammar as `at`."
+        },
+        "not_after": {
+          "type": "string",
+          "description": "Latest start; kernel retries stop here."
+        },
+        "window": {
+          "type": "string",
+          "description": "Wall-clock window on the due day, e.g. 19:17-23:00.",
+          "pattern": "^\\d{2}:\\d{2}(:\\d{2})?-\\d{2}:\\d{2}(:\\d{2})?$"
+        },
+        "late": {
+          "type": "object",
+          "description": "What happens when the step runs past its time: hold (stop, alert, wait for a person), late_copy (switch to the message's `late` variant), run (draws), skip (only if declared).",
+          "additionalProperties": false,
+          "properties": {
+            "grace": {
+              "type": "string",
+              "description": "How long after due_at before the step counts as late (A1).",
+              "pattern": "^\\d+\\s*(s|m|h|d|days?)$",
+              "default": "10m",
+              "examples": [
+                "10m",
+                "15m"
+              ]
+            },
+            "then": {
+              "enum": [
+                "hold",
+                "late_copy",
+                "run",
+                "skip"
+              ],
+              "default": "hold"
+            },
+            "after_that": {
+              "enum": [
+                "hold",
+                "skip"
+              ],
+              "description": "After the late copy's own window has passed."
+            }
+          }
+        },
+        "gate": {
+          "enum": [
+            "tyler",
+            "casey"
+          ],
+          "description": "A per-step go (P2)."
+        },
+        "do": {
+          "const": "agent"
+        },
+        "output_schema": {
+          "type": "string",
+          "description": "The proposal schema, e.g. steward-v1."
+        },
+        "budget_usd": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "x-outputs": [
+        "proposal"
+      ]
+    }
+  }
+}
