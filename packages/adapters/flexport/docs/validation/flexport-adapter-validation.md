@@ -9,7 +9,7 @@
 - against the local fake Flexport API: one token request across many calls and concurrent processes; the 24 h token budget refuses before anything is sent; a changed credential fingerprint discards the token, a new secret keeps the client's request history and a new client id resets it; an unsafe or linked token cache is refused;
 - a 401 on a token issued minutes earlier records `auth_failed_at`, sends no token request for an hour and ends the pass at once (one token request, one bundle call for twelve shipments); a 401 on an older token retires it once;
 - renewal keeps a still-valid token while the token endpoint fails, and failed token requests back off 15 min, 1 h, 4 h until a success resets them;
-- no redirect is followed and no token is sent to another origin; error text carries no response body, token or secret;
+- no redirect is followed and no token is sent to another origin; error text carries no token or secret, a read's error no response text, and a refused write's error only Flexport's cleaned, capped `error.message`;
 - collections page by number with their original filters and drop rows of another shipment;
 - the bundle has the six keys the Python reader takes, identical input builds a byte-identical Record, an unchanged bundle is not re-emitted within 24 h and is re-emitted byte for byte after 24 h, and a backfill re-emits identical Records;
 - timestamps are monotonic per Record: a return to an earlier exact bundle or network is a newer Record, and an unchanged re-emission keeps its timestamp;

@@ -126,6 +126,31 @@ test("the built executable backfills, shares one token across processes and guar
     });
     assert.ok(fake.requests.at(-1)!.body.equals(Buffer.from(bodyJson)));
 
+    // What Flexport said about a refused write reaches stderr, which the runtime hands to its caller.
+    fake.inject({
+      path: "/bookings",
+      method: "POST",
+      status: 400,
+      body: { _object: "/api/response", data: null, error: { _object: "/api/error", status: 400, code: "invalid_param", message: "Missing property origin_address_ref" } },
+    });
+    const declined = await run(
+      [
+        "flexport.bookings.create",
+        "--connection",
+        CONNECTION_ID,
+        "--payload-json",
+        JSON.stringify({
+          body_json: bodyJson,
+          body_sha256: createHash("sha256").update(bodyJson).digest("hex"),
+          go: "Tyler: go",
+          confirm: "SEND_TO_FLEXPORT",
+        }),
+      ],
+      env,
+    );
+    assert.equal(declined.code, 1);
+    assert.match(declined.stderr, /\[ERROR\] Flexport POST \/bookings failed \(HTTP 400, invalid_param\): Missing property origin_address_ref/);
+
     // A real commercial invoice is well over 128 KiB once base64'd into body_json: past the Linux
     // limit on the one argv string the runtime would put an inline --payload-json in. The runtime
     // writes such a payload to a 0600 file and passes --payload-file because adapter.info says so.

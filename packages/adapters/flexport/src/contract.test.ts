@@ -34,7 +34,7 @@ test("package manifest is the stable Flexport adapter identity", () => {
   const { methods, ...identity } = readJson("adapter.nexus.json");
   assert.deepEqual(identity, {
     id: "flexport",
-    version: "0.1.0",
+    version: "0.1.1",
     displayName: "Flexport",
     description:
       "Flexport API v2 adapter: shipment bundles, final documents and the network as Records, plus four guarded writes.",
@@ -77,14 +77,14 @@ test("manifest, package.json, lockfile and adapter.info carry one version", asyn
     readJson("package-lock.json").version,
     info.version,
   ];
-  assert.deepEqual(versions, ["0.1.0", "0.1.0", "0.1.0", "0.1.0"]);
+  assert.deepEqual(versions, ["0.1.1", "0.1.1", "0.1.1", "0.1.1"]);
   assert.equal(info.platform, readJson("adapter.nexus.json").platform);
 });
 
 test("the published OpenAPI contract lists every method with its action", () => {
   const openapi = readFileSync(resolve(PACKAGE_ROOT, "api/openapi.yaml"), "utf8");
   assert.match(openapi, /^openapi: 3\.1\.0$/m);
-  assert.match(openapi, /^  version: 0\.1\.0$/m);
+  assert.match(openapi, /^  version: 0\.1\.1$/m);
   const { methods } = readJson("adapter.nexus.json");
   for (const name of METHOD_NAMES) {
     const block = openapi.split(`  /operations/${name}:\n`)[1]?.split(/\n  \/operations\//)[0];

@@ -9,7 +9,7 @@ This adapter connects MoonSleep's Flexport API v2 client to Nex. It turns each F
 
 ## Connection identity
 
-- adapter and platform: `flexport`; version `0.1.0`
+- adapter and platform: `flexport`; version `0.1.1`
 - auth method: `flexport_client_credentials` (`api_key`, service `flexport`) with fields `client_id` (text, required), `client_secret` (secret, required), `account` (text, optional)
 - production connection: `moonsleep-flexport`, account `moonsleep`, credential row `flexport/moonsleep-flexport`
 - the adapter reads only `credential.fields.client_id` and `credential.fields.client_secret`, never `credential.value`
@@ -37,7 +37,7 @@ Connection config (`runtime.config`, never secret):
 - A changed credential discards the cached token, the backoff and `auth_failed_at`. The request history is kept when only the secret changed and reset only when the client id changed (Flexport counts token requests per client); a cache written before the client fingerprint was recorded keeps its history.
 - Health and `flexport.status` never touch the network.
 - Every call sends `Authorization: Bearer`, `Flexport-Version: 2` and `Accept: application/json`, refuses redirects ("redirected (HTTP 302); not followed"), and refuses any URL whose origin differs from the base URL before sending.
-- Errors carry the method, path, HTTP status and, when it is a plain slug, the envelope's `error.code`; never a response body, token or secret.
+- Errors carry the method, path, HTTP status and, when it is a plain slug, the envelope's `error.code`; never a token or secret. A read's error carries no response text. A write Flexport refuses (HTTP 4xx) also carries the envelope's `error.message`, because that is what names the field: one printable line of at most 300 characters, with the client id, client secret, token and any bearer value removed. A 5xx carries no message.
 - Reads retry 429/502/503/504 three times honoring Retry-After up to 30 s (else 1, 2, 4 s). Writes retry only 429, when Flexport did not act.
 - Writes are `flexport.products.create` (POST `/products`), `flexport.products.update` (PATCH `/products/{product_id}`), `flexport.bookings.create` (POST `/bookings`) and `flexport.documents.create` (POST `/documents`). Each refuses before any network call unless `body_json` is a JSON object, `body_sha256` equals its sha256, `go` holds Tyler's words and `confirm` is `SEND_TO_FLEXPORT`. The body is sent byte for byte and never logged or returned. The monitor, backfill and health never write; health reports `automatic_writes: false`.
 - `adapter.info` declares `supports_payload_file: true`. The runtime then passes a method payload over 64 KiB as `--payload-file <0600 file>` instead of one inline `--payload-json` argument, which Linux caps at 128 KiB (a base64 document body passes that at about 96 KB of file). The SDK opens the file once without following a link, requires a regular file holding a JSON object, and never quotes it in an error. `adapter.nexus.json` does not carry the flag: the Nex manifest schema is strict and has no such key. Payloads of 64 KiB or less still arrive inline on the adapter's command line.

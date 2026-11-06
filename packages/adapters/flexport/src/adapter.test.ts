@@ -198,7 +198,7 @@ test("adapter.info declares the api_key auth, ingest operations and exactly eigh
   const reflected = await info();
   assert.equal(reflected.platform, "flexport");
   assert.equal(reflected.name, "flexport-adapter");
-  assert.equal(reflected.version, "0.1.0");
+  assert.equal(reflected.version, "0.1.1");
   assert.equal(reflected.credential_service, "flexport");
   assert.equal(reflected.supports_payload_file, true, "document bodies over 64 KiB arrive as a payload file");
   assert.deepEqual(reflected.auth?.methods, [
@@ -718,7 +718,7 @@ test("every write sends body_json byte for byte and returns the Flexport object"
   });
 });
 
-test("a refused write reports the HTTP status and slug code only", async () => {
+test("a refused write reports the status, the slug code and what Flexport said about the field", async () => {
   await withHarness(async (harness) => {
     harness.fake.inject({
       path: "/bookings",
@@ -730,9 +730,43 @@ test("a refused write reports the HTTP status and slug code only", async () => {
     await assert.rejects(
       call(harness, "flexport.bookings.create", { body_json: bodyJson, body_sha256: sha256(bodyJson), go: "go", confirm: "SEND_TO_FLEXPORT" }),
       (error: Error) => {
-        assert.equal(error.message, "Flexport POST /bookings failed (HTTP 400, invalid_param)");
+        assert.equal(error.message, "Flexport POST /bookings failed (HTTP 400, invalid_param): origin_address_ref does not exist in your network");
         return true;
       },
     );
+  });
+});
+
+test("a refused write's detail is one short printable line with no credential", async () => {
+  await withHarness(async (harness) => {
+    const write = () => {
+      const bodyJson = '{"name":"x"}';
+      return call(harness, "flexport.bookings.create", { body_json: bodyJson, body_sha256: sha256(bodyJson), go: "go", confirm: "SEND_TO_FLEXPORT" });
+    };
+    harness.fake.inject({
+      path: "/bookings",
+      method: "POST",
+      status: 400,
+      body: { error: { code: "invalid_param", message: `Missing property\n  hs_code \u0007 ${FAKE_CLIENT_ID} ${FAKE_CLIENT_SECRET} Bearer abc.def` } },
+    });
+    await assert.rejects(write(), (error: Error) => {
+      assert.equal(error.message, "Flexport POST /bookings failed (HTTP 400, invalid_param): Missing property hs_code <redacted> <redacted> Bearer <redacted>");
+      return true;
+    });
+    harness.fake.inject({ path: "/bookings", method: "POST", status: 400, body: { error: { code: "invalid_param", message: "x".repeat(5000) } } });
+    await assert.rejects(write(), (error: Error) => {
+      assert.ok(error.message.endsWith("x...") && error.message.length < 400, "capped");
+      return true;
+    });
+    harness.fake.inject({ path: "/bookings", method: "POST", status: 400, body: { error: { code: "invalid_param", message: "\u0007\n" } } });
+    await assert.rejects(write(), (error: Error) => {
+      assert.equal(error.message, "Flexport POST /bookings failed (HTTP 400, invalid_param)", "nothing printable: the code alone");
+      return true;
+    });
+    harness.fake.inject({ path: "/bookings", method: "POST", status: 500, body: { error: { code: "server_error", message: "stack trace with internals" } } });
+    await assert.rejects(write(), (error: Error) => {
+      assert.equal(error.message, "Flexport POST /bookings failed (HTTP 500, server_error)", "a server error is not a refusal: no detail");
+      return true;
+    });
   });
 });

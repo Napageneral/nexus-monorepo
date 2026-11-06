@@ -39,13 +39,13 @@ async function startFakeRuntime() {
       reply({
         ok: true,
         staged_artifact: {
-          server_path: "/var/lib/nex/staged/flexport-0.1.0.tar.gz",
+          server_path: "/var/lib/nex/staged/flexport-0.1.1.tar.gz",
           sha256: createHash("sha256").update(body).digest("hex"),
           size_bytes: body.length,
         },
       });
     } else if (url.pathname === "/api/operator/packages/install") {
-      reply({ ok: true, package_id: "flexport", version: "0.1.0", status: "active", active_release_path: "/opt/x" });
+      reply({ ok: true, package_id: "flexport", version: "0.1.1", status: "active", active_release_path: "/opt/x" });
     } else {
       response.writeHead(404);
       response.end();
@@ -118,7 +118,7 @@ test(
         service: "flexport",
       });
 
-      const artifact = join(root, "flexport-0.1.0.tar.gz");
+      const artifact = join(root, "flexport-0.1.1.tar.gz");
       writeFileSync(artifact, randomBytes(4096));
       const artifactSha256 = createHash("sha256").update(readFileSync(artifact)).digest("hex");
       const installed = await runScript(
