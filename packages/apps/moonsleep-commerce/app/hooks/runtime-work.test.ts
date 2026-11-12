@@ -110,6 +110,38 @@ const COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
   "records.get_many",
 ]);
 
+// The runtime's jobs.list and schedules.list: newest first, 100 rows unless a
+// limit is given (at most 1,000), internal definitions dropped after the limit.
+function runtimePage(rows: Array<Record<string, unknown>>, params: Record<string, unknown> = {}) {
+  const limit = Math.max(1, Math.min(1_000, Number(params.limit ?? 100)));
+  const offset = Math.max(0, Number(params.offset ?? 0));
+  return rows
+    .toReversed()
+    .slice(offset, offset + limit)
+    .filter((row) => row.internal !== true);
+}
+
+// Definitions registered after this app's own, as the moonsleep-site bridge
+// timers were from 2026-09-11; one in fifteen is internal.
+function newerForeignWork(count: number) {
+  const jobs = Array.from({ length: count }, (_, index) => ({
+    id: `foreign-job-${index}`,
+    name: `moonsleep-site.timer.unit-${index}`,
+    status: "active",
+    internal: index % 15 === 0,
+  }));
+  const schedules = jobs.map((job) => ({
+    id: job.id.replace("job", "schedule"),
+    name: job.name,
+    job_definition_id: job.id,
+    expression: "0 * * * * *",
+    timezone: "UTC",
+    enabled: 1,
+    internal: job.internal,
+  }));
+  return { jobs, schedules };
+}
+
 function runtimeFixture(
   initial: {
     jobs?: Array<Record<string, unknown>>;
@@ -122,7 +154,9 @@ function runtimeFixture(
   const schedules = [...(initial.schedules ?? [])];
   const runtime = {
     jobs: {
-      list: vi.fn(async () => ({ payload: { jobs } })),
+      list: vi.fn(async (params?: Record<string, unknown>) => ({
+        payload: { jobs: runtimePage(jobs, params) },
+      })),
       create: vi.fn(async (params: Record<string, unknown>) => {
         const job = { id: `job-${jobs.length + 1}`, ...params };
         jobs.push(job);
@@ -167,7 +201,9 @@ function runtimeFixture(
       },
     },
     schedules: {
-      list: vi.fn(async () => ({ payload: { schedules } })),
+      list: vi.fn(async (params?: Record<string, unknown>) => ({
+        payload: { schedules: runtimePage(schedules, params) },
+      })),
       create: vi.fn(async (params: Record<string, unknown>) => {
         const schedule = {
           id: `schedule-${schedules.length + 1}`,
@@ -399,6 +435,88 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.runtime.events.subscriptions.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.create).not.toHaveBeenCalled();
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+  });
+
+  it("re-installs over owned work that newer definitions pushed past the first page", async () => {
+    // On the primary (2026-10-19) the default jobs.list page holds 74 of 160
+    // visible definitions, newest first, and every job this app owns (created
+    // 2026-07-21 to 08-31) is older than the bridge timers registered from
+    // 2026-09-11. A re-install that read one page created a second definition
+    // and a second schedule for each of them.
+    const fixture = runtimeFixture();
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+    const foreign = newerForeignWork(1_050);
+    fixture.jobs.push(...foreign.jobs);
+    fixture.schedules.push(...foreign.schedules);
+    vi.clearAllMocks();
+
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+
+    expect(fixture.runtime.jobs.create).not.toHaveBeenCalled();
+    expect(fixture.runtime.jobs.update).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.create).not.toHaveBeenCalled();
+    expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
+    expect(fixture.runtime.events.subscriptions.create).not.toHaveBeenCalled();
+    expect(fixture.jobs).toHaveLength(15 + 1_050);
+    expect(fixture.schedules).toHaveLength(12 + 1_050);
+    // The first full page came back short once internal rows were dropped;
+    // the owned work was only on the second.
+    expect(fixture.runtime.jobs.list).toHaveBeenCalledWith({ limit: 1_000, offset: 1_000 });
+    expect(fixture.runtime.schedules.list).toHaveBeenCalledWith({ limit: 1_000, offset: 1_000 });
+  });
+
+  it("refuses to choose between two definitions of an owned job", async () => {
+    const fixture = runtimeFixture();
+    await ensureMoonSleepCommerceRuntimeWork({
+      runtime: fixture.runtime,
+      appId: "moonsleep-commerce",
+    });
+    const effects = fixture.jobs.find(
+      (row) => row.name === "moonsleep-commerce.shopify-paid-order-effects",
+    )!;
+    fixture.jobs.push({ ...effects, id: "job-duplicate" });
+    vi.clearAllMocks();
+
+    await expect(
+      ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" }),
+    ).rejects.toThrow(
+      "MoonSleep commerce job moonsleep-commerce.shopify-paid-order-effects has duplicate definitions",
+    );
+    expect(fixture.runtime.jobs.create).not.toHaveBeenCalled();
+    expect(fixture.runtime.jobs.update).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when jobs.list never reaches an empty page", async () => {
+    const fixture = runtimeFixture();
+    fixture.runtime.jobs.list.mockImplementation(async () => ({
+      payload: { jobs: [{ id: "foreign-job", name: "another-app.job", status: "active" }] },
+    }));
+
+    await expect(
+      ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" }),
+    ).rejects.toThrow("Nex jobs.list reached its page bound");
+    expect(fixture.runtime.jobs.list).toHaveBeenCalledTimes(20);
+    expect(fixture.runtime.jobs.list).toHaveBeenLastCalledWith({ limit: 1_000, offset: 19_000 });
+    expect(fixture.runtime.jobs.create).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a jobs.list page is not a list instead of creating every job", async () => {
+    const fixture = runtimeFixture();
+    fixture.runtime.jobs.list.mockImplementation(async () => ({
+      ok: false,
+      error: { message: "jobs.list failed: unavailable" },
+    }));
+
+    await expect(
+      ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" }),
+    ).rejects.toThrow("Nex jobs.list did not return a jobs list");
+    expect(fixture.runtime.jobs.create).not.toHaveBeenCalled();
   });
 
   it("repairs Shopify projectors that were defaulted into the workflow lane", async () => {
@@ -751,6 +869,50 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.schedules.slice(0, 2).map((schedule) => schedule.enabled)).toEqual([1, 1]);
   });
 
+  function liveProjectors() {
+    return runtimeFixture({
+      jobs: [
+        { id: "job-c", name: "moonsleep-commerce.shopify-customer-identity", status: "active" },
+        { id: "job-o", name: "moonsleep-commerce.shopify-order-commerce", status: "active" },
+      ],
+      subscriptions: [
+        { id: "sub-c", job_definition_id: "job-c", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "customer" }), enabled: 1 },
+        { id: "sub-o", job_definition_id: "job-o", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "order" }), enabled: 1 },
+        { id: "sub-l", job_definition_id: "job-o", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "line_item" }), enabled: 1 },
+      ],
+    });
+  }
+
+  it("leaves a live projector's enabled subscriptions alone (0.3.39: production keeps writing orders and customers)", async () => {
+    const fixture = liveProjectors();
+    await ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" });
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    const calls = (fixture.runtime.jobs.update as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls;
+    for (const id of ["job-c", "job-o"]) {
+      const update = calls.map(([params]) => params).find((params) => params.id === id);
+      expect(update?.status).toBe("active");
+    }
+  });
+
+  it("after its own deactivate, the next ensure turns both projectors back on and keeps their subscriptions", async () => {
+    const fixture = liveProjectors();
+    await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
+    const jobUpdates = (fixture.runtime.jobs.update as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls;
+    expect(jobUpdates.map(([params]) => params)).toEqual(
+      expect.arrayContaining([{ id: "job-c", status: "inactive" }, { id: "job-o", status: "inactive" }]),
+    );
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    await ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" });
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    const after = jobUpdates.map(([params]) => params).filter((params) => "script_path" in params);
+    for (const id of ["job-c", "job-o"]) {
+      expect(after.find((params) => params.id === id)?.status).toBe("active");
+    }
+  });
+
   it("disables and removes only the exact owned work", async () => {
     const fixture = runtimeFixture({
       jobs: [
@@ -781,10 +943,8 @@ describe("MoonSleep commerce runtime work", () => {
       ],
     });
     await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
-    expect(fixture.runtime.events.subscriptions.update).toHaveBeenCalledWith({
-      id: "subscription-1",
-      enabled: false,
-    });
+    // 0.3.39: the deactivate leaves subscriptions alone (an inactive job gets no event).
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
     expect(fixture.runtime.jobs.update).toHaveBeenCalledWith({ id: "job-1", status: "inactive" });
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
     expect(fixture.schedules[0]?.enabled).toBe(1);

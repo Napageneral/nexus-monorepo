@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 import {
   buildShopifySourceIdentityObservations,
   configureShopifyProjections,
@@ -8,7 +9,6 @@ import {
   seedShopifySourceIdentities,
   triggerShopifySource,
 } from "./index.js";
-import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 const SHOPIFY_SOURCE_FAMILIES = [
   "orders.delta",
@@ -28,6 +28,41 @@ const SHOPIFY_SOURCE_FAMILIES = [
 function sourceJobName(family: string): string {
   return `moonsleep-commerce.shopify-source.${family.replaceAll(".", "-")}`;
 }
+
+// The runtime's jobs.list and schedules.list: rows in creation order come back
+// newest first, 100 unless a limit is given (at most 1,000), and internal
+// definitions are dropped after the limit is applied.
+function runtimeList(key: "jobs" | "schedules", rows: Array<Record<string, unknown>>) {
+  return vi.fn(async (params: Record<string, unknown> = {}) => {
+    const limit = Math.max(1, Math.min(1_000, Number(params.limit ?? 100)));
+    const offset = Math.max(0, Number(params.offset ?? 0));
+    return {
+      payload: {
+        [key]: rows
+          .toReversed()
+          .slice(offset, offset + limit)
+          .filter((row) => row.internal !== true),
+      },
+    };
+  });
+}
+
+// Definitions registered after this app's own, as the moonsleep-site bridge
+// timers were from 2026-09-11; one in fifteen is internal.
+function newerForeignJobs(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `foreign-job-${index}`,
+    name: `moonsleep-site.timer.unit-${index}`,
+    status: "active",
+    internal: index % 15 === 0,
+  }));
+}
+
+const PAST_THE_FIRST_PAGE = [
+  { limit: 1_000, offset: 0 },
+  { limit: 1_000, offset: 1_000 },
+  { limit: 1_000, offset: 2_000 },
+];
 
 describe("Shopify source schedule configuration", () => {
   it("plans without mutation and applies only an exact hash-bound family set", async () => {
@@ -70,9 +105,9 @@ describe("Shopify source schedule configuration", () => {
       return { payload: { schedule: row } };
     });
     const nex = {
-      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      jobs: { list: runtimeList("jobs", jobs), update: jobsUpdate },
       schedules: {
-        list: vi.fn(async () => ({ payload: { schedules } })),
+        list: runtimeList("schedules", schedules),
         update: schedulesUpdate,
       },
     };
@@ -153,6 +188,97 @@ describe("Shopify source schedule configuration", () => {
     ).toBe(true);
     expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
   });
+
+  it("configures source schedules that newer definitions pushed past the first page", async () => {
+    const foreign = newerForeignJobs(1_050);
+    const jobs: Array<Record<string, unknown>> = [
+      ...SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+        id: `job-${index}`,
+        name: sourceJobName(family),
+        status: "active",
+        config_json: JSON.stringify({ family }),
+      })),
+      ...foreign,
+    ];
+    const schedules: Array<Record<string, unknown>> = [
+      ...SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+        id: `schedule-${index}`,
+        job_definition_id: `job-${index}`,
+        name: sourceJobName(family),
+        expression: "0 0 1 1 *",
+        timezone: "UTC",
+        enabled: 0,
+      })),
+      ...foreign.map((job) => ({
+        id: job.id.replace("job", "schedule"),
+        job_definition_id: job.id,
+        name: job.name,
+        expression: "0 * * * * *",
+        timezone: "UTC",
+        enabled: 1,
+        internal: job.internal,
+      })),
+    ];
+    const jobsList = runtimeList("jobs", jobs);
+    const schedulesList = runtimeList("schedules", schedules);
+    const nex = {
+      jobs: {
+        list: jobsList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = jobs.find((entry) => entry.id === input.id)!;
+          row.config_json = String(input.config_json);
+          return { payload: { job: row } };
+        }),
+      },
+      schedules: {
+        list: schedulesList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = schedules.find((entry) => entry.id === input.id)!;
+          if (input.expression !== undefined) {
+            row.expression = String(input.expression);
+          }
+          if (input.timezone !== undefined) {
+            row.timezone = String(input.timezone);
+          }
+          if (input.enabled !== undefined) {
+            row.enabled = input.enabled === true ? 1 : 0;
+          }
+          return { payload: { schedule: row } };
+        }),
+      },
+    };
+    const params ={ connection_id: "shopify-primary", enabled_families: ["orders.delta"] };
+    const planned = (await configureShopifySourceSchedules({
+      params: { mode: "plan", ...params },
+      nex,
+    } as never)) as Record<string, unknown>;
+
+    await expect(
+      configureShopifySourceSchedules({
+        params: {
+          mode: "apply",
+          ...params,
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+        },
+        nex,
+      } as never),
+    ).resolves.toMatchObject({ state: "applied" });
+    expect(
+      schedules
+        .filter((row) => row.enabled === 1 && !String(row.id).startsWith("foreign"))
+        .map((row) => row.name),
+    ).toEqual([sourceJobName("orders.delta")]);
+    // The binding read and the exact readback both paged past a short first page.
+    expect(jobsList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
+    expect(schedulesList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
+  });
 });
 describe("Shopify durable projection configuration", () => {
   it("plans without mutation and atomically enables exact customer and commerce subscriptions", async () => {
@@ -206,7 +332,7 @@ describe("Shopify durable projection configuration", () => {
       return { payload: { subscription: row } };
     });
     const nex = {
-      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      jobs: { list: runtimeList("jobs", jobs), update: jobsUpdate },
       events: {
         subscriptions: {
           list: vi.fn(async (input: Record<string, unknown>) => ({
@@ -269,22 +395,18 @@ describe("Shopify durable projection configuration", () => {
     const update = vi.fn();
     const nex = {
       jobs: {
-        list: vi.fn(async () => ({
-          payload: {
-            jobs: [
-              {
-                id: "job-customer",
-                name: "moonsleep-commerce.shopify-customer-identity",
-                status: "inactive",
-              },
-              {
-                id: "job-commerce",
-                name: "moonsleep-commerce.shopify-order-commerce",
-                status: "inactive",
-              },
-            ],
+        list: runtimeList("jobs", [
+          {
+            id: "job-customer",
+            name: "moonsleep-commerce.shopify-customer-identity",
+            status: "inactive",
           },
-        })),
+          {
+            id: "job-commerce",
+            name: "moonsleep-commerce.shopify-order-commerce",
+            status: "inactive",
+          },
+        ]),
         update,
       },
       events: {
@@ -326,6 +448,78 @@ describe("Shopify durable projection configuration", () => {
     ).rejects.toThrow("subscription contract drifted");
     expect(update).not.toHaveBeenCalled();
   });
+
+  it("configures projections whose jobs newer definitions pushed past the first page", async () => {
+    const jobs: Array<Record<string, unknown>> = [
+      {
+        id: "job-customer",
+        name: "moonsleep-commerce.shopify-customer-identity",
+        status: "inactive",
+      },
+      { id: "job-commerce", name: "moonsleep-commerce.shopify-order-commerce", status: "inactive" },
+      ...newerForeignJobs(1_050),
+    ];
+    const subscriptions = [
+      ["sub-customer", "job-customer", "customer"],
+      ["sub-order", "job-commerce", "order"],
+      ["sub-line", "job-commerce", "line_item"],
+    ].map(([id, jobDefinitionId, containerId]) => ({
+      id,
+      job_definition_id: jobDefinitionId,
+      event_type: "record.ingested",
+      match_json: JSON.stringify({ platform: "shopify", container_id: containerId }),
+      enabled: 0,
+    }));
+    const jobsList = runtimeList("jobs", jobs);
+    const nex = {
+      jobs: {
+        list: jobsList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = jobs.find((entry) => entry.id === input.id)!;
+          row.status = String(input.status);
+          return { payload: { job: row } };
+        }),
+      },
+      events: {
+        subscriptions: {
+          list: vi.fn(async (input: Record<string, unknown>) => ({
+            payload: {
+              subscriptions: subscriptions.filter(
+                (row) => row.job_definition_id === input.job_definition_id,
+              ),
+            },
+          })),
+          update: vi.fn(async (input: Record<string, unknown>) => {
+            const row = subscriptions.find((entry) => entry.id === input.id)!;
+            row.enabled = input.enabled === true ? 1 : 0;
+            return { payload: { subscription: row } };
+          }),
+        },
+      },
+    };
+    const planned = (await configureShopifyProjections({
+      params: { mode: "plan", enabled_projections: ["order_commerce"] },
+      nex,
+    } as never)) as Record<string, unknown>;
+
+    await expect(
+      configureShopifyProjections({
+        params: {
+          mode: "apply",
+          enabled_projections: ["order_commerce"],
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS",
+        },
+        nex,
+      } as never),
+    ).resolves.toMatchObject({ state: "applied" });
+    expect(jobs.slice(0, 2).map((row) => row.status)).toEqual(["inactive", "active"]);
+    expect(subscriptions.map((row) => row.enabled)).toEqual([0, 1, 1]);
+    expect(jobsList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
+  });
 });
 
 describe("Shopify source manual trigger", () => {
@@ -339,17 +533,13 @@ describe("Shopify source manual trigger", () => {
       },
       nex: {
         jobs: {
-          list: vi.fn(async () => ({
-            payload: {
-              jobs: [
-                {
-                  id: "job-orders",
-                  name: "moonsleep-commerce.shopify-source.orders-delta",
-                  status: "active",
-                },
-              ],
+          list: runtimeList("jobs", [
+            {
+              id: "job-orders",
+              name: "moonsleep-commerce.shopify-source.orders-delta",
+              status: "active",
             },
-          })),
+          ]),
           invoke,
         },
       },
@@ -367,6 +557,34 @@ describe("Shopify source manual trigger", () => {
       max_attempts: 3,
       idempotency_key: "shopify-source:orders.delta:operator:orders:20260722T120000Z",
     });
+  });
+
+  it("finds the source job that newer definitions pushed past the first page", async () => {
+    // 2026-09-11 to 2026-10-19 every observation-triggered source run failed
+    // "Shopify source job is missing or duplicated": orders-delta, created in
+    // July, was no longer on the default jobs.list page.
+    const invoke = vi.fn(async () => ({ payload: { run: { id: "run-1" } } }));
+    const list = runtimeList("jobs", [
+      {
+        id: "job-orders",
+        name: "moonsleep-commerce.shopify-source.orders-delta",
+        status: "active",
+      },
+      ...newerForeignJobs(1_050),
+    ]);
+
+    await expect(
+      triggerShopifySource({
+        params: {
+          family: "orders.delta",
+          connection_id: "shopify-primary",
+          request_id: "operator:orders:20261019T210000Z",
+        },
+        nex: { jobs: { list, invoke } },
+      } as never),
+    ).resolves.toMatchObject({ job_definition_id: "job-orders", run_id: "run-1" });
+    expect(list.mock.calls.map((call) => call[0])).toEqual(PAST_THE_FIRST_PAGE);
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it("queues one immutable observation through the existing source job without a provider call", async () => {
@@ -402,17 +620,13 @@ describe("Shopify source manual trigger", () => {
       },
       nex: {
         jobs: {
-          list: vi.fn(async () => ({
-            payload: {
-              jobs: [
-                {
-                  id: "job-orders",
-                  name: "moonsleep-commerce.shopify-source.orders-delta",
-                  status: "active",
-                },
-              ],
+          list: runtimeList("jobs", [
+            {
+              id: "job-orders",
+              name: "moonsleep-commerce.shopify-source.orders-delta",
+              status: "active",
             },
-          })),
+          ]),
           invoke,
         },
       },
@@ -541,17 +755,13 @@ describe("Shopify source manual trigger", () => {
       },
       nex: {
         jobs: {
-          list: vi.fn(async () => ({
-            payload: {
-              jobs: [
-                {
-                  id: "job-customers",
-                  name: "moonsleep-commerce.shopify-source.customers-delta",
-                  status: "inactive",
-                },
-              ],
+          list: runtimeList("jobs", [
+            {
+              id: "job-customers",
+              name: "moonsleep-commerce.shopify-source.customers-delta",
+              status: "inactive",
             },
-          })),
+          ]),
           invoke,
         },
       },
