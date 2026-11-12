@@ -869,6 +869,50 @@ describe("MoonSleep commerce runtime work", () => {
     expect(fixture.schedules.slice(0, 2).map((schedule) => schedule.enabled)).toEqual([1, 1]);
   });
 
+  function liveProjectors() {
+    return runtimeFixture({
+      jobs: [
+        { id: "job-c", name: "moonsleep-commerce.shopify-customer-identity", status: "active" },
+        { id: "job-o", name: "moonsleep-commerce.shopify-order-commerce", status: "active" },
+      ],
+      subscriptions: [
+        { id: "sub-c", job_definition_id: "job-c", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "customer" }), enabled: 1 },
+        { id: "sub-o", job_definition_id: "job-o", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "order" }), enabled: 1 },
+        { id: "sub-l", job_definition_id: "job-o", event_type: "record.ingested",
+          match_json: JSON.stringify({ platform: "shopify", container_id: "line_item" }), enabled: 1 },
+      ],
+    });
+  }
+
+  it("leaves a live projector's enabled subscriptions alone (0.3.39: production keeps writing orders and customers)", async () => {
+    const fixture = liveProjectors();
+    await ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" });
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    const calls = (fixture.runtime.jobs.update as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls;
+    for (const id of ["job-c", "job-o"]) {
+      const update = calls.map(([params]) => params).find((params) => params.id === id);
+      expect(update?.status).toBe("active");
+    }
+  });
+
+  it("after its own deactivate, the next ensure turns both projectors back on and keeps their subscriptions", async () => {
+    const fixture = liveProjectors();
+    await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
+    const jobUpdates = (fixture.runtime.jobs.update as unknown as { mock: { calls: Array<[Record<string, unknown>]> } }).mock.calls;
+    expect(jobUpdates.map(([params]) => params)).toEqual(
+      expect.arrayContaining([{ id: "job-c", status: "inactive" }, { id: "job-o", status: "inactive" }]),
+    );
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    await ensureMoonSleepCommerceRuntimeWork({ runtime: fixture.runtime, appId: "moonsleep-commerce" });
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
+    const after = jobUpdates.map(([params]) => params).filter((params) => "script_path" in params);
+    for (const id of ["job-c", "job-o"]) {
+      expect(after.find((params) => params.id === id)?.status).toBe("active");
+    }
+  });
+
   it("disables and removes only the exact owned work", async () => {
     const fixture = runtimeFixture({
       jobs: [
@@ -899,10 +943,8 @@ describe("MoonSleep commerce runtime work", () => {
       ],
     });
     await disableMoonSleepCommerceRuntimeWork(fixture.runtime);
-    expect(fixture.runtime.events.subscriptions.update).toHaveBeenCalledWith({
-      id: "subscription-1",
-      enabled: false,
-    });
+    // 0.3.39: the deactivate leaves subscriptions alone (an inactive job gets no event).
+    expect(fixture.runtime.events.subscriptions.update).not.toHaveBeenCalled();
     expect(fixture.runtime.jobs.update).toHaveBeenCalledWith({ id: "job-1", status: "inactive" });
     expect(fixture.runtime.schedules.update).not.toHaveBeenCalled();
     expect(fixture.schedules[0]?.enabled).toBe(1);

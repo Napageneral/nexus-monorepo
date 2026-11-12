@@ -323,7 +323,12 @@ async function listSchedules(runtime: NexClient): Promise<RuntimeRow[]> {
   );
 }
 
-async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec): Promise<string> {
+async function ensureJob(
+  runtime: NexClient,
+  appId: string,
+  spec: OwnedJobSpec,
+  projectorLive = false,
+): Promise<string> {
   const existing = findOwnedJob(await listJobs(runtime), spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
   const isPaidOrderEffects = spec.name === PAID_ORDER_EFFECTS_JOB_NAME;
@@ -348,8 +353,13 @@ async function ensureJob(runtime: NexClient, appId: string, spec: OwnedJobSpec):
         : COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST;
   if (existing) {
     const id = asString(existing.id);
+    // A projector stays (or comes back) active while it is live: active now, or still carrying an enabled
+    // subscription it expects (a deactivate before an upgrade leaves those enabled; Nex sends no event to an
+    // inactive job, so the subscription is what says the projector was live).
     const status =
-      !("config" in spec) && asString(existing.status) === "active" ? "active" : spec.status;
+      !("config" in spec) && (asString(existing.status) === "active" || projectorLive)
+        ? "active"
+        : spec.status;
     let configNeedsUpdate = false;
     if (configJson !== "") {
       if ("schedule" in spec) {
@@ -468,6 +478,7 @@ async function ensureSubscriptions(
   runtime: NexClient,
   jobDefinitionId: string,
   matches: ReadonlyArray<Readonly<Record<string, string>>>,
+  projectorLive = false,
 ): Promise<string[]> {
   const subscriptions = await listSubscriptions(runtime, jobDefinitionId);
   const expectedJson = matches.map((match) => JSON.stringify(match));
@@ -496,7 +507,9 @@ async function ensureSubscriptions(
     const existing = matchesForContract[0];
     if (existing) {
       const id = asString(existing.id);
-      if (asInteger(existing.enabled) !== 0) {
+      // A live projector keeps its subscriptions: production writes every new Shopify order and customer into Nex
+      // through them (decided 2026-11-12; the channel-intake worker's own call is the fallback).
+      if (asInteger(existing.enabled) !== 0 && !projectorLive) {
         const updated = unwrapPayload(
           await runtime.events.subscriptions.update({ id, match, enabled: false }),
         );
@@ -511,7 +524,7 @@ async function ensureSubscriptions(
         job_definition_id: jobDefinitionId,
         event_type: EVENT_TYPE,
         match,
-        enabled: false,
+        enabled: projectorLive,
       }),
     );
     const id = asString(asRecord(created.subscription).id);
@@ -521,6 +534,24 @@ async function ensureSubscriptions(
     ids.push(id);
   }
   return ids;
+}
+
+// Live: active now, or still carrying an enabled subscription it expects (what a deactivate leaves behind).
+async function projectorIsLive(
+  runtime: NexClient,
+  spec: (typeof JOB_SPECS)[number],
+): Promise<boolean> {
+  const existing = findOwnedJob(await listJobs(runtime), spec.name);
+  if (!existing) {
+    return false;
+  }
+  if (asString(existing.status) === "active") {
+    return true;
+  }
+  const expected = spec.matches.map((match) => JSON.stringify(match));
+  return (await listSubscriptions(runtime, asString(existing.id))).some(
+    (row) => expected.includes(asString(row.match_json)) && asInteger(row.enabled) !== 0,
+  );
 }
 
 export async function ensureMoonSleepCommerceRuntimeWork(params: {
@@ -535,17 +566,26 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   sourceJobDefinitionIds: string[];
   sourceScheduleIds: string[];
 }> {
-  const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!);
+  const customerLive = await projectorIsLive(params.runtime, JOB_SPECS[0]!);
+  const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!, customerLive);
   const subscriptionIds = await ensureSubscriptions(
     params.runtime,
     jobDefinitionId,
     JOB_SPECS[0]!.matches,
+    customerLive,
   );
-  const commerceJobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[1]!);
+  const commerceLive = await projectorIsLive(params.runtime, JOB_SPECS[1]!);
+  const commerceJobDefinitionId = await ensureJob(
+    params.runtime,
+    params.appId,
+    JOB_SPECS[1]!,
+    commerceLive,
+  );
   const commerceSubscriptionIds = await ensureSubscriptions(
     params.runtime,
     commerceJobDefinitionId,
     JOB_SPECS[1]!.matches,
+    commerceLive,
   );
   const paidOrderEffectsJobDefinitionId = await ensureJob(
     params.runtime,
@@ -586,14 +626,8 @@ export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): P
       continue;
     }
     const jobId = asString(job.id);
-    for (const subscription of await listSubscriptions(runtime, jobId)) {
-      if (asInteger(subscription.enabled) !== 0) {
-        await runtime.events.subscriptions.update({
-          id: asString(subscription.id),
-          enabled: false,
-        });
-      }
-    }
+    // Subscriptions are left as they are: Nex sends no event to an inactive job, and an enabled subscription is how
+    // the next release's ensure knows a projector was live and turns it back on (0.3.39).
     if (asString(job.status) !== "inactive") {
       await runtime.jobs.update({ id: jobId, status: "inactive" });
     }
