@@ -32,8 +32,26 @@ function payload(value: unknown): Row {
   return Object.keys(nested).length > 0 ? nested : valueRow;
 }
 
+// jobs.list answers one page: 100 rows unless a limit is given, at most 1,000, newest first, and the
+// runtime drops internal definitions after it applies the limit, so a short page is not the end of the
+// list. On the MoonSleep primary (280 definitions, 2026-11-12) an older owned job is off the first page:
+// the finance app's upgrade that day missed its own job that way, tried to create it again and failed on
+// the unique name. Read until an empty page; a list that has not ended within the bound fails closed,
+// because the install hook creates what it does not find.
+export const JOBS_LIST_PAGE_SIZE = 1_000;
+export const JOBS_LIST_MAX_PAGES = 20;
+
 async function listJobs(runtime: NexClient): Promise<Row[]> {
-  return rows(payload(await runtime.jobs.list({})).jobs);
+  const all: Row[] = [];
+  for (let page = 0; page < JOBS_LIST_MAX_PAGES; page += 1) {
+    const entries = payload(
+      await runtime.jobs.list({ limit: JOBS_LIST_PAGE_SIZE, offset: page * JOBS_LIST_PAGE_SIZE }),
+    ).jobs;
+    if (!Array.isArray(entries)) throw new Error("Nex jobs.list did not return a jobs list");
+    if (entries.length === 0) return all;
+    all.push(...rows(entries));
+  }
+  throw new Error(`Nex jobs.list did not end within ${JOBS_LIST_MAX_PAGES} pages`);
 }
 
 async function listSubscriptions(runtime: NexClient, jobId: string): Promise<Row[]> {
