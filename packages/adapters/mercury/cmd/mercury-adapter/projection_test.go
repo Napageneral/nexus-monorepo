@@ -21,7 +21,7 @@ import (
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
-func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) {
+func TestProjectionCreatesCompleteSnapshotAndExactCaptureReceipt(t *testing.T) {
 	body := `{
   "accounts": [
     {"id":"acct_1","createdAt":"2026-07-24T10:00:00Z","availableBalance":42.50}
@@ -45,36 +45,40 @@ func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) 
 		t.Fatal(err)
 	}
 	if len(records) != 2 {
-		t.Fatalf("records = %d, want revision + receipt", len(records))
+		t.Fatalf("records = %d, want snapshot + receipt", len(records))
 	}
 
-	revision := records[0]
-	if revision.Operation != "record.ingest" ||
-		revision.Routing.ContainerID != "account_snapshot" ||
-		revision.Routing.ThreadID != "mercury:account_snapshot:acct_1" {
-		t.Fatalf("revision routing = %#v", revision.Routing)
+	snapshot := records[0]
+	if snapshot.Operation != "record.ingest" ||
+		snapshot.Routing.ContainerID != "account_snapshot" ||
+		snapshot.Routing.ThreadID != "mercury:account_snapshot:acct_1" ||
+		snapshot.Routing.ProviderAccountRef == nil ||
+		*snapshot.Routing.ProviderAccountRef != "acct_1" {
+		t.Fatalf("snapshot routing = %#v", snapshot.Routing)
 	}
-	if revision.Payload.Timestamp != time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC).UnixMilli() {
-		t.Fatalf("revision timestamp = %d", revision.Payload.Timestamp)
+	if snapshot.Payload.Timestamp != time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("snapshot timestamp = %d", snapshot.Payload.Timestamp)
 	}
-	payload := revision.Payload.Payload
-	if payload["contract"] != mercuryRecordContract ||
-		payload["provider_object_id"] != "acct_1" ||
-		payload["provider_write_authority"] != false ||
-		payload["journal_authority"] != false ||
-		payload["payment_authority"] != false {
-		t.Fatalf("revision payload = %#v", payload)
+	if snapshot.Payload.ExternalRecordID != "acct_1" ||
+		snapshot.Payload.SourceRecordType == nil ||
+		*snapshot.Payload.SourceRecordType != "account_snapshot" ||
+		snapshot.Payload.ProviderVersionRef != nil {
+		t.Fatalf("snapshot identity provenance = %#v", snapshot.Payload)
 	}
-	canonical := payload["provider_payload_canonical_json"].(string)
+	payload := snapshot.Payload.Payload
+	canonical, ok := payload["provider_object_json"].(string)
+	if !ok {
+		t.Fatalf("snapshot payload = %#v", payload)
+	}
 	digest := sha256.Sum256([]byte(canonical))
-	if payload["provider_payload_sha256"] != hex.EncodeToString(digest[:]) {
-		t.Fatal("revision digest does not bind canonical provider object")
+	if payload["provider_object_sha256"] != hex.EncodeToString(digest[:]) {
+		t.Fatal("snapshot digest does not bind canonical provider object")
 	}
-	if revision.Payload.Metadata["contract"] != mercuryRecordContract ||
-		revision.Payload.Metadata["provider_payload_sha256"] != payload["provider_payload_sha256"] ||
-		revision.Payload.Metadata["provider_object_id_sha256"] == "" ||
-		revision.Payload.Metadata["provider_write_authority"] != false {
-		t.Fatalf("persisted revision metadata = %#v", revision.Payload.Metadata)
+	if snapshot.Payload.Metadata["contract"] != mercuryRecordContract ||
+		snapshot.Payload.Metadata["provider_payload_sha256"] != payload["provider_object_sha256"] ||
+		snapshot.Payload.Metadata["provider_object_id_sha256"] == "" ||
+		snapshot.Payload.Metadata["provider_write_authority"] != false {
+		t.Fatalf("persisted snapshot metadata = %#v", snapshot.Payload.Metadata)
 	}
 
 	receipt := records[1]
@@ -82,9 +86,8 @@ func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) 
 		t.Fatalf("receipt routing = %#v", receipt.Routing)
 	}
 	receiptPayload := receipt.Payload.Payload
-	if receiptPayload["provider_response_body"] != body ||
-		receiptPayload["provider_response_sha256"] != response.Pages[0].BodySHA256 ||
-		receiptPayload["provider_write_attempted"] != false {
+	if receiptPayload["provider_object_json"] != body ||
+		receiptPayload["provider_object_sha256"] != response.Pages[0].BodySHA256 {
 		t.Fatalf("receipt payload = %#v", receiptPayload)
 	}
 	if receipt.Payload.Metadata["contract"] != mercuryCaptureContract ||
@@ -94,7 +97,7 @@ func TestProjectionCreatesImmutableRevisionAndExactCaptureReceipt(t *testing.T) 
 	}
 }
 
-func TestProjectionRevisionIdentityIsContentAddressed(t *testing.T) {
+func TestProjectionPreservesProviderIdentityAcrossChangedSnapshots(t *testing.T) {
 	client := &mercuryClient{
 		connectionID:  "mercury-primary",
 		credentialRef: "mercury/test",
@@ -118,10 +121,13 @@ func TestProjectionRevisionIdentityIsContentAddressed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if firstRecords[0].Payload.ExternalRecordID != secondRecords[0].Payload.ExternalRecordID {
-		t.Fatal("object key order changed immutable revision identity")
+		t.Fatal("object key order changed provider identity")
 	}
-	if firstRecords[0].Payload.ExternalRecordID == changedRecords[0].Payload.ExternalRecordID {
-		t.Fatal("changed provider content reused immutable revision identity")
+	if firstRecords[0].Payload.ExternalRecordID != changedRecords[0].Payload.ExternalRecordID {
+		t.Fatal("changed provider content changed provider identity")
+	}
+	if firstRecords[0].Payload.Payload["provider_object_sha256"] == changedRecords[0].Payload.Payload["provider_object_sha256"] {
+		t.Fatal("changed provider content reused the snapshot digest")
 	}
 }
 
@@ -170,7 +176,7 @@ func TestCaptureReceiptIdentityBindsObservationOccurrence(t *testing.T) {
 		t.Fatal("later identical capture reused the prior occurrence identity")
 	}
 	if first[0].Payload.ExternalRecordID != next[0].Payload.ExternalRecordID {
-		t.Fatal("unchanged provider revision did not preserve content identity")
+		t.Fatal("unchanged provider object did not preserve provider identity")
 	}
 }
 
@@ -232,9 +238,9 @@ func TestTransactionCreatesPaymentAndAttachmentRevisions(t *testing.T) {
 	}
 	families := recordFamilies(records)
 	for _, expected := range []string{
-		"transaction_revision",
-		"payment_revision",
-		"attachment_revision",
+		"transaction_snapshot",
+		"payment_snapshot",
+		"attachment_snapshot",
 		"api_capture_receipt",
 	} {
 		if families[expected] != 1 {
@@ -255,7 +261,7 @@ func TestTransactionDerivesStableIdentityForLiveAttachmentShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	attachments := recordsForFamily(first, "attachment_revision")
+	attachments := recordsForFamily(first, "attachment_snapshot")
 	if len(attachments) != 2 {
 		t.Fatalf("attachment revisions = %d", len(attachments))
 	}
@@ -273,12 +279,15 @@ func TestTransactionDerivesStableIdentityForLiveAttachmentShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	nextAttachments := recordsForFamily(next, "attachment_revision")
+	nextAttachments := recordsForFamily(next, "attachment_snapshot")
 	if attachments[0].Routing.ThreadID != nextAttachments[0].Routing.ThreadID {
 		t.Fatal("rotating attachment URL changed the stable attachment identity")
 	}
-	if attachments[0].Payload.ExternalRecordID == nextAttachments[0].Payload.ExternalRecordID {
-		t.Fatal("rotating attachment URL did not create an immutable successor revision")
+	if attachments[0].Payload.ExternalRecordID != nextAttachments[0].Payload.ExternalRecordID {
+		t.Fatal("rotating attachment URL changed the evidence identity")
+	}
+	if attachments[0].Payload.Payload["provider_object_sha256"] == nextAttachments[0].Payload.Payload["provider_object_sha256"] {
+		t.Fatal("rotating attachment URL reused the snapshot digest")
 	}
 }
 
@@ -307,7 +316,7 @@ func TestApprovalCreatesScheduledPaymentObservationOnlyWhenScheduled(t *testing.
 		t.Fatal(err)
 	}
 	families := recordFamilies(records)
-	if families["approval_request_revision"] != 2 ||
+	if families["approval_request_snapshot"] != 2 ||
 		families["scheduled_payment_observation"] != 1 ||
 		families["api_capture_receipt"] != 1 {
 		t.Fatalf("families = %#v", families)

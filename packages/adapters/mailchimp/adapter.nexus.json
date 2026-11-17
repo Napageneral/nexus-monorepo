@@ -1,0 +1,100 @@
+{
+  "id": "mailchimp",
+  "version": "0.2.5",
+  "displayName": "Mailchimp",
+  "description": "Read-only Mailchimp Marketing and Transactional history ingestion for Nex.",
+  "platform": "mailchimp",
+  "command": "./dist/index.js",
+  "skill": "./SKILL.md",
+  "methods": {
+    "records.backfill.stage": {
+      "description": "Stage an explicit backfill window for the runtime's worker-side historical import: the records records.backfill would stream, written as JSONL chunk files with a manifest under stage_dir. Same reads, identities and receipt; creates the Transactional export when the window needs it.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": {
+        "type": "object",
+        "properties": {
+          "since": { "type": "string", "description": "ISO lower bound (campaign send time)" },
+          "to": { "type": "string", "description": "ISO upper bound; defaults to now" },
+          "stage_dir": { "type": "string", "description": "Empty directory for the chunk files and manifest.json; a temporary directory when omitted" }
+        },
+        "required": ["since"],
+        "additionalProperties": false
+      },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.backfill.plan": {
+      "description": "Plan an explicit backfill window without pulling records: sent campaigns, record and read-call estimates, and whether Transactional history would come from the recent search or the activity export.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.marketing.campaigns.list": {
+      "description": "List sent Mailchimp Marketing campaigns without mutating provider state.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.marketing.campaign.content.get": {
+      "description": "Read the exact stored content for one Marketing campaign.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.marketing.campaign.recipients.list": {
+      "description": "List recipient activity for one Marketing campaign.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.messages.search": {
+      "description": "Search recent Transactional message activity.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.message.info": {
+      "description": "Read one Transactional message by provider id.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.exports.list": {
+      "description": "List read-only Transactional activity export jobs.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.export.info": {
+      "description": "Read one Transactional activity export job.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    },
+    "mailchimp.transactional.templates.list": {
+      "description": "List Transactional templates for historical interpretation.",
+      "action": "read",
+      "connection_required": true,
+      "mutates_remote": false,
+      "params": { "type": "object", "additionalProperties": true },
+      "response": { "type": "object", "additionalProperties": true }
+    }
+  }
+}

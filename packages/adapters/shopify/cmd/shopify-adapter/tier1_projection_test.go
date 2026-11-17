@@ -40,8 +40,11 @@ func TestBuildCustomerRecord(t *testing.T) {
 	if record.Routing.ThreadID != "moonsleepco.myshopify.com:customer:44" {
 		t.Fatalf("unexpected thread id: %q", record.Routing.ThreadID)
 	}
-	if !strings.Contains(record.Payload.ExternalRecordID, ":customer:44:") {
+	if record.Payload.ExternalRecordID != "customer:44" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
+	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.customer" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
 	}
 	if got := record.Payload.Metadata["family"]; got != "customer" {
 		t.Fatalf("unexpected family metadata: %#v", got)
@@ -77,7 +80,7 @@ func TestBuildProductRecord(t *testing.T) {
 	if record.Routing.ThreadID != "moonsleepco.myshopify.com:product:55" {
 		t.Fatalf("unexpected thread id: %q", record.Routing.ThreadID)
 	}
-	if !strings.Contains(record.Payload.ExternalRecordID, ":product:55:") {
+	if record.Payload.ExternalRecordID != "product:55" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
 	}
 	if got := record.Payload.Metadata["family"]; got != "product" {

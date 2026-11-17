@@ -1,3 +1,4 @@
+import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from "node:fs";
 import { createAdapterLogger, patchConsoleToStderr, type AdapterLogger } from "./logger.js";
 import { writeJSONLine } from "./io.js";
 import { createAdapterServeSession, type AdapterServeSession } from "./serve.js";
@@ -311,8 +312,7 @@ export async function runAdapter(adapter: AdapterDefinition, opts: RunAdapterOpt
           return 1;
         }
         const connectionID = readFlag(filteredArgs, "--connection");
-        const payloadRaw = readFlag(filteredArgs, "--payload-json");
-        const payload = payloadRaw ? parseJsonObjectFlag(payloadRaw, "--payload-json") : undefined;
+        const payload = readPayloadFlags(filteredArgs);
         const result = await handler(ctx, {
           ...(connectionID ? { connection_id: connectionID } : {}),
           ...(payload ? { payload } : {}),
@@ -335,12 +335,16 @@ function printUsage(name: string, stderr: NodeJS.WriteStream): void {
   stderr.write("  records.backfill --connection <id> --since <date> [--to <date>]\n");
   stderr.write("  adapter.health --connection <id>\n");
   stderr.write("  adapter.connections.list\n");
-  stderr.write("  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json>]\n");
-  stderr.write("  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json>]\n");
+  stderr.write(
+    "  adapter.setup.start [--connection <id>] [--session-id <id>] [--payload-json <json> | --payload-file <path>]\n",
+  );
+  stderr.write(
+    "  adapter.setup.submit --session-id <id> [--connection <id>] [--payload-json <json> | --payload-file <path>]\n",
+  );
   stderr.write("  adapter.setup.status --session-id <id> [--connection <id>]\n");
   stderr.write("  adapter.setup.cancel --session-id <id> [--connection <id>]\n");
   stderr.write("  adapter.serve.start --connection <id>\n");
-  stderr.write("  <namespace.method> [--connection <id>] [--payload-json <json>]\n\n");
+  stderr.write("  <namespace.method> [--connection <id>] [--payload-json <json> | --payload-file <path>]\n\n");
   stderr.write("Global flags:\n");
   stderr.write("  --verbose, -v                     Enable debug logging\n");
 }
@@ -381,13 +385,67 @@ function parseJsonObjectFlag(raw: string, flagName: string): Record<string, unkn
   return parsed as Record<string, unknown>;
 }
 
+/**
+ * The payload of a method or setup call: inline `--payload-json`, or `--payload-file <path>`, which
+ * the runtime uses for a payload over 64 KiB when adapter.info says `supports_payload_file`. Never
+ * both. The file is opened once without following a link, must be a regular file, and is read
+ * from that one descriptor. Its content is never quoted in an error: it can be a document body.
+ */
+function readPayloadFlags(args: string[]): Record<string, unknown> | undefined {
+  const payloadRaw = readFlag(args, "--payload-json");
+  const payloadFile = readFlag(args, "--payload-file");
+  if (payloadRaw?.trim() && payloadFile?.trim()) {
+    throw new Error("--payload-json and --payload-file are mutually exclusive");
+  }
+  if (payloadFile?.trim()) {
+    return readPayloadFile(payloadFile);
+  }
+  return payloadRaw ? parseJsonObjectFlag(payloadRaw, "--payload-json") : undefined;
+}
+
+function readPayloadFile(filePath: string): Record<string, unknown> {
+  // O_NONBLOCK: a FIFO in place of the file is refused below instead of blocking the open.
+  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
+  let fd: number;
+  try {
+    fd = openSync(filePath, flags);
+  } catch (error) {
+    if (isRecord(error) && error.code === "ELOOP") {
+      throw new Error("--payload-file must be a regular file, not a link");
+    }
+    throw new Error(`--payload-file could not be read: ${errorToString(error)}`);
+  }
+  let raw: string;
+  try {
+    if (!fstatSync(fd).isFile()) {
+      throw new Error("--payload-file must be a regular file");
+    }
+    raw = readFileSync(fd, "utf8");
+  } finally {
+    closeSync(fd);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("--payload-file must contain valid JSON");
+  }
+  if (!isRecord(parsed)) {
+    throw new Error("--payload-file must decode to a JSON object");
+  }
+  return parsed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function readAdapterSetupRequest(args: string[], requireSessionID: boolean): AdapterSetupRequest {
   const connectionID = readFlag(args, "--connection");
   const sessionID = requireSessionID
     ? requireFlag(args, "--session-id")
     : readFlag(args, "--session-id");
-  const payloadRaw = readFlag(args, "--payload-json");
-  const payload = payloadRaw ? parseJsonObjectFlag(payloadRaw, "--payload-json") : undefined;
+  const payload = readPayloadFlags(args);
   return {
     ...(connectionID ? { connection_id: connectionID } : {}),
     ...(sessionID ? { session_id: sessionID } : {}),

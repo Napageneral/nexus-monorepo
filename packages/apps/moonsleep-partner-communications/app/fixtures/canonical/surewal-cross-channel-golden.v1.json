@@ -1,0 +1,429 @@
+{
+  "fixture_id": "surewal-cross-channel-golden-v1",
+  "fixture_scope": "synthetic-sanitized",
+  "migration_id": "partner-legacy-migration:surewal-cross-channel-golden-v1",
+  "workspace_id": "moonsleep-ops",
+  "workspace_key": "surewal-reviewed",
+  "canonical_partner_entity_id": "entity-surewal-fixture",
+  "partner_contact_id": "contact-rebecca-fixture",
+  "partner_display_name": "Surewal",
+  "person_organization_relationships": [
+    {
+      "person_entity_id": "entity-rebecca-fixture",
+      "organization_entity_id": "entity-surewal-fixture",
+      "relationship_type": "supplier_representative",
+      "review_state": "reviewed"
+    }
+  ],
+  "legacy_package_version": "0.2.1",
+  "legacy_review_revision_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "records": [
+    {
+      "source_record_id": "alibaba:fixture:message:production-question",
+      "source_revision_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "provider": "alibaba",
+      "connection_id": "alibaba-moonsleep-fixture",
+      "provider_thread_id": "surewal-shared-group-fixture",
+      "provider_message_id": "production-question",
+      "observed_at": "2026-07-20T09:00:00.000Z",
+      "direction": "inbound",
+      "summary": "Synthetic supplier question about the production completion date.",
+      "attachment_count": 0,
+      "source_revision_ref": {
+        "provider": "alibaba",
+        "adapter_package_id": "moonsleep-alibaba-evidence",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "alibaba-moonsleep-fixture",
+        "provider_account_id": "alibaba-buyer-fixture",
+        "provider_record_id": "production-question",
+        "provider_revision_id": null,
+        "source_logical_record_id": "alibaba:fixture:message:production-question",
+        "source_revision_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "payload_sha256": "b111111111111111111111111111111111111111111111111111111111111111",
+        "source_at": "2026-07-20T09:00:00.000Z",
+        "captured_at": "2026-07-20T09:01:00.000Z",
+        "fragment_refs": [
+          "fragment:alibaba:production-question:body"
+        ],
+        "attachment_refs": [],
+        "source_run_receipt_ref": "source-run:alibaba:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-attachment",
+      "source_revision_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "provider": "alibaba",
+      "connection_id": "alibaba-moonsleep-fixture",
+      "provider_thread_id": "surewal-shared-group-fixture",
+      "provider_message_id": "production-attachment",
+      "observed_at": "2026-07-20T09:05:00.000Z",
+      "direction": "inbound",
+      "summary": "Synthetic attachment with an explicit promised completion date.",
+      "attachment_count": 1,
+      "source_revision_ref": {
+        "provider": "alibaba",
+        "adapter_package_id": "moonsleep-alibaba-evidence",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "alibaba-moonsleep-fixture",
+        "provider_account_id": "alibaba-buyer-fixture",
+        "provider_record_id": "production-attachment",
+        "provider_revision_id": null,
+        "source_logical_record_id": "alibaba:fixture:message:production-attachment",
+        "source_revision_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "payload_sha256": "b222222222222222222222222222222222222222222222222222222222222222",
+        "source_at": "2026-07-20T09:05:00.000Z",
+        "captured_at": "2026-07-20T09:06:00.000Z",
+        "fragment_refs": [
+          "fragment:alibaba:production-attachment:caption"
+        ],
+        "attachment_refs": [
+          "attachment:alibaba:production-plan-fixture"
+        ],
+        "source_run_receipt_ref": "source-run:alibaba:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-follow-up",
+      "source_revision_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "provider": "alibaba",
+      "connection_id": "alibaba-moonsleep-fixture",
+      "provider_thread_id": "surewal-shared-group-fixture",
+      "provider_message_id": "production-follow-up",
+      "observed_at": "2026-07-20T10:00:00.000Z",
+      "direction": "outbound",
+      "summary": "Synthetic MoonSleep follow-up asking for confirmation.",
+      "attachment_count": 0,
+      "source_revision_ref": {
+        "provider": "alibaba",
+        "adapter_package_id": "moonsleep-alibaba-evidence",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "alibaba-moonsleep-fixture",
+        "provider_account_id": "alibaba-buyer-fixture",
+        "provider_record_id": "production-follow-up",
+        "provider_revision_id": null,
+        "source_logical_record_id": "alibaba:fixture:message:production-follow-up",
+        "source_revision_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "payload_sha256": "b333333333333333333333333333333333333333333333333333333333333333",
+        "source_at": "2026-07-20T10:00:00.000Z",
+        "captured_at": "2026-07-20T10:01:00.000Z",
+        "fragment_refs": [
+          "fragment:alibaba:production-follow-up:body"
+        ],
+        "attachment_refs": [],
+        "source_run_receipt_ref": "source-run:alibaba:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    },
+    {
+      "source_record_id": "gmail:fixture:message:production-continuation",
+      "source_revision_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "provider": "gmail",
+      "connection_id": "gmail-moonsleep-fixture",
+      "provider_thread_id": "surewal-production-email-fixture",
+      "provider_message_id": "production-continuation",
+      "observed_at": "2026-07-20T11:00:00.000Z",
+      "direction": "inbound",
+      "summary": "Synthetic reviewed Gmail continuation about the same production timing.",
+      "attachment_count": 0,
+      "source_revision_ref": {
+        "provider": "gmail",
+        "adapter_package_id": "gog",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "gmail-moonsleep-fixture",
+        "provider_account_id": "gmail-mailbox-fixture",
+        "provider_record_id": "production-continuation",
+        "provider_revision_id": "gmail-history-fixture-1",
+        "source_logical_record_id": "gmail:fixture:message:production-continuation",
+        "source_revision_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "payload_sha256": "b444444444444444444444444444444444444444444444444444444444444444",
+        "source_at": "2026-07-20T11:00:00.000Z",
+        "captured_at": "2026-07-20T11:01:00.000Z",
+        "fragment_refs": [
+          "fragment:gmail:production-continuation:text"
+        ],
+        "attachment_refs": [],
+        "source_run_receipt_ref": "source-run:gmail:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:payment-question",
+      "source_revision_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "provider": "alibaba",
+      "connection_id": "alibaba-moonsleep-fixture",
+      "provider_thread_id": "surewal-shared-group-fixture",
+      "provider_message_id": "payment-question",
+      "observed_at": "2026-07-20T11:05:00.000Z",
+      "direction": "inbound",
+      "summary": "Synthetic separate payment-balance question in the same Alibaba thread.",
+      "attachment_count": 0,
+      "source_revision_ref": {
+        "provider": "alibaba",
+        "adapter_package_id": "moonsleep-alibaba-evidence",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "alibaba-moonsleep-fixture",
+        "provider_account_id": "alibaba-buyer-fixture",
+        "provider_record_id": "payment-question",
+        "provider_revision_id": null,
+        "source_logical_record_id": "alibaba:fixture:message:payment-question",
+        "source_revision_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "payload_sha256": "b555555555555555555555555555555555555555555555555555555555555555",
+        "source_at": "2026-07-20T11:05:00.000Z",
+        "captured_at": "2026-07-20T11:06:00.000Z",
+        "fragment_refs": [
+          "fragment:alibaba:payment-question:body"
+        ],
+        "attachment_refs": [],
+        "source_run_receipt_ref": "source-run:alibaba:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-closure",
+      "source_revision_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "provider": "alibaba",
+      "connection_id": "alibaba-moonsleep-fixture",
+      "provider_thread_id": "surewal-shared-group-fixture",
+      "provider_message_id": "production-closure",
+      "observed_at": "2026-07-20T12:00:00.000Z",
+      "direction": "inbound",
+      "summary": "Synthetic explicit completion confirmation for the production-timing loop.",
+      "attachment_count": 0,
+      "source_revision_ref": {
+        "provider": "alibaba",
+        "adapter_package_id": "moonsleep-alibaba-evidence",
+        "adapter_package_version": "fixture-v1",
+        "connection_id": "alibaba-moonsleep-fixture",
+        "provider_account_id": "alibaba-buyer-fixture",
+        "provider_record_id": "production-closure",
+        "provider_revision_id": null,
+        "source_logical_record_id": "alibaba:fixture:message:production-closure",
+        "source_revision_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+        "payload_sha256": "b666666666666666666666666666666666666666666666666666666666666666",
+        "source_at": "2026-07-20T12:00:00.000Z",
+        "captured_at": "2026-07-20T12:01:00.000Z",
+        "fragment_refs": [
+          "fragment:alibaba:production-closure:body"
+        ],
+        "attachment_refs": [],
+        "source_run_receipt_ref": "source-run:alibaba:fixture-001",
+        "provider_read_authority": true,
+        "provider_write_authority": false
+      }
+    }
+  ],
+  "identity_resolutions": [
+    {
+      "source_record_id": "alibaba:fixture:message:production-question",
+      "status": "confirmed",
+      "decision_origin": "exact_provider_anchor",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-attachment",
+      "status": "confirmed",
+      "decision_origin": "exact_provider_anchor",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-follow-up",
+      "status": "confirmed",
+      "decision_origin": "exact_provider_anchor",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    },
+    {
+      "source_record_id": "gmail:fixture:message:production-continuation",
+      "status": "confirmed",
+      "decision_origin": "operator_review",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:payment-question",
+      "status": "confirmed",
+      "decision_origin": "exact_provider_anchor",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-closure",
+      "status": "confirmed",
+      "decision_origin": "exact_provider_anchor",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "contact_id": "contact-rebecca-fixture"
+    }
+  ],
+  "workspace_assertions": [
+    {
+      "source_record_id": "alibaba:fixture:message:production-question",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-attachment",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-follow-up",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "gmail:fixture:message:production-continuation",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:payment-question",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-closure",
+      "category": "vendor",
+      "status": "confirmed",
+      "assertion_origin": "operator_review"
+    }
+  ],
+  "open_loop_assertions": [
+    {
+      "open_loop_id": "surewal-production-timing-fixture",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "primary_source_record_id": "alibaba:fixture:message:production-question",
+      "evidence_source_record_ids": [
+        "alibaba:fixture:message:production-question",
+        "alibaba:fixture:message:production-attachment",
+        "alibaba:fixture:message:production-follow-up",
+        "gmail:fixture:message:production-continuation",
+        "alibaba:fixture:message:production-closure"
+      ],
+      "closure_source_record_ids": [
+        "alibaba:fixture:message:production-closure"
+      ],
+      "title": "Confirm production completion timing",
+      "summary": "The reviewed cross-channel production timing question is explicitly closed by the final Alibaba confirmation.",
+      "labels": [
+        "production",
+        "schedule"
+      ],
+      "lifecycle": "resolved",
+      "review_state": "confirmed",
+      "assertion_origin": "operator_review"
+    },
+    {
+      "open_loop_id": "surewal-payment-balance-fixture",
+      "canonical_entity_id": "entity-surewal-fixture",
+      "primary_source_record_id": "alibaba:fixture:message:payment-question",
+      "evidence_source_record_ids": [
+        "alibaba:fixture:message:payment-question"
+      ],
+      "closure_source_record_ids": [],
+      "title": "Review supplier payment balance",
+      "summary": "A separate payment-balance question remains waiting on MoonSleep and carries no payment authority.",
+      "labels": [
+        "payment",
+        "review"
+      ],
+      "lifecycle": "waiting_on_moonsleep",
+      "review_state": "confirmed",
+      "assertion_origin": "operator_review"
+    }
+  ],
+  "source_coverage_assertions": [
+    {
+      "source_record_id": "alibaba:fixture:message:production-question",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-production-timing-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-attachment",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-production-timing-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-follow-up",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-production-timing-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "gmail:fixture:message:production-continuation",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-production-timing-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:payment-question",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-payment-balance-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:production-closure",
+      "disposition": "open_loop_evidence",
+      "open_loop_ids": [
+        "surewal-production-timing-fixture"
+      ],
+      "assertion_origin": "operator_review"
+    }
+  ],
+  "structured_claims": [
+    {
+      "source_record_id": "alibaba:fixture:message:production-attachment",
+      "claim_type": "date",
+      "claim_role": "promised_completion",
+      "value_text": "2026-07-25",
+      "date_value": "2026-07-25",
+      "source_quote_digest": "c222222222222222222222222222222222222222222222222222222222222222",
+      "explicitness": "explicit"
+    },
+    {
+      "source_record_id": "alibaba:fixture:message:payment-question",
+      "claim_type": "money",
+      "claim_role": "amount_due",
+      "value_text": "160000.00 USD",
+      "currency_code": "USD",
+      "minor_units": "16000000",
+      "source_quote_digest": "c555555555555555555555555555555555555555555555555555555555555555",
+      "explicitness": "explicit"
+    }
+  ],
+  "expected": {
+    "source_record_count": 6,
+    "native_conversation_count": 2,
+    "open_loop_count": 2,
+    "resolved_open_loop_count": 1,
+    "waiting_on_moonsleep_count": 1,
+    "provider_write_authority": false,
+    "identity_merge_authority": false,
+    "external_domain_write_authority": false
+  }
+}

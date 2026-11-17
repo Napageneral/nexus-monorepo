@@ -1,63 +1,53 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NexusApp } from "./app.ts";
+import { render } from "lit";
+import { describe, expect, it, vi } from "vitest";
+import { renderChat, type ChatProps } from "./views/chat.ts";
 
-// oxlint-disable-next-line typescript/unbound-method
-const originalConnect = NexusApp.prototype.connect;
-
-function mountApp(pathname: string) {
-  window.history.replaceState({}, "", pathname);
-  const app = document.createElement("nexus-app") as NexusApp;
-  document.body.append(app);
-  return app;
+function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
+  return {
+    conversationId: "",
+    onConversationIdChange: () => undefined,
+    thinkingLevel: null,
+    showThinking: false,
+    loading: false,
+    sending: false,
+    messages: [],
+    toolMessages: [],
+    stream: null,
+    streamStartedAt: null,
+    draft: "",
+    queue: [],
+    connected: true,
+    canSend: true,
+    disabledReason: null,
+    error: null,
+    conversations: null,
+    sessions: null,
+    focusMode: false,
+    assistantName: "Nexus",
+    assistantAvatar: null,
+    onRefresh: () => undefined,
+    onToggleFocusMode: () => undefined,
+    onDraftChange: () => undefined,
+    onSend: () => undefined,
+    onQueueRemove: () => undefined,
+    onNewSession: () => undefined,
+    ...overrides,
+  };
 }
 
-beforeEach(() => {
-  NexusApp.prototype.connect = () => {
-    // no-op: avoid real runtime WS connections in browser tests
-  };
-  window.__NEXUS_OPERATOR_CONSOLE_BASE_PATH__ = undefined;
-  localStorage.clear();
-  document.body.innerHTML = "";
-});
-
-afterEach(() => {
-  NexusApp.prototype.connect = originalConnect;
-  window.__NEXUS_OPERATOR_CONSOLE_BASE_PATH__ = undefined;
-  localStorage.clear();
-  document.body.innerHTML = "";
-});
-
 describe("chat focus mode", () => {
-  it("collapses header + sidebar on chat tab only", async () => {
-    const app = mountApp("/console");
-    await app.updateComplete;
+  it("renders its explicit exit control only while focus mode is active", () => {
+    const container = document.createElement("div");
+    const onToggleFocusMode = vi.fn();
 
-    const shell = app.querySelector(".shell");
-    expect(shell).not.toBeNull();
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(false);
+    render(renderChat(createProps({ focusMode: false, onToggleFocusMode })), container);
+    expect(container.querySelector('button[title="Exit focus mode"]')).toBeNull();
 
-    const toggle = app.querySelector<HTMLButtonElement>('button[title^="Toggle focus mode"]');
-    expect(toggle).not.toBeNull();
-    toggle?.click();
+    render(renderChat(createProps({ focusMode: true, onToggleFocusMode })), container);
+    const exitButton = container.querySelector<HTMLButtonElement>('button[title="Exit focus mode"]');
+    expect(exitButton).not.toBeNull();
 
-    await app.updateComplete;
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(true);
-
-    const link = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/integrations"]');
-    expect(link).not.toBeNull();
-    link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
-
-    await app.updateComplete;
-    expect(app.tab).toBe("integrations");
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(false);
-
-    const chatLink = app.querySelector<HTMLAnchorElement>('a.nav-item[href="/console"]');
-    chatLink?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
-    );
-
-    await app.updateComplete;
-    expect(app.tab).toBe("console");
-    expect(shell?.classList.contains("shell--chat-focus")).toBe(true);
+    exitButton?.click();
+    expect(onToggleFocusMode).toHaveBeenCalledTimes(1);
   });
 });

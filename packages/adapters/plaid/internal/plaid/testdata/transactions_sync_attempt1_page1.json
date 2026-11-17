@@ -1,0 +1,23 @@
+{
+  "added": [
+    {
+      "transaction_id": "stale-attempt-transaction",
+      "account_id": "account-amex-synthetic",
+      "pending": true,
+      "pending_transaction_id": null,
+      "date": "2026-07-16",
+      "authorized_date": "2026-07-16",
+      "datetime": "2026-07-16T15:00:00Z",
+      "name": "Stale Attempt Merchant",
+      "merchant_name": "Stale Attempt Merchant",
+      "amount": 111.11,
+      "iso_currency_code": "USD",
+      "unofficial_currency_code": null
+    }
+  ],
+  "modified": [],
+  "removed": [],
+  "next_cursor": "cursor-attempt-1",
+  "has_more": true,
+  "request_id": "req-sync-attempt1-page1"
+}

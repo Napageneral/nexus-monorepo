@@ -1,4 +1,10 @@
-import type { AdapterInboundRecord, Attachment, ContentType, ContainerKind } from "./protocol.js";
+import type {
+  AdapterInboundRecord,
+  Attachment,
+  CompleteProviderSnapshot,
+  ContentType,
+  ContainerKind,
+} from "./protocol.js";
 
 export class RecordBuilder {
   private record: AdapterInboundRecord;
@@ -72,6 +78,26 @@ export class RecordBuilder {
     return this;
   }
 
+  withProviderAccountRef(providerAccountRef: string | null): this {
+    this.record.routing.provider_account_ref = providerAccountRef;
+    return this;
+  }
+
+  withSourceRecordType(sourceRecordType: string | null): this {
+    this.record.payload.source_record_type = sourceRecordType;
+    return this;
+  }
+
+  withProviderVersionRef(providerVersionRef: string | null): this {
+    this.record.payload.provider_version_ref = providerVersionRef;
+    return this;
+  }
+
+  withCompleteProviderSnapshot(snapshot: CompleteProviderSnapshot): this {
+    this.record.payload.payload = snapshot;
+    return this;
+  }
+
   withThread(threadID: string, threadName?: string): this {
     this.record.routing.thread_id = threadID;
     if (threadName) {
@@ -138,7 +164,10 @@ export function newRecord(platform: string, externalRecordID: string): RecordBui
 export type MessageRecordOptions = {
   platform: string;
   connectionId: string;
+  providerAccountRef?: string | null;
   externalRecordId: string;
+  sourceRecordType?: string | null;
+  providerVersionRef?: string | null;
   senderId: string;
   senderName?: string;
   receiverId?: string;
@@ -157,6 +186,7 @@ export type MessageRecordOptions = {
   attachments?: Attachment[];
   recipients?: string[];
   metadata?: Record<string, unknown>;
+  completeProviderSnapshot?: CompleteProviderSnapshot;
   routingMetadata?: Record<string, unknown>;
 };
 
@@ -167,6 +197,19 @@ export function messageRecord(options: MessageRecordOptions): AdapterInboundReco
     .withContainer(options.containerId, options.containerKind, options.containerName)
     .withContent(options.content)
     .withContentType(options.contentType ?? "text");
+
+  if (options.providerAccountRef !== undefined) {
+    builder.withProviderAccountRef(options.providerAccountRef);
+  }
+  if (options.sourceRecordType !== undefined) {
+    builder.withSourceRecordType(options.sourceRecordType);
+  }
+  if (options.providerVersionRef !== undefined) {
+    builder.withProviderVersionRef(options.providerVersionRef);
+  }
+  if (options.completeProviderSnapshot) {
+    builder.withCompleteProviderSnapshot(options.completeProviderSnapshot);
+  }
 
   if (options.timestamp instanceof Date) {
     builder.withTimestamp(options.timestamp);

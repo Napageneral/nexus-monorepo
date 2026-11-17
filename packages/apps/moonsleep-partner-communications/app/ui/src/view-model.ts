@@ -44,3 +44,12 @@ export function lifecycleLabel(value: string): string {
     dismissed: "Dismissed",
   } as Record<string, string>)[value] ?? value.replaceAll("_", " ");
 }
+
+export function coverageLabel(value: string): string {
+  return ({
+    unreviewed: "Unreviewed",
+    proposed: "Proposal ready",
+    proposal_conflict: "Proposal conflict",
+    reviewed: "Reviewed",
+  } as Record<string, string>)[value] ?? value.replaceAll("_", " ");
+}

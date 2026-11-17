@@ -24,6 +24,34 @@ type RuntimeContext struct {
 
 	// Credential is optional; adapters may run in unauthenticated mode.
 	Credential *RuntimeCredential `json:"credential,omitempty"`
+
+	// Checkpoints (runtime context version 2, P-9.2) carries the adapter's durable cursors as the
+	// runtime persisted them, keyed "<scope>/<key>", verbatim JSON. Nil means the runtime predates
+	// checkpoints (keep any file-backed behaviour); an empty map means the runtime owns them and
+	// none exists yet (cold start). Adapters hand new values back with EmitCheckpoint or a
+	// "checkpoint" field in a method result; they never write a durable cursor file themselves.
+	Checkpoints map[string]json.RawMessage `json:"checkpoints,omitempty"`
+}
+
+// ManagedCheckpoints reports whether the runtime owns this adapter's checkpoints (context v2).
+func (ctx *RuntimeContext) ManagedCheckpoints() bool {
+	return ctx != nil && ctx.Checkpoints != nil
+}
+
+// Checkpoint decodes the checkpoint stored under scope/key into out. It returns false when the
+// runtime holds no value for the key (a cold start), and an error only for undecodable JSON.
+func (ctx *RuntimeContext) Checkpoint(scope, key string, out any) (bool, error) {
+	if ctx == nil || ctx.Checkpoints == nil {
+		return false, nil
+	}
+	raw, ok := ctx.Checkpoints[CheckpointContextKey(scope, key)]
+	if !ok || len(raw) == 0 {
+		return false, nil
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return false, fmt.Errorf("decode checkpoint %s/%s: %w", scope, key, err)
+	}
+	return true, nil
 }
 
 // RuntimeCredential is the resolved plaintext secret injected by NEX.

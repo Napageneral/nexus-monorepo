@@ -1,20 +1,14 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 import {
   buildShopifySourceIdentityObservations,
   configureShopifyProjections,
   configureShopifySourceSchedules,
-  inspectShopifyCustomerBackfill,
-  inspectShopifyCommerceBackfill,
-  projectShopifyCommerceBackfill,
-  projectShopifyCustomerBackfill,
   projectShopifyCustomerCohort,
   seedShopifySourceIdentities,
-  shopifyCustomerRecordSetSha256,
-  shopifyCommerceRecordSetSha256,
   triggerShopifySource,
 } from "./index.js";
-import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 const SHOPIFY_SOURCE_FAMILIES = [
   "orders.delta",
@@ -35,6 +29,41 @@ function sourceJobName(family: string): string {
   return `moonsleep-commerce.shopify-source.${family.replaceAll(".", "-")}`;
 }
 
+// The runtime's jobs.list and schedules.list: rows in creation order come back
+// newest first, 100 unless a limit is given (at most 1,000), and internal
+// definitions are dropped after the limit is applied.
+function runtimeList(key: "jobs" | "schedules", rows: Array<Record<string, unknown>>) {
+  return vi.fn(async (params: Record<string, unknown> = {}) => {
+    const limit = Math.max(1, Math.min(1_000, Number(params.limit ?? 100)));
+    const offset = Math.max(0, Number(params.offset ?? 0));
+    return {
+      payload: {
+        [key]: rows
+          .toReversed()
+          .slice(offset, offset + limit)
+          .filter((row) => row.internal !== true),
+      },
+    };
+  });
+}
+
+// Definitions registered after this app's own, as the moonsleep-site bridge
+// timers were from 2026-09-11; one in fifteen is internal.
+function newerForeignJobs(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `foreign-job-${index}`,
+    name: `moonsleep-site.timer.unit-${index}`,
+    status: "active",
+    internal: index % 15 === 0,
+  }));
+}
+
+const PAST_THE_FIRST_PAGE = [
+  { limit: 1_000, offset: 0 },
+  { limit: 1_000, offset: 1_000 },
+  { limit: 1_000, offset: 2_000 },
+];
+
 describe("Shopify source schedule configuration", () => {
   it("plans without mutation and applies only an exact hash-bound family set", async () => {
     const jobs = SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
@@ -51,6 +80,14 @@ describe("Shopify source schedule configuration", () => {
       timezone: "UTC",
       enabled: 0,
     }));
+    schedules.push({
+      id: "foreign-schedule",
+      job_definition_id: "foreign-job",
+      name: "another-app.critical-schedule",
+      expression: "7 * * * * *",
+      timezone: "UTC",
+      enabled: 1,
+    });
     let failingJobId = "";
     const jobsUpdate = vi.fn(async (input: Record<string, unknown>) => {
       if (input.id === failingJobId) {
@@ -68,9 +105,9 @@ describe("Shopify source schedule configuration", () => {
       return { payload: { schedule: row } };
     });
     const nex = {
-      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      jobs: { list: runtimeList("jobs", jobs), update: jobsUpdate },
       schedules: {
-        list: vi.fn(async () => ({ payload: { schedules } })),
+        list: runtimeList("schedules", schedules),
         update: schedulesUpdate,
       },
     };
@@ -119,9 +156,13 @@ describe("Shopify source schedule configuration", () => {
     expect(applied).toMatchObject({ state: "applied", plan_sha256: planned.plan_sha256 });
     expect(jobsUpdate).toHaveBeenCalledTimes(12);
     expect(schedulesUpdate).toHaveBeenCalledTimes(27);
+    expect(schedulesUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "foreign-schedule" }),
+    );
+    expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
     expect(
       schedules
-        .filter((row) => row.enabled === 1)
+        .filter((row) => row.enabled === 1 && row.id !== "foreign-schedule")
         .map((row) => row.name)
         .sort(),
     ).toEqual(enabledFamilies.map(sourceJobName).sort());
@@ -142,10 +183,103 @@ describe("Shopify source schedule configuration", () => {
         nex,
       } as never),
     ).rejects.toThrow("injected job update failure");
-    expect(schedules.every((row) => row.enabled === 0)).toBe(true);
+    expect(
+      schedules.filter((row) => row.id !== "foreign-schedule").every((row) => row.enabled === 0),
+    ).toBe(true);
+    expect(schedules.find((row) => row.id === "foreign-schedule")?.enabled).toBe(1);
+  });
+
+  it("configures source schedules that newer definitions pushed past the first page", async () => {
+    const foreign = newerForeignJobs(1_050);
+    const jobs: Array<Record<string, unknown>> = [
+      ...SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+        id: `job-${index}`,
+        name: sourceJobName(family),
+        status: "active",
+        config_json: JSON.stringify({ family }),
+      })),
+      ...foreign,
+    ];
+    const schedules: Array<Record<string, unknown>> = [
+      ...SHOPIFY_SOURCE_FAMILIES.map((family, index) => ({
+        id: `schedule-${index}`,
+        job_definition_id: `job-${index}`,
+        name: sourceJobName(family),
+        expression: "0 0 1 1 *",
+        timezone: "UTC",
+        enabled: 0,
+      })),
+      ...foreign.map((job) => ({
+        id: job.id.replace("job", "schedule"),
+        job_definition_id: job.id,
+        name: job.name,
+        expression: "0 * * * * *",
+        timezone: "UTC",
+        enabled: 1,
+        internal: job.internal,
+      })),
+    ];
+    const jobsList = runtimeList("jobs", jobs);
+    const schedulesList = runtimeList("schedules", schedules);
+    const nex = {
+      jobs: {
+        list: jobsList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = jobs.find((entry) => entry.id === input.id)!;
+          row.config_json = String(input.config_json);
+          return { payload: { job: row } };
+        }),
+      },
+      schedules: {
+        list: schedulesList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = schedules.find((entry) => entry.id === input.id)!;
+          if (input.expression !== undefined) {
+            row.expression = String(input.expression);
+          }
+          if (input.timezone !== undefined) {
+            row.timezone = String(input.timezone);
+          }
+          if (input.enabled !== undefined) {
+            row.enabled = input.enabled === true ? 1 : 0;
+          }
+          return { payload: { schedule: row } };
+        }),
+      },
+    };
+    const params ={ connection_id: "shopify-primary", enabled_families: ["orders.delta"] };
+    const planned = (await configureShopifySourceSchedules({
+      params: { mode: "plan", ...params },
+      nex,
+    } as never)) as Record<string, unknown>;
+
+    await expect(
+      configureShopifySourceSchedules({
+        params: {
+          mode: "apply",
+          ...params,
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_SOURCE_SCHEDULES",
+        },
+        nex,
+      } as never),
+    ).resolves.toMatchObject({ state: "applied" });
+    expect(
+      schedules
+        .filter((row) => row.enabled === 1 && !String(row.id).startsWith("foreign"))
+        .map((row) => row.name),
+    ).toEqual([sourceJobName("orders.delta")]);
+    // The binding read and the exact readback both paged past a short first page.
+    expect(jobsList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
+    expect(schedulesList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
   });
 });
-
 describe("Shopify durable projection configuration", () => {
   it("plans without mutation and atomically enables exact customer and commerce subscriptions", async () => {
     const jobs = [
@@ -198,7 +332,7 @@ describe("Shopify durable projection configuration", () => {
       return { payload: { subscription: row } };
     });
     const nex = {
-      jobs: { list: vi.fn(async () => ({ payload: { jobs } })), update: jobsUpdate },
+      jobs: { list: runtimeList("jobs", jobs), update: jobsUpdate },
       events: {
         subscriptions: {
           list: vi.fn(async (input: Record<string, unknown>) => ({
@@ -261,22 +395,18 @@ describe("Shopify durable projection configuration", () => {
     const update = vi.fn();
     const nex = {
       jobs: {
-        list: vi.fn(async () => ({
-          payload: {
-            jobs: [
-              {
-                id: "job-customer",
-                name: "moonsleep-commerce.shopify-customer-identity",
-                status: "inactive",
-              },
-              {
-                id: "job-commerce",
-                name: "moonsleep-commerce.shopify-order-commerce",
-                status: "inactive",
-              },
-            ],
+        list: runtimeList("jobs", [
+          {
+            id: "job-customer",
+            name: "moonsleep-commerce.shopify-customer-identity",
+            status: "inactive",
           },
-        })),
+          {
+            id: "job-commerce",
+            name: "moonsleep-commerce.shopify-order-commerce",
+            status: "inactive",
+          },
+        ]),
         update,
       },
       events: {
@@ -318,6 +448,78 @@ describe("Shopify durable projection configuration", () => {
     ).rejects.toThrow("subscription contract drifted");
     expect(update).not.toHaveBeenCalled();
   });
+
+  it("configures projections whose jobs newer definitions pushed past the first page", async () => {
+    const jobs: Array<Record<string, unknown>> = [
+      {
+        id: "job-customer",
+        name: "moonsleep-commerce.shopify-customer-identity",
+        status: "inactive",
+      },
+      { id: "job-commerce", name: "moonsleep-commerce.shopify-order-commerce", status: "inactive" },
+      ...newerForeignJobs(1_050),
+    ];
+    const subscriptions = [
+      ["sub-customer", "job-customer", "customer"],
+      ["sub-order", "job-commerce", "order"],
+      ["sub-line", "job-commerce", "line_item"],
+    ].map(([id, jobDefinitionId, containerId]) => ({
+      id,
+      job_definition_id: jobDefinitionId,
+      event_type: "record.ingested",
+      match_json: JSON.stringify({ platform: "shopify", container_id: containerId }),
+      enabled: 0,
+    }));
+    const jobsList = runtimeList("jobs", jobs);
+    const nex = {
+      jobs: {
+        list: jobsList,
+        update: vi.fn(async (input: Record<string, unknown>) => {
+          const row = jobs.find((entry) => entry.id === input.id)!;
+          row.status = String(input.status);
+          return { payload: { job: row } };
+        }),
+      },
+      events: {
+        subscriptions: {
+          list: vi.fn(async (input: Record<string, unknown>) => ({
+            payload: {
+              subscriptions: subscriptions.filter(
+                (row) => row.job_definition_id === input.job_definition_id,
+              ),
+            },
+          })),
+          update: vi.fn(async (input: Record<string, unknown>) => {
+            const row = subscriptions.find((entry) => entry.id === input.id)!;
+            row.enabled = input.enabled === true ? 1 : 0;
+            return { payload: { subscription: row } };
+          }),
+        },
+      },
+    };
+    const planned = (await configureShopifyProjections({
+      params: { mode: "plan", enabled_projections: ["order_commerce"] },
+      nex,
+    } as never)) as Record<string, unknown>;
+
+    await expect(
+      configureShopifyProjections({
+        params: {
+          mode: "apply",
+          enabled_projections: ["order_commerce"],
+          expected_plan_sha256: planned.plan_sha256,
+          confirmation: "CONFIGURE_MOONSLEEP_SHOPIFY_PROJECTIONS",
+        },
+        nex,
+      } as never),
+    ).resolves.toMatchObject({ state: "applied" });
+    expect(jobs.slice(0, 2).map((row) => row.status)).toEqual(["inactive", "active"]);
+    expect(subscriptions.map((row) => row.enabled)).toEqual([0, 1, 1]);
+    expect(jobsList.mock.calls.map((call) => call[0])).toEqual([
+      ...PAST_THE_FIRST_PAGE,
+      ...PAST_THE_FIRST_PAGE,
+    ]);
+  });
 });
 
 describe("Shopify source manual trigger", () => {
@@ -331,17 +533,13 @@ describe("Shopify source manual trigger", () => {
       },
       nex: {
         jobs: {
-          list: vi.fn(async () => ({
-            payload: {
-              jobs: [
-                {
-                  id: "job-orders",
-                  name: "moonsleep-commerce.shopify-source.orders-delta",
-                  status: "active",
-                },
-              ],
+          list: runtimeList("jobs", [
+            {
+              id: "job-orders",
+              name: "moonsleep-commerce.shopify-source.orders-delta",
+              status: "active",
             },
-          })),
+          ]),
           invoke,
         },
       },
@@ -361,6 +559,192 @@ describe("Shopify source manual trigger", () => {
     });
   });
 
+  it("finds the source job that newer definitions pushed past the first page", async () => {
+    // 2026-09-11 to 2026-10-19 every observation-triggered source run failed
+    // "Shopify source job is missing or duplicated": orders-delta, created in
+    // July, was no longer on the default jobs.list page.
+    const invoke = vi.fn(async () => ({ payload: { run: { id: "run-1" } } }));
+    const list = runtimeList("jobs", [
+      {
+        id: "job-orders",
+        name: "moonsleep-commerce.shopify-source.orders-delta",
+        status: "active",
+      },
+      ...newerForeignJobs(1_050),
+    ]);
+
+    await expect(
+      triggerShopifySource({
+        params: {
+          family: "orders.delta",
+          connection_id: "shopify-primary",
+          request_id: "operator:orders:20261019T210000Z",
+        },
+        nex: { jobs: { list, invoke } },
+      } as never),
+    ).resolves.toMatchObject({ job_definition_id: "job-orders", run_id: "run-1" });
+    expect(list.mock.calls.map((call) => call[0])).toEqual(PAST_THE_FIRST_PAGE);
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("queues one immutable observation through the existing source job without a provider call", async () => {
+    const invoke = vi.fn(async () => ({ payload: { run: { id: "run-observation-1" } } }));
+    const observation = {
+      projection_work_id: `channelprojection_${"1".repeat(32)}`,
+      observation_receipt_id: `channelobs_${"2".repeat(32)}`,
+      projection_target: "nex",
+      source_system: "shopify",
+      source_account_ref: "moonsleep",
+      source_stream: "orders/paid",
+      external_receipt_id: "f5d13f46-6d83-4a93-baf8-acdeec37893a",
+      semantic_revision_id: "orders/paid:8328002633890:2026-08-22T20:00:00Z",
+      raw_body_sha256: "3".repeat(64),
+      verification_issuer: "shopify-hmac-sha256",
+      verification_receipt_sha256: "4".repeat(64),
+      observation_sha256: "5".repeat(64),
+      immutable_facts_sha256: "6".repeat(64),
+      immutable_facts: {
+        id: 8328002633890,
+        updated_at: "2026-08-22T20:00:00Z",
+        line_items: [{ id: 1, quantity: 1 }],
+      },
+      business_admission_outcome: "pending",
+      accepted_order_receipt_id: null,
+      accepted_order_revision_id: null,
+    };
+    const ctx = {
+      params: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation,
+      },
+      nex: {
+        jobs: {
+          list: runtimeList("jobs", [
+            {
+              id: "job-orders",
+              name: "moonsleep-commerce.shopify-source.orders-delta",
+              status: "active",
+            },
+          ]),
+          invoke,
+        },
+      },
+    };
+
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      queued: true,
+      family: "orders.delta",
+      request_id: observation.projection_work_id,
+      projection_work_id: observation.projection_work_id,
+      observation_receipt_id: observation.observation_receipt_id,
+      job_definition_id: "job-orders",
+      run_id: "run-observation-1",
+      provider_write_authority: false,
+    });
+    const immutableObservation = {
+      projection_work_id: observation.projection_work_id,
+      observation_receipt_id: observation.observation_receipt_id,
+      projection_target: observation.projection_target,
+      source_system: observation.source_system,
+      source_account_ref: observation.source_account_ref,
+      source_stream: observation.source_stream,
+      external_receipt_id: observation.external_receipt_id,
+      semantic_revision_id: observation.semantic_revision_id,
+      raw_body_sha256: observation.raw_body_sha256,
+      verification_issuer: observation.verification_issuer,
+      verification_receipt_sha256: observation.verification_receipt_sha256,
+      observation_sha256: observation.observation_sha256,
+      immutable_facts_sha256: observation.immutable_facts_sha256,
+      immutable_facts: observation.immutable_facts,
+    };
+    expect(invoke).toHaveBeenLastCalledWith({
+      job_id: "job-orders",
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}`,
+    });
+
+    ctx.params.observation = {
+      ...observation,
+      business_admission_outcome: "accepted",
+      accepted_order_receipt_id: "acceptedorderreceipt_" + "7".repeat(32),
+      accepted_order_revision_id: "acceptedorderrevision_" + "8".repeat(32),
+    };
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      run_id: "run-observation-1",
+    });
+    expect(invoke).toHaveBeenLastCalledWith({
+      job_id: "job-orders",
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}`,
+    });
+
+    // Re-issue of an abandoned lineage: the dead Run's id joins the key so the
+    // runtime mints a new Run instead of replaying the refused envelope.
+    const deadRun = "jobrun_aff093b9-b3a0-46af-9754-14a5936ef356";
+    ctx.params.reissue_of = deadRun;
+    await expect(triggerShopifySource(ctx as never)).resolves.toMatchObject({
+      run_id: "run-observation-1",
+      reissue_of: deadRun,
+    });
+    expect(invoke).toHaveBeenLastCalledWith({
+      job_id: "job-orders",
+      input: {
+        family: "orders.delta",
+        connection_id: "shopify-primary",
+        observation: immutableObservation,
+      },
+      trigger_source: "moonsleep-commerce-shopify-observation",
+      max_attempts: 3,
+      idempotency_key: `shopify-observation:${observation.projection_work_id}:reissue:${deadRun}`,
+    });
+    ctx.params.reissue_of = "not a run id";
+    await expect(triggerShopifySource(ctx as never)).rejects.toThrow("reissue_of is malformed");
+    delete ctx.params.reissue_of;
+  });
+
+  it("rejects an observation whose source stream disagrees with the source family", async () => {
+    const invoke = vi.fn();
+    await expect(
+      triggerShopifySource({
+        params: {
+          family: "customers.delta",
+          connection_id: "shopify-primary",
+          observation: {
+            projection_work_id: `channelprojection_${"1".repeat(32)}`,
+            observation_receipt_id: `channelobs_${"2".repeat(32)}`,
+            projection_target: "nex",
+            source_system: "shopify",
+            source_account_ref: "moonsleep",
+            source_stream: "orders/updated",
+            external_receipt_id: "receipt-1",
+            semantic_revision_id: "orders/updated:1:revision-1",
+            raw_body_sha256: "3".repeat(64),
+            verification_issuer: "shopify-hmac-sha256",
+            verification_receipt_sha256: "4".repeat(64),
+            observation_sha256: "5".repeat(64),
+            immutable_facts_sha256: "6".repeat(64),
+            immutable_facts: { id: 1 },
+          },
+        },
+        nex: { jobs: { list: vi.fn(), invoke } },
+      } as never),
+    ).rejects.toThrow("source_stream does not match family");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed requests and inactive jobs before queue mutation", async () => {
     const invoke = vi.fn();
     const base = {
@@ -371,17 +755,13 @@ describe("Shopify source manual trigger", () => {
       },
       nex: {
         jobs: {
-          list: vi.fn(async () => ({
-            payload: {
-              jobs: [
-                {
-                  id: "job-customers",
-                  name: "moonsleep-commerce.shopify-source.customers-delta",
-                  status: "inactive",
-                },
-              ],
+          list: runtimeList("jobs", [
+            {
+              id: "job-customers",
+              name: "moonsleep-commerce.shopify-source.customers-delta",
+              status: "inactive",
             },
-          })),
+          ]),
           invoke,
         },
       },
@@ -633,12 +1013,19 @@ function customerRecord(recordId: string, customerId: string) {
   return {
     id: recordId,
     record_id: recordId,
+    payload_sha256: createHash("sha256").update(`immutable:${recordId}`).digest("hex"),
     platform: "shopify",
+    source_record_type: "shopify.customer",
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
     timestamp: 1_784_564_000_000,
     payload: {
-      provider_object_json: providerObjectJson,
-      provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+      source_metadata: {
+        provider_payload: {
+          provider_object_json: providerObjectJson,
+          provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+        },
+      },
     },
     metadata: {
       family: "customer",
@@ -653,7 +1040,9 @@ function customerRecord(recordId: string, customerId: string) {
 
 function context(recordById: Record<string, ReturnType<typeof customerRecord>>) {
   const seenObservations = new Set<string>();
-  const recordsGet = vi.fn(async ({ id }: { id: string }) => ({ record: recordById[id] }));
+  const recordsGetMany = vi.fn(async ({ ids }: { ids: string[] }) => ({
+    records: ids.map((id) => recordById[id]).filter(Boolean),
+  }));
   const observe = vi.fn(async (input: Record<string, unknown>) => {
     const contactId = String(input.contact_id);
     const suffix = contactId.split("/").at(-1);
@@ -675,19 +1064,74 @@ function context(recordById: Record<string, ReturnType<typeof customerRecord>>) 
       replayed: wasSeen,
     };
   });
-  const resolve = vi.fn(async ({ entity_id }: { entity_id: string }) => ({
-    canonical_id: entity_id,
+  const profilesList = vi.fn(async () => ({
+    items: [
+      {
+        profile_id: "commerce.customer.reference_fact.v1",
+        profile_version: "1.0.0",
+        element_type: "fact",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+      {
+        profile_id: "commerce.customer.current.v1",
+        profile_version: "1.0.0",
+        element_type: "observation",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+    ],
   }));
-  const tagsList = vi.fn(async () => ({ tags: ["Customer", "Shopify"] }));
+  const profileRegister = vi.fn(async (input: Record<string, unknown>) => ({
+    item: {
+      profile_id: input.profileId,
+      profile_version: input.profileVersion,
+      element_type: input.elementType,
+      owner_package: input.ownerPackage,
+      source_manifest_sha256: input.sourceManifestSha256,
+      status: "active",
+    },
+    reused: false,
+  }));
+  const facetsGet = vi.fn(async (input: Record<string, unknown>) => {
+    throw new Error(`Facet ${String(input.id)} not found`);
+  });
+  const semanticsApply = vi.fn(async (input: Record<string, unknown>) => {
+    const observations = input.observations as Array<Record<string, unknown>>;
+    const objects = input.objects as Array<Record<string, unknown>>;
+    return {
+      status: "committed",
+      actionAuthority: false,
+      observations: Object.fromEntries(
+        observations.map((item, index) => [
+          item.ref,
+          { observationId: `observation-${index}`, receiptId: `receipt-${index}`, reused: false },
+        ]),
+      ),
+      objects: Object.fromEntries(
+        objects.map((item) => [
+          item.ref,
+          { objectId: item.id, objectType: "facet_attachment", reused: false },
+        ]),
+      ),
+    };
+  });
   return {
     params: { record_ids: Object.keys(recordById) },
     nex: {
-      records: { get: recordsGet },
+      records: { get_many: recordsGetMany },
       contacts: { observe },
-      entities: { resolve, tags: { list: tagsList } },
+      memory: {
+        evidence: { profiles: { list: profilesList, register: profileRegister } },
+      },
+      semantics: { apply: semanticsApply },
+      facets: { attachments: { get: facetsGet } },
     },
-    recordsGet,
+    recordsGetMany,
     observe,
+    semanticsApply,
   };
 }
 
@@ -703,7 +1147,7 @@ describe("Shopify customer cohort projector", () => {
     await expect(projectShopifyCustomerCohort(ctx as never)).rejects.toThrow(
       "only accepts Shopify records",
     );
-    expect(ctx.recordsGet).toHaveBeenCalledTimes(2);
+    expect(ctx.recordsGetMany).toHaveBeenCalledWith({ ids: ["record-1", "record-2"] });
     expect(ctx.observe).not.toHaveBeenCalled();
   });
 
@@ -723,6 +1167,8 @@ describe("Shopify customer cohort projector", () => {
       provider_write_authority: false,
     });
     expect(ctx.observe).toHaveBeenCalledTimes(2);
+    expect(ctx.semanticsApply).toHaveBeenCalledOnce();
+    expect((ctx.semanticsApply.mock.calls[0]?.[0].objects as unknown[]).length).toBe(2);
   });
 
   it("rejects duplicate, untrimmed, empty, and oversized cohorts", async () => {
@@ -733,399 +1179,12 @@ describe("Shopify customer cohort projector", () => {
       [" record-1"],
       ["x".repeat(513)],
       ["é".repeat(257)],
-      Array.from({ length: 51 }, (_, index) => `record-${index}`),
+      Array.from({ length: 101 }, (_, index) => `record-${index}`),
     ]) {
       await expect(
         projectShopifyCustomerCohort({ ...ctx, params: { record_ids: recordIds } } as never),
       ).rejects.toThrow();
     }
     expect(ctx.observe).not.toHaveBeenCalled();
-  });
-});
-
-describe("Complete Shopify customer record-set discovery", () => {
-  function completeContext(recordById: Record<string, ReturnType<typeof customerRecord>>) {
-    const ctx = context(recordById);
-    const ordered = Object.values(recordById);
-    const list = vi.fn(async ({ limit, offset }: { limit: number; offset: number }) => ({
-      records: ordered.slice(offset, offset + limit),
-      limit,
-      offset,
-    }));
-    return {
-      ...ctx,
-      params: {
-        shop_domain: "moonsleepco.myshopify.com",
-        connection_id: "shopify-primary",
-      },
-      nex: { ...ctx.nex, records: { ...ctx.nex.records, list } },
-      list,
-    };
-  }
-
-  it("inspects the exact complete hash-bound set without projecting it", async () => {
-    const ctx = completeContext({
-      "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
-      "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
-      "record-3": customerRecord("record-3", "gid://shopify/Customer/3"),
-    });
-    const inspected = await inspectShopifyCustomerBackfill(ctx as never);
-    expect(inspected).toMatchObject({
-      state: "ready",
-      record_count: 3,
-      record_ids: ["record-1", "record-2", "record-3"],
-      record_set_sha256: shopifyCustomerRecordSetSha256(["record-1", "record-2", "record-3"]),
-      first_record_id: "record-1",
-      last_record_id: "record-3",
-      provider_write_authority: false,
-    });
-
-    expect(ctx.observe).not.toHaveBeenCalled();
-    expect(ctx.recordsGet).not.toHaveBeenCalled();
-    expect(ctx.list).toHaveBeenCalledWith({
-      platform: "shopify",
-      connection_id: "shopify-primary",
-      limit: 1000,
-      offset: 0,
-    });
-  });
-
-  it("paginates the public record surface and rejects duplicate IDs", async () => {
-    const records = Object.fromEntries(
-      Array.from({ length: 1001 }, (_, index) => {
-        const id = `record-${String(index).padStart(4, "0")}`;
-        return [id, customerRecord(id, `gid://shopify/Customer/${index + 1}`)];
-      }),
-    );
-    const ctx = completeContext(records);
-    await expect(inspectShopifyCustomerBackfill(ctx as never)).resolves.toMatchObject({
-      record_count: 1001,
-    });
-    expect(ctx.list).toHaveBeenCalledTimes(2);
-
-    const duplicateCtx = completeContext({
-      first: customerRecord("same-id", "gid://shopify/Customer/1"),
-      second: customerRecord("same-id", "gid://shopify/Customer/2"),
-    });
-    await expect(inspectShopifyCustomerBackfill(duplicateCtx as never)).rejects.toThrow(
-      "duplicate record ids",
-    );
-    expect(duplicateCtx.observe).not.toHaveBeenCalled();
-  });
-});
-
-describe("Shopify customer full backfill projector", () => {
-  function backfillContext(
-    recordById: Record<string, ReturnType<typeof customerRecord>>,
-    recordIds = Object.keys(recordById).sort(),
-  ) {
-    const ctx = context(recordById);
-    return {
-      ...ctx,
-      params: {
-        record_ids: recordIds,
-        record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
-      },
-    };
-  }
-
-  it("returns stable hashes and zero new identities on the exact second run", async () => {
-    const ctx = backfillContext({
-      "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
-      "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
-      "record-3": customerRecord("record-3", "gid://shopify/Customer/3"),
-    });
-
-    const first = await projectShopifyCustomerBackfill(ctx as never);
-    expect(first).toMatchObject({
-      state: "succeeded",
-      records_requested: 3,
-      records_projected: 3,
-      created_entities: 3,
-      created_contacts: 3,
-      replayed: 0,
-      first_record_id: "record-1",
-      last_record_id: "record-3",
-      provider_write_authority: false,
-    });
-
-    const second = await projectShopifyCustomerBackfill(ctx as never);
-    expect(second).toMatchObject({
-      state: "succeeded",
-      records_requested: 3,
-      records_projected: 3,
-      created_entities: 0,
-      created_contacts: 0,
-      replayed: 3,
-      record_set_sha256: first.record_set_sha256,
-      projection_result_sha256: first.projection_result_sha256,
-      provider_write_authority: false,
-    });
-    expect(ctx.observe).toHaveBeenCalledTimes(6);
-  });
-
-  it("validates the complete batch before the first identity write", async () => {
-    const invalid = {
-      ...customerRecord("record-3", "gid://shopify/Customer/3"),
-      space_id: "wrong.myshopify.com",
-    };
-    const ctx = backfillContext({
-      "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
-      "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
-      "record-3": invalid,
-    });
-
-    await expect(projectShopifyCustomerBackfill(ctx as never)).rejects.toThrow(
-      "space does not match",
-    );
-    expect(ctx.recordsGet).toHaveBeenCalledTimes(3);
-    expect(ctx.observe).not.toHaveBeenCalled();
-  });
-
-  it("rejects an altered set identity, unsorted IDs, and malformed digests before reads", async () => {
-    const ctx = backfillContext({
-      "record-1": customerRecord("record-1", "gid://shopify/Customer/1"),
-      "record-2": customerRecord("record-2", "gid://shopify/Customer/2"),
-    });
-    const cases = [
-      { record_ids: ["record-1", "record-2"], record_set_sha256: "0".repeat(64) },
-      {
-        record_ids: ["record-2", "record-1"],
-        record_set_sha256: shopifyCustomerRecordSetSha256(["record-2", "record-1"]),
-      },
-      { record_ids: ["record-1", "record-2"], record_set_sha256: "INVALID" },
-      {
-        record_ids: Array.from(
-          { length: 251 },
-          (_, index) => `record-${String(index).padStart(4, "0")}`,
-        ),
-        record_set_sha256: "0".repeat(64),
-      },
-    ];
-
-    for (const params of cases) {
-      await expect(projectShopifyCustomerBackfill({ ...ctx, params } as never)).rejects.toThrow();
-    }
-    expect(ctx.recordsGet).not.toHaveBeenCalled();
-    expect(ctx.observe).not.toHaveBeenCalled();
-  });
-});
-
-function commerceRecord(
-  id: string,
-  family: "order" | "line_item",
-  options: { invalidHash?: boolean } = {},
-) {
-  const orderId = "900719925474099312346";
-  const lineItemId = "900719925474099312347";
-  const raw =
-    family === "order"
-      ? `{"id":${orderId},"customer":{"id":900719925474099312345},"total_price":"199.00"}`
-      : `{"id":${lineItemId},"quantity":1,"price":"199.00"}`;
-  return {
-    id,
-    record_id: `shopify:shopify-primary:${family}:${id}:revision-1`,
-    platform: "shopify",
-    space_id: "moonsleepco.myshopify.com",
-    timestamp: 1_784_640_000_000 + (family === "order" ? 1 : 2),
-    payload: {
-      provider_object_json: raw,
-      provider_object_sha256: options.invalidHash
-        ? "0".repeat(64)
-        : createHash("sha256").update(raw).digest("hex"),
-    },
-    metadata: {
-      family,
-      revision_hash: (family === "order" ? "b" : "c").repeat(64),
-      provider_ids:
-        family === "order"
-          ? { order_id: orderId, customer_id: "900719925474099312345" }
-          : { order_id: orderId, line_item_id: lineItemId },
-      row:
-        family === "order"
-          ? {
-              shop_domain: "moonsleepco.myshopify.com",
-              order_id: orderId,
-              customer_id: "900719925474099312345",
-              name: "#SYNTH-1",
-              currency: "USD",
-              subtotal_price: "199.00",
-              total_price: "199.00",
-              billing_address: { address1: "1 Synthetic Way", city: "Austin", zip: "78701" },
-              shipping_address: { address1: "2 Replay Road", city: "Austin", zip: "78702" },
-            }
-          : {
-              shop_domain: "moonsleepco.myshopify.com",
-              order_id: orderId,
-              line_item_id: lineItemId,
-              product_id: "900719925474099312348",
-              variant_id: "900719925474099312349",
-              sku: "SYNTHETIC-SKU",
-              title: "Synthetic Product",
-              quantity: 1,
-              price: "199.00",
-            },
-    },
-  };
-}
-
-describe("Shopify order and line-item bounded backfill", () => {
-  function commerceContext(records: Record<string, ReturnType<typeof commerceRecord>>) {
-    const ids = Object.keys(records).sort();
-    const committed = new Set<string>();
-    const recordsGet = vi.fn(async ({ id }: { id: string }) => ({ record: records[id] }));
-    const orderObserve = vi.fn(async (input: Record<string, unknown>) => {
-      const sourceRecordId = String(input.source_record_id);
-      const replayed = committed.has(sourceRecordId);
-      committed.add(sourceRecordId);
-      return {
-        created: !replayed,
-        replayed,
-        became_current: true,
-        row_id: "order-row",
-        revision_id: `revision-${sourceRecordId}`,
-        source_record_id: sourceRecordId,
-        source_revision_sha256: input.source_revision_sha256,
-        projection_payload_sha256: "d".repeat(64),
-      };
-    });
-    const lineObserve = vi.fn(async (input: Record<string, unknown>) => {
-      expect(orderObserve).toHaveBeenCalled();
-      const sourceRecordId = String(input.source_record_id);
-      const replayed = committed.has(sourceRecordId);
-      committed.add(sourceRecordId);
-      return {
-        created: !replayed,
-        replayed,
-        became_current: true,
-        row_id: "line-row",
-        revision_id: `revision-${sourceRecordId}`,
-        source_record_id: sourceRecordId,
-        source_revision_sha256: input.source_revision_sha256,
-        projection_payload_sha256: "e".repeat(64),
-      };
-    });
-    return {
-      params: { record_ids: ids, record_set_sha256: shopifyCommerceRecordSetSha256(ids) },
-      nex: {
-        records: { get: recordsGet },
-        contacts: {
-          resolve: vi.fn(async () => ({
-            found: true,
-            contact: { id: "customer-contact", canonical_entity_id: "customer-entity" },
-          })),
-        },
-        commerce: {
-          orders: {
-            observe: orderObserve,
-            get: vi.fn(async () => ({ found: true, revision: { currency: "USD" } })),
-          },
-          "line-items": { observe: lineObserve },
-        },
-      },
-      recordsGet,
-      orderObserve,
-      lineObserve,
-    };
-  }
-
-  it("projects orders before line items and replays the same exact set without duplicates", async () => {
-    const ctx = commerceContext({
-      "record-z-order": commerceRecord("record-z-order", "order"),
-      "record-a-line": commerceRecord("record-a-line", "line_item"),
-    });
-    const first = await projectShopifyCommerceBackfill(ctx as never);
-    expect(first).toMatchObject({
-      state: "succeeded",
-      records_requested: 2,
-      records_projected: 2,
-      orders_projected: 1,
-      line_items_projected: 1,
-      created: 2,
-      replayed: 0,
-      provider_read_authority: false,
-      provider_write_authority: false,
-    });
-    const second = await projectShopifyCommerceBackfill(ctx as never);
-    expect(second).toMatchObject({
-      record_set_sha256: first.record_set_sha256,
-      projection_result_sha256: first.projection_result_sha256,
-      created: 0,
-      replayed: 2,
-    });
-  });
-
-  it("validates every source record before the first commerce write", async () => {
-    const ctx = commerceContext({
-      "record-a-order": commerceRecord("record-a-order", "order"),
-      "record-b-line": commerceRecord("record-b-line", "line_item", { invalidHash: true }),
-    });
-    await expect(projectShopifyCommerceBackfill(ctx as never)).rejects.toThrow(
-      "hash does not match",
-    );
-    expect(ctx.recordsGet).toHaveBeenCalledTimes(2);
-    expect(ctx.orderObserve).not.toHaveBeenCalled();
-    expect(ctx.lineObserve).not.toHaveBeenCalled();
-  });
-
-  it("discovers only committed order and line-item records with no provider call", async () => {
-    const order = commerceRecord("record-z-order", "order");
-    const line = commerceRecord("record-a-line", "line_item");
-    const customer = customerRecord("record-customer", "gid://shopify/Customer/1");
-    const list = vi.fn(async () => ({ records: [order, customer, line] }));
-    const inspected = await inspectShopifyCommerceBackfill({
-      params: {
-        shop_domain: "moonsleepco.myshopify.com",
-        connection_id: "shopify-primary",
-      },
-      nex: { records: { list } },
-    } as never);
-    expect(inspected).toMatchObject({
-      state: "ready",
-      record_count: 2,
-      record_ids: ["record-z-order", "record-a-line"],
-      provider_read_authority: false,
-      provider_write_authority: false,
-    });
-  });
-
-  it("orders the full inspection manifest by dependency before batch slicing", async () => {
-    const records = [
-      commerceRecord("record-a-line", "line_item"),
-      commerceRecord("record-z-order", "order"),
-      commerceRecord("record-b-line", "line_item"),
-      commerceRecord("record-y-order", "order"),
-    ];
-    const inspected = await inspectShopifyCommerceBackfill({
-      params: {
-        shop_domain: "moonsleepco.myshopify.com",
-        connection_id: "shopify-primary",
-      },
-      nex: { records: { list: vi.fn(async () => ({ records })) } },
-    } as never);
-    expect(inspected.record_ids).toEqual([
-      "record-y-order",
-      "record-z-order",
-      "record-a-line",
-      "record-b-line",
-    ]);
-  });
-
-  it("rejects oversized batches and altered set hashes before reads", async () => {
-    const ctx = commerceContext({ "record-order": commerceRecord("record-order", "order") });
-    await expect(
-      projectShopifyCommerceBackfill({
-        ...ctx,
-        params: { ...ctx.params, record_set_sha256: "0".repeat(64) },
-      } as never),
-    ).rejects.toThrow("does not match");
-    const tooMany = Array.from({ length: 51 }, (_, index) => `record-${index}`);
-    await expect(
-      projectShopifyCommerceBackfill({
-        ...ctx,
-        params: { record_ids: tooMany, record_set_sha256: shopifyCommerceRecordSetSha256(tooMany) },
-      } as never),
-    ).rejects.toThrow("between 1 and 50");
-    expect(ctx.recordsGet).not.toHaveBeenCalled();
   });
 });

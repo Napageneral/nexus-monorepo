@@ -47,6 +47,12 @@ export type DefineAdapterConfig<TClient> = {
   version: string;
   multi_account?: boolean;
   credential_service?: string;
+  /**
+   * Opt in to `--payload-file <path>` (always accepted by `runAdapter`): adapter.info then says
+   * `supports_payload_file: true`, and the runtime sends payloads over 64 KiB as a private file
+   * instead of one inline `--payload-json` argument. Absent, adapter.info is unchanged.
+   */
+  supportsPayloadFile?: boolean;
   auth?: AdapterAuthManifest;
   capabilities: ChannelCapabilities;
   methodCatalog?: AdapterMethodCatalog;
@@ -250,6 +256,7 @@ function buildAdapterInfo<TClient>(
     methods: methodDescriptors,
     ...(config.credential_service ? { credential_service: config.credential_service } : {}),
     multi_account: config.multi_account ?? false,
+    ...(config.supportsPayloadFile === true ? { supports_payload_file: true } : {}),
     platform_capabilities: config.capabilities,
     ...(config.auth ? { auth: config.auth } : {}),
     ...(methodDescriptors.length > 0

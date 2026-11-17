@@ -1,0 +1,35 @@
+{
+  "accounts": [
+    {
+      "account_id": "account-amex-synthetic",
+      "balances": {
+        "available": null,
+        "current": 67578.06,
+        "limit": 100000,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      },
+      "mask": "1000",
+      "name": "Business Gold",
+      "official_name": "Synthetic Business Gold Card",
+      "subtype": "credit card",
+      "type": "credit"
+    },
+    {
+      "account_id": "account-chase-synthetic",
+      "balances": {
+        "available": 14935.53,
+        "current": 5064.47,
+        "limit": 20000,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      },
+      "mask": "8374",
+      "name": "Business Card",
+      "official_name": "Synthetic Chase Business Card",
+      "subtype": "credit card",
+      "type": "credit"
+    }
+  ],
+  "request_id": "req-accounts-synthetic"
+}

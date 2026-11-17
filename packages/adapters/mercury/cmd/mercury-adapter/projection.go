@@ -23,9 +23,9 @@ const (
 	mercuryProjectionPageLimit  = 100
 	mercuryProjectionPageSize   = 1000
 	mercuryCaptureContract      = "nex_mercury_api_capture_v1"
-	mercuryRecordContract       = "nex_mercury_record_revision_v1"
+	mercuryRecordContract       = "nex_mercury_record_v1"
 	mercuryAttachmentIDContract = "nex_mercury_derived_attachment_identity_v1"
-	mercuryProjectionRecordText = "Mercury immutable provider revision"
+	mercuryProjectionRecordText = "Mercury provider snapshot"
 )
 
 // Mercury filters its transaction list by creation time, and the poll cursor moves to each capture's time, so a
@@ -74,28 +74,28 @@ var mercuryProjectionSources = map[string]mercuryProjectionSource{
 	},
 	"listTransactions": {
 		OperationID:  "listTransactions",
-		Family:       "transaction_revision",
+		Family:       "transaction_snapshot",
 		ArrayField:   "transactions",
 		IDField:      "id",
 		TimestampKey: []string{"postedAt", "createdAt", "estimatedDeliveryDate"},
 	},
 	"getRecipients": {
 		OperationID:  "getRecipients",
-		Family:       "recipient_revision",
+		Family:       "recipient_snapshot",
 		ArrayField:   "recipients",
 		IDField:      "id",
 		TimestampKey: []string{"dateLastPaid"},
 	},
 	"listSendMoneyApprovalRequests": {
 		OperationID:  "listSendMoneyApprovalRequests",
-		Family:       "approval_request_revision",
+		Family:       "approval_request_snapshot",
 		ArrayField:   "requests",
 		IDField:      "requestId",
 		TimestampKey: []string{"createdAt", "scheduledSendDate"},
 	},
 	"getAccountStatements": {
 		OperationID:  "getAccountStatements",
-		Family:       "statement_revision",
+		Family:       "statement_snapshot",
 		ArrayField:   "statements",
 		IDField:      "id",
 		TimestampKey: []string{"endDate", "startDate"},
@@ -611,7 +611,7 @@ func projectMercuryResponseKeeping(
 					continue
 				}
 			}
-			rowRecords, err := buildMercuryRevisionRecords(client, source, row, capturedAt)
+			rowRecords, err := buildMercuryRecords(client, source, row, capturedAt)
 			if err != nil {
 				return nil, fmt.Errorf("Mercury %s page %d: %w", source.OperationID, pageIndex+1, err)
 			}
@@ -716,7 +716,7 @@ func projectionProviderTimestamps(
 	return result, nil
 }
 
-func buildMercuryRevisionRecords(
+func buildMercuryRecords(
 	client *mercuryClient,
 	source mercuryProjectionSource,
 	raw json.RawMessage,
@@ -732,13 +732,13 @@ func buildMercuryRevisionRecords(
 	}
 	occurredAt := providerTimestamp(object, source.TimestampKey, capturedAt)
 	records := []nexadapter.AdapterInboundRecord{
-		newMercuryRevisionRecord(client, source.Family, providerID, canonical, object, source.OperationID, occurredAt, capturedAt, nil),
+		newMercuryRecord(client, source.Family, providerID, canonical, object, source.OperationID, occurredAt, capturedAt, nil),
 	}
-	if source.Family == "transaction_revision" {
+	if source.Family == "transaction_snapshot" {
 		if requestID := optionalProviderID(object, "requestId"); requestID != "" {
-			records = append(records, newMercuryRevisionRecord(
+			records = append(records, newMercuryRecord(
 				client,
-				"payment_revision",
+				"payment_snapshot",
 				requestID,
 				canonical,
 				object,
@@ -749,9 +749,9 @@ func buildMercuryRevisionRecords(
 			))
 		}
 	}
-	if source.Family == "approval_request_revision" {
+	if source.Family == "approval_request_snapshot" {
 		if scheduledDate := optionalProviderID(object, "scheduledSendDate"); scheduledDate != "" {
-			records = append(records, newMercuryRevisionRecord(
+			records = append(records, newMercuryRecord(
 				client,
 				"scheduled_payment_observation",
 				providerID,
@@ -778,9 +778,9 @@ func buildMercuryRevisionRecords(
 		if err != nil {
 			return nil, err
 		}
-		records = append(records, newMercuryRevisionRecord(
+		records = append(records, newMercuryRecord(
 			client,
-			"attachment_revision",
+			"attachment_snapshot",
 			attachmentID,
 			attachmentCanonical,
 			attachmentObject,
@@ -902,7 +902,7 @@ func embeddedAttachments(object map[string]any) []json.RawMessage {
 	return attachments
 }
 
-func newMercuryRevisionRecord(
+func newMercuryRecord(
 	client *mercuryClient,
 	family string,
 	providerID string,
@@ -914,8 +914,7 @@ func newMercuryRevisionRecord(
 	identityMetadata map[string]any,
 ) nexadapter.AdapterInboundRecord {
 	digest := sha256.Sum256(canonical)
-	revision := hex.EncodeToString(digest[:])
-	safeConnection := nexadapter.SafeIDToken(client.connectionID)
+	snapshotSHA256 := hex.EncodeToString(digest[:])
 	safeProviderID := nexadapter.SafeIDToken(providerID)
 	evidenceMetadata := map[string]any{
 		"contract":                        mercuryRecordContract,
@@ -928,7 +927,7 @@ func newMercuryRevisionRecord(
 		"provider_operation_id":           operationID,
 		"provider_payload":                object,
 		"provider_payload_canonical_json": string(canonical),
-		"provider_payload_sha256":         revision,
+		"provider_payload_sha256":         snapshotSHA256,
 		"captured_at":                     capturedAt.Format(time.RFC3339Nano),
 		"provider_write_authority":        false,
 		"journal_authority":               false,
@@ -939,27 +938,41 @@ func newMercuryRevisionRecord(
 		"connection_id":                   client.connectionID,
 		"credential_ref":                  client.credentialRef,
 		"logical_row_id":                  providerID,
-		"revision_hash":                   revision,
+		"snapshot_sha256":                 snapshotSHA256,
 	}
 	for key, value := range identityMetadata {
 		evidenceMetadata[key] = value
 	}
+	var providerAccountRef *string
+	accountID := firstNonBlank(
+		optionalProviderID(object, "accountId"),
+		optionalProviderID(object, "sourceAccountId"),
+		optionalProviderID(object, "mercuryAccountId"),
+	)
+	if family == "account_snapshot" {
+		accountID = providerID
+	}
+	if accountID != "" {
+		providerAccountRef = &accountID
+	}
+	sourceRecordType := family
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Routing: nexadapter.AdapterInboundRouting{
-			Adapter:       platformID,
-			Platform:      platformID,
-			ConnectionID:  client.connectionID,
-			SenderID:      "mercury",
-			SenderName:    "Mercury",
-			ReceiverID:    client.connectionID,
-			SpaceID:       "moonsleep",
-			SpaceName:     "MoonSleep",
-			ContainerKind: "group",
-			ContainerID:   family,
-			ContainerName: family,
-			ThreadID:      fmt.Sprintf("mercury:%s:%s", family, safeProviderID),
-			ThreadName:    providerID,
+			Adapter:            platformID,
+			Platform:           platformID,
+			ConnectionID:       client.connectionID,
+			ProviderAccountRef: providerAccountRef,
+			SenderID:           "mercury",
+			SenderName:         "Mercury",
+			ReceiverID:         client.connectionID,
+			SpaceID:            "moonsleep",
+			SpaceName:          "MoonSleep",
+			ContainerKind:      "group",
+			ContainerID:        family,
+			ContainerName:      family,
+			ThreadID:           fmt.Sprintf("mercury:%s:%s", family, safeProviderID),
+			ThreadName:         providerID,
 			Metadata: map[string]any{
 				"family":                family,
 				"provider_operation_id": operationID,
@@ -967,14 +980,15 @@ func newMercuryRevisionRecord(
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("mercury:%s:%s:%s:%s", safeConnection, family, safeProviderID, revision),
+			ExternalRecordID: providerID,
+			SourceRecordType: &sourceRecordType,
 			Timestamp:        occurredAt.UnixMilli(),
 			Content:          fmt.Sprintf("%s family=%s provider_id=%s", mercuryProjectionRecordText, family, providerID),
-			ContentType:      "text",
-			// Payload is retained for direct adapter consumers. Metadata carries
-			// the same hash-bound evidence through the canonical record.ingest
-			// boundary, whose public record row persists payload metadata.
-			Payload:  evidenceMetadata,
+			ContentType:      "application/json",
+			Payload: map[string]any{
+				"provider_object_json":   string(canonical),
+				"provider_object_sha256": snapshotSHA256,
+			},
 			Metadata: evidenceMetadata,
 		},
 	}
@@ -1010,6 +1024,7 @@ func buildMercuryCaptureReceipt(
 		page.BodySHA256,
 	)
 	safeConnection := nexadapter.SafeIDToken(client.connectionID)
+	sourceRecordType := "api_capture_receipt"
 	evidenceMetadata := map[string]any{
 		"contract":                 mercuryCaptureContract,
 		"provider":                 "mercury",
@@ -1037,7 +1052,7 @@ func buildMercuryCaptureReceipt(
 		"cutover_authority":        false,
 		"connection_id":            client.connectionID,
 		"credential_ref":           client.credentialRef,
-		"revision_hash":            page.BodySHA256,
+		"snapshot_sha256":          page.BodySHA256,
 	}
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
@@ -1067,11 +1082,15 @@ func buildMercuryCaptureReceipt(
 		},
 		Payload: nexadapter.AdapterInboundPayload{
 			ExternalRecordID: fmt.Sprintf("mercury:%s:api_capture_receipt:%s", safeConnection, nexadapter.SafeIDToken(receiptID)),
+			SourceRecordType: &sourceRecordType,
 			Timestamp:        capturedAt.UnixMilli(),
 			Content:          fmt.Sprintf("Mercury API capture operation=%s page=%d rows=%d", source.OperationID, pageNumber, rowCount),
-			ContentType:      "text",
-			Payload:          evidenceMetadata,
-			Metadata:         evidenceMetadata,
+			ContentType:      "application/json",
+			Payload: map[string]any{
+				"provider_object_json":   page.Body,
+				"provider_object_sha256": page.BodySHA256,
+			},
+			Metadata: evidenceMetadata,
 		},
 	}, nil
 }

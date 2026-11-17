@@ -3,14 +3,21 @@ import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { AclPermissionRequest } from "./controllers/acl-requests.ts";
 import type { InstalledApp, InstalledAppMethod } from "./controllers/apps.ts";
 import type {
+  IdentityEntity,
   IdentityChannel,
   IdentityContact,
   IdentityGroup,
+  IdentityGroupMember,
   IdentityMergeCandidate,
   IdentityPolicy,
 } from "./controllers/identity.ts";
 import type { IngressCredential } from "./controllers/ingress-credentials.ts";
 import type { AdapterAuthField, AdapterConnectionEntry } from "./controllers/integrations.ts";
+import type {
+  RecordsChannelEntry,
+  RecordsEntry,
+  RecordsSearchEntry,
+} from "./controllers/records.ts";
 import type { AutomationMeeseeksEntry } from "./controllers/schedules.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { Tab } from "./navigation.ts";
@@ -41,6 +48,8 @@ import type {
   MemoryReviewEntityDetail,
   MemoryReviewFactDetail,
   MemoryReviewObservationDetail,
+  MonitorOperation,
+  MonitorOperationsStatsResult,
   MemoryReviewQualityBucket,
   MemoryReviewQualityItemsResult,
   MemoryReviewQualitySummary,
@@ -55,6 +64,7 @@ import type {
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, ScheduleFormState } from "./ui-types.ts";
+import type { SemanticReviewState } from "./semantic-review-types.ts";
 import type { AccessSubTab } from "./views/access-view.ts";
 import type { AdaptersSubTab } from "./views/adapters-view.ts";
 import type { AutomationsSubTab } from "./views/automations-view.ts";
@@ -64,7 +74,7 @@ import type { OperationsSubTab } from "./views/operations-view.ts";
 import type { SystemSubTab } from "./views/system-view.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
-export type AppViewState = {
+export type AppViewState = SemanticReviewState & {
   settings: UiSettings;
   password: string;
   tab: Tab;
@@ -121,11 +131,20 @@ export type AppViewState = {
   identityLoading: boolean;
   identityError: string | null;
   identityMergeBusyId: string | null;
+  identityEntities: IdentityEntity[];
   identityContacts: IdentityContact[];
   identityChannels: IdentityChannel[];
   identityGroups: IdentityGroup[];
   identityPolicies: IdentityPolicy[];
   identityMergeCandidates: IdentityMergeCandidate[];
+  identitySelectedEntityId: string | null;
+  identitySelectedEntity: IdentityEntity | null;
+  identitySelectedEntityContacts: IdentityContact[];
+  identityEntityDetailLoading: boolean;
+  identitySelectedGroupId: string | null;
+  identitySelectedGroup: IdentityGroup | null;
+  identityGroupMembers: IdentityGroupMember[];
+  identityGroupDetailLoading: boolean;
   pendingRuntimeUrl: string | null;
   configLoading: boolean;
   configRaw: string;
@@ -184,6 +203,14 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
+  monitorPaused: boolean;
+  monitorLiveOps: MonitorOperation[];
+  monitorHistoryOps: MonitorOperation[];
+  monitorHistoryTotal: number;
+  monitorHistoryLoading: boolean;
+  monitorHistoryError: string | null;
+  monitorStats: MonitorOperationsStatsResult | null;
+  monitorStatsLoading: boolean;
   agentsPanel: "overview" | "files" | "tools" | "skills" | "accounts" | "automations";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
@@ -223,7 +250,7 @@ export type AppViewState = {
   memorySearchType: MemoryReviewSearchType;
   memorySearchLoading: boolean;
   memorySearchResult: MemoryReviewSearchResult | null;
-  memorySubTab: "library" | "search" | "operations";
+  memorySubTab: "library" | "search" | "quality" | "review";
   memoryQualityScope: "run" | "global";
   memoryQualityLoading: boolean;
   memoryQualitySummary: MemoryReviewQualitySummary | null;
@@ -281,6 +308,19 @@ export type AppViewState = {
   automationMeeseeksLoading: boolean;
   automationMeeseeksError: string | null;
   automationMeeseeks: AutomationMeeseeksEntry[];
+  recordsLoading: boolean;
+  recordsError: string | null;
+  recordsItems: RecordsEntry[];
+  recordsOffset: number;
+  recordsLimit: number;
+  recordsHasMore: boolean;
+  recordsPlatformFilter: string;
+  recordsChannelsLoading: boolean;
+  recordsChannels: RecordsChannelEntry[];
+  recordsSearchQuery: string;
+  recordsSearchPlatform: string;
+  recordsSearchLoading: boolean;
+  recordsSearchResults: RecordsSearchEntry[] | null;
   skillsLoading: boolean;
   skillsReport: SkillStatusReport | null;
   skillsError: string | null;

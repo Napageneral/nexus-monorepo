@@ -1,0 +1,42 @@
+{
+  "accounts": [
+    {
+      "account_id": "account-amex-synthetic",
+      "balances": {
+        "available": null,
+        "current": 67578.06,
+        "limit": 100000,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      },
+      "mask": "1000",
+      "name": "Business Gold",
+      "official_name": "Synthetic Business Gold Card",
+      "subtype": "credit card",
+      "type": "credit"
+    }
+  ],
+  "liabilities": {
+    "credit": [
+      {
+        "account_id": "account-amex-synthetic",
+        "aprs": [
+          {
+            "apr_percentage": 24.99,
+            "apr_type": "purchase_apr",
+            "balance_subject_to_apr": 67578.06,
+            "interest_charge_amount": 0
+          }
+        ],
+        "is_overdue": false,
+        "last_payment_amount": 15000,
+        "last_payment_date": "2026-07-01",
+        "last_statement_balance": 67578.06,
+        "last_statement_issue_date": "2026-07-10",
+        "minimum_payment_amount": 675.78,
+        "next_payment_due_date": "2026-08-03"
+      }
+    ]
+  },
+  "request_id": "req-liabilities-synthetic"
+}

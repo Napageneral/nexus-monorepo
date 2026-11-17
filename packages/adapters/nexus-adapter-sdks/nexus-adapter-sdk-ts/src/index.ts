@@ -20,6 +20,9 @@ export { requireContainerTarget, readReplyToTarget, readThreadTarget } from "./t
 export type { RetryOptions } from "./retry.js";
 export { parseRetryAfterMs, sleepWithSignal, withRetry } from "./retry.js";
 
+export type { OpenApiMethodBuilderConfig } from "./openapi.js";
+export { createOpenApiMethods } from "./openapi.js";
+
 export type {
   AdapterContext,
   AdapterBackfillWindow,
@@ -36,6 +39,8 @@ export { runAdapter as runAdapterCLI } from "./run.js";
 
 export {
   AdapterConnectionIdentitySchema,
+  CompleteProviderSnapshotSchema,
+  completeProviderSnapshot,
   AdapterAuthFieldSchema,
   AdapterAuthManifestSchema,
   AdapterMethodSchema,
@@ -80,6 +85,7 @@ export {
 
 export type {
   AdapterConnectionIdentity,
+  CompleteProviderSnapshot,
   AdapterAuthField,
   AdapterAuthManifest,
   AdapterMethod,
@@ -146,3 +152,4 @@ export { newRecord, RecordBuilder, messageRecord } from "./event.js";
 
 export type { AdapterLogger } from "./logger.js";
 export { createAdapterLogger, patchConsoleToStderr } from "./logger.js";
+export * from "./checkpoint.js";

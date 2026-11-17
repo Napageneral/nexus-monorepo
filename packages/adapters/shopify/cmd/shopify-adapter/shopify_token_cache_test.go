@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSharedShopifyAccessTokenReusesExactCredentialBindingAcrossCalls(t *testing.T) {
@@ -17,9 +18,9 @@ func TestSharedShopifyAccessTokenReusesExactCredentialBindingAcrossCalls(t *test
 		ClientSecret: "secret-a",
 	}
 	fetches := 0
-	fetch := func(context.Context, *shopifyState) (string, error) {
+	fetch := func(context.Context, *shopifyState) (shopifyAccessToken, error) {
 		fetches++
-		return "token-a", nil
+		return shopifyAccessToken{Value: "token-a", ExpiresAt: time.Now().UTC().Add(24 * time.Hour)}, nil
 	}
 
 	first, err := sharedShopifyAccessToken(context.Background(), state, fetch)
@@ -56,9 +57,9 @@ func TestSharedShopifyAccessTokenRejectsCredentialCrossReuse(t *testing.T) {
 		ClientSecret: "secret-a",
 	}
 	fetches := 0
-	fetch := func(context.Context, *shopifyState) (string, error) {
+	fetch := func(context.Context, *shopifyState) (shopifyAccessToken, error) {
 		fetches++
-		return "token-for-current-secret", nil
+		return shopifyAccessToken{Value: "token-for-current-secret", ExpiresAt: time.Now().UTC().Add(24 * time.Hour)}, nil
 	}
 	if _, err := sharedShopifyAccessToken(context.Background(), state, fetch); err != nil {
 		t.Fatal(err)
@@ -90,13 +91,50 @@ func TestSharedShopifyAccessTokenFailsClosedOnUnsafeCacheMetadata(t *testing.T) 
 	if err := os.Chmod(cachePath, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = sharedShopifyAccessToken(context.Background(), state, func(context.Context, *shopifyState) (string, error) {
-		return "must-not-fetch", nil
+	_, err = sharedShopifyAccessToken(context.Background(), state, func(context.Context, *shopifyState) (shopifyAccessToken, error) {
+		return shopifyAccessToken{Value: "must-not-fetch", ExpiresAt: time.Now().UTC().Add(24 * time.Hour)}, nil
 	})
 	if err == nil {
 		t.Fatal("unsafe cache metadata was accepted")
 	}
 	if _, statErr := os.Stat(filepath.Dir(cachePath)); statErr != nil {
 		t.Fatal(statErr)
+	}
+}
+
+func TestSharedShopifyAccessTokenPersistsProviderExpiryAndInvalidatesRejectedToken(t *testing.T) {
+	t.Setenv(nexadapterStateDirEnvName, t.TempDir())
+	state := &shopifyState{
+		ConnectionID: "conn-token-expiry",
+		ShopDomain:   "moon.example.myshopify.com",
+		ClientID:     "client-a",
+		ClientSecret: "secret-a",
+	}
+	wantExpiry := time.Now().UTC().Add(23 * time.Hour).Truncate(time.Second)
+	if _, err := sharedShopifyAccessToken(context.Background(), state, func(context.Context, *shopifyState) (shopifyAccessToken, error) {
+		return shopifyAccessToken{Value: "token-expiring", ExpiresAt: wantExpiry}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cachePath, _, err := sharedShopifyTokenCachePaths(state.ConnectionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache, err := readSharedShopifyTokenCache(cachePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotExpiry, err := time.Parse(time.RFC3339Nano, cache.ExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gotExpiry.Equal(wantExpiry) {
+		t.Fatalf("persisted expiry = %s, want %s", gotExpiry, wantExpiry)
+	}
+	if err := invalidateShopifyAccessToken(state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(cachePath); !os.IsNotExist(err) {
+		t.Fatalf("rejected token cache still exists: %v", err)
 	}
 }

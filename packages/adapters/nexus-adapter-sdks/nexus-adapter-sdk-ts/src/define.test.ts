@@ -146,4 +146,48 @@ describe("defineAdapter", () => {
     expect(stderr.read()).toBe("");
     expect(JSON.parse(stdout.read().trim())).toEqual({ total: 7 });
   });
+
+  it("declares supports_payload_file in adapter.info only when the adapter opts in", async () => {
+    const capabilities = {
+      supports_markdown: false,
+      supports_tables: false,
+      supports_code_blocks: false,
+      supports_embeds: false,
+      supports_threads: false,
+      supports_reactions: false,
+      supports_polls: false,
+      supports_buttons: false,
+      supports_edit: false,
+      supports_delete: false,
+      supports_media: false,
+      supports_voice_notes: false,
+      supports_streaming_edit: false,
+    };
+    const reflect = async (adapter: ReturnType<typeof defineAdapter>) => {
+      const stdout = captureStream();
+      const stderr = captureStream();
+      // validateOutput (the default) parses through AdapterInfoSchema, which must keep the field.
+      const code = await runAdapter(adapter, {
+        argv: ["node", "adapter", "adapter.info"],
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        patchConsole: false,
+        installSignalHandlers: false,
+        requireRuntimeContext: false,
+      });
+      expect(code).toBe(0);
+      expect(stderr.read()).toBe("");
+      return JSON.parse(stdout.read().trim()) as Record<string, unknown>;
+    };
+
+    const optedIn = await reflect(
+      defineAdapter({ platform: "test", name: "test-adapter", version: "1.0.0", capabilities, supportsPayloadFile: true }),
+    );
+    expect(optedIn.supports_payload_file).toBe(true);
+
+    const unchanged = await reflect(
+      defineAdapter({ platform: "test", name: "test-adapter", version: "1.0.0", capabilities }),
+    );
+    expect(Object.hasOwn(unchanged, "supports_payload_file")).toBe(false);
+  });
 });

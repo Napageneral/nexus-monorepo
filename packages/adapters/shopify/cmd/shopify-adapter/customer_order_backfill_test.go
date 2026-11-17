@@ -356,7 +356,7 @@ func TestCustomerOrderBackfillReceiptHashesExactRecordsJSON(t *testing.T) {
 	record := nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: "shopify:test:customer:44:revision",
+			ExternalRecordID: "customer:44",
 			Timestamp:        1,
 			Content:          "customer proof",
 			ContentType:      "text",

@@ -6,11 +6,15 @@ import type {
   MemoryReviewQualityItemsResult,
   MemoryReviewQualitySummary,
 } from "../../ui/types.ts";
+import {
+  renderSemanticReviewPage,
+  type SemanticReviewPageProps,
+} from "./semantic-review.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
 export type MemoryPageProps = {
-  subTab: "library" | "search" | "quality";
+  subTab: "library" | "search" | "quality" | "review";
   onSubTabChange: (sub: MemoryPageProps["subTab"]) => void;
   loading: boolean;
   error: string | null;
@@ -107,6 +111,9 @@ export type MemoryPageProps = {
   onFactSelect: (id: string) => void;
   onObservationSelect: (id: string) => void;
 
+  // Blind semantic calibration
+  semanticReview: SemanticReviewPageProps;
+
   onRefresh: () => void;
 };
 
@@ -175,6 +182,7 @@ function renderSubTabs(
     { key: "library", label: "Library" },
     { key: "search", label: "Search" },
     { key: "quality", label: "Quality" },
+    { key: "review", label: "Review batches" },
   ];
   return html`
     <div class="console-detail-tabs" style="margin-bottom: var(--console-space-5);">
@@ -880,7 +888,9 @@ export function renderMemoryPage(props: MemoryPageProps) {
         ? renderSearchTab(props)
         : props.subTab === "quality"
           ? renderQualityTab(props)
-          : nothing;
+          : props.subTab === "review"
+            ? renderSemanticReviewPage(props.semanticReview)
+            : nothing;
   return html`
     <div class="console-page-header">
       <div class="console-page-header-row">

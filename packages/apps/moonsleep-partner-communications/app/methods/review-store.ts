@@ -323,6 +323,25 @@ export async function listReviewWorkspaces(ctx: NexAppMethodContext): Promise<Ro
   };
 }
 
+export async function currentReviewedRecordIds(
+  ctx: NexAppMethodContext,
+): Promise<Set<string>> {
+  const history = await listAllReviewHistory(ctx);
+  const grouped = new Map<string, Array<{ record: Row; review: StoredReview }>>();
+  for (const entry of history) {
+    const existing = grouped.get(entry.review.workspace_key) ?? [];
+    existing.push(entry);
+    grouped.set(entry.review.workspace_key, existing);
+  }
+  const reviewed = new Set<string>();
+  for (const entries of grouped.values()) {
+    const heads = currentHeads(entries);
+    if (heads.length !== 1) continue;
+    for (const recordId of heads[0].review.record_ids) reviewed.add(recordId);
+  }
+  return reviewed;
+}
+
 export async function commitReview(params: {
   ctx: NexAppMethodContext;
   request: ReviewRequestBody;

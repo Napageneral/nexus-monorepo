@@ -10,6 +10,7 @@ import {
   AdapterInfoSchema,
   AdapterInboundRecordSchema,
 } from "./protocol.js";
+import { AdapterCheckpointLineSchema } from "./checkpoint.js";
 import { readAdapterRuntimeContextFile } from "./runtime-context.js";
 
 function contractDir(): string {
@@ -61,7 +62,8 @@ describe("adapter protocol contract (active Nex docs)", () => {
 
     const inboundRecord = loadJSON(path.join(fixturesDir, "inbound_record.json"));
     expect(get("AdapterInboundRecord")(inboundRecord)).toBe(true);
-    AdapterInboundRecordSchema.parse(inboundRecord);
+    const parsedInboundRecord = AdapterInboundRecordSchema.parse(inboundRecord);
+    expect(get("AdapterCompleteProviderSnapshot")(parsedInboundRecord.payload.payload)).toBe(true);
 
     const health = loadJSON(path.join(fixturesDir, "adapter_health.json"));
     expect(get("AdapterHealth")(health)).toBe(true);
@@ -127,7 +129,9 @@ describe("adapter protocol contract (active Nex docs)", () => {
       AdapterInboundRecordSchema.parse(value),
     );
     roundTrip("AdapterHealth", "adapter_health.json", (value) => AdapterHealthSchema.parse(value));
-    roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) => AdapterConnectionIdentitySchema.parse(value));
+    roundTrip("AdapterConnectionIdentity", "adapter_connection_identity.json", (value) =>
+      AdapterConnectionIdentitySchema.parse(value),
+    );
   });
 });
 
@@ -149,15 +153,27 @@ describe("opaque record payload", () => {
         content: "sanitized supplier message",
         content_type: "text",
         payload: {
-          provider_object_json: "{\"messageId\":\"1\"}",
+          provider_object_json: '{"messageId":"1"}',
           provider_object_sha256: "a".repeat(64),
         },
       },
     });
 
     expect(parsed.payload.payload).toEqual({
-      provider_object_json: "{\"messageId\":\"1\"}",
+      provider_object_json: '{"messageId":"1"}',
       provider_object_sha256: "a".repeat(64),
     });
+  });
+
+  it("accepts the checkpoint line fixture and the version 2 runtime context", () => {
+    const dir = contractDir();
+    const line = loadJSON(path.join(dir, "fixtures", "checkpoint_line.json"));
+    expect(() => AdapterCheckpointLineSchema.parse(line)).not.toThrow();
+    const context = readAdapterRuntimeContextFile(path.join(dir, "fixtures", "runtime_context_v2.json"));
+    expect(context.checkpoints).toEqual({
+      "monitor/history": (line as { value: unknown }).value,
+    });
+    const legacy = readAdapterRuntimeContextFile(path.join(dir, "fixtures", "runtime_context.json"));
+    expect(legacy.checkpoints).toBeUndefined();
   });
 });

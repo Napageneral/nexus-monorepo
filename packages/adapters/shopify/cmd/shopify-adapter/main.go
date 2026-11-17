@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
@@ -23,7 +24,7 @@ import (
 
 const (
 	adapterName                = "shopify-adapter"
-	adapterVersion             = "0.2.4"
+	adapterVersion             = "0.2.15"
 	platformID                 = "shopify"
 	defaultAPIVersion          = "2026-01"
 	defaultHTTPTimeout         = 30 * time.Second
@@ -59,6 +60,11 @@ type shopifyTokenCache struct {
 	ClientSecret string
 	AccessToken  string
 	ExpiresAt    time.Time
+}
+
+type shopifyAccessToken struct {
+	Value     string
+	ExpiresAt time.Time
 }
 
 type shopifyShopResponse struct {
@@ -204,7 +210,7 @@ func decodeProviderJSONObject(data []byte) (map[string]any, error) {
 	return raw, nil
 }
 
-func providerRevisionInput(providerObject map[string]any, typedFallback any) any {
+func providerSnapshotInput(providerObject map[string]any, typedFallback any) any {
 	if providerObject != nil {
 		return providerObject
 	}
@@ -212,7 +218,7 @@ func providerRevisionInput(providerObject map[string]any, typedFallback any) any
 }
 
 func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[string]any, typedFallback any) map[string]any {
-	object := providerRevisionInput(providerObject, mustJSONObject(typedFallback))
+	object := providerSnapshotInput(providerObject, mustJSONObject(typedFallback))
 	raw := append(json.RawMessage(nil), providerJSON...)
 	if len(raw) == 0 {
 		encoded, err := json.Marshal(object)
@@ -221,9 +227,10 @@ func providerPayloadEnvelope(providerJSON json.RawMessage, providerObject map[st
 		}
 		raw = encoded
 	}
-	digest := sha256.Sum256(raw)
+	providerObjectJSON := strings.ToValidUTF8(string(raw), "\ufffd")
+	digest := sha256.Sum256([]byte(providerObjectJSON))
 	return map[string]any{
-		"provider_object_json":   string(raw),
+		"provider_object_json":   providerObjectJSON,
 		"provider_object_sha256": hex.EncodeToString(digest[:]),
 	}
 }
@@ -388,6 +395,7 @@ func connections(ctx nexadapter.AdapterContext[struct{}]) ([]nexadapter.AdapterC
 }
 
 func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth, error) {
+	startedAt := time.Now()
 	state, err := loadShopifyState(ctx)
 	if err != nil {
 		return &nexadapter.AdapterHealth{
@@ -396,6 +404,9 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 			Error:        err.Error(),
 		}, nil
 	}
+	trace := newShopifyHealthTrace()
+	healthContext := withShopifyHealthTrace(ctx.Context, trace)
+	recordShopifyHealthLatency(healthContext, "state_load", startedAt)
 
 	details := map[string]any{
 		"credential_ref":     state.CredentialRef,
@@ -423,7 +434,10 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 		}, nil
 	}
 
-	shop, err := fetchShopInfo(ctx.Context, state)
+	shopID, err := fetchShopHealthIdentity(healthContext, state)
+	latencyMS, tokenSource := trace.snapshot()
+	details["latency_ms"] = latencyMS
+	details["token_source"] = tokenSource
 	if err != nil {
 		return &nexadapter.AdapterHealth{
 			Connected:    false,
@@ -434,21 +448,7 @@ func health(ctx nexadapter.AdapterContext[struct{}]) (*nexadapter.AdapterHealth,
 		}, nil
 	}
 
-	shopID := strconv.FormatInt(shop.ID, 10)
 	details["shop_id"] = shopID
-	details["shop_name"] = shop.Name
-	if strings.TrimSpace(shop.Email) != "" {
-		details["shop_email"] = shop.Email
-	}
-	if strings.TrimSpace(shop.Domain) != "" {
-		details["shop_domain_reported"] = shop.Domain
-	}
-	if strings.TrimSpace(shop.MyshopifyDomain) != "" {
-		details["myshopify_domain"] = shop.MyshopifyDomain
-	}
-	if strings.TrimSpace(shop.PrimaryDomain.Host) != "" {
-		details["primary_domain"] = shop.PrimaryDomain.Host
-	}
 
 	return &nexadapter.AdapterHealth{
 		Connected:    true,
@@ -479,6 +479,50 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 	if err != nil {
 		return err
 	}
+	fingerprintStore, err := openShopifySnapshotFingerprintStore(state.ConnectionID)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := fingerprintStore.close(); closeErr != nil {
+			nexadapter.LogError("shopify snapshot fingerprint store close: %v", closeErr)
+		}
+	}()
+	monitorCtx, cancel := context.WithCancel(ctx.Context)
+	defer cancel()
+	var checkpointMu sync.Mutex
+	var checkpointErr error
+	checkpointedEmit := func(value any) {
+		checkpointMu.Lock()
+		defer checkpointMu.Unlock()
+		if checkpointErr != nil {
+			return
+		}
+		record, ok := value.(nexadapter.AdapterInboundRecord)
+		if !ok {
+			emit(value)
+			return
+		}
+		family, logicalRowID, fingerprint := shopifySnapshotCheckpointKeys(record)
+		if family == "" || logicalRowID == "" || fingerprint == "" {
+			emit(record)
+			return
+		}
+		duplicate, err := fingerprintStore.isDuplicate(family, logicalRowID, fingerprint)
+		if err != nil {
+			checkpointErr = err
+			cancel()
+			return
+		}
+		if duplicate {
+			return
+		}
+		emit(record)
+		if err := fingerprintStore.put(family, logicalRowID, fingerprint); err != nil {
+			checkpointErr = err
+			cancel()
+		}
+	}
 
 	poll := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval:      defaultMonitorInterval,
@@ -490,7 +534,13 @@ func monitor(ctx nexadapter.AdapterContext[struct{}], emit nexadapter.EmitFunc) 
 		MaxConsecutiveErrors: 5,
 	})
 
-	return poll(ctx.Context, ctx.ConnectionID, emit)
+	err = poll(monitorCtx, ctx.ConnectionID, checkpointedEmit)
+	checkpointMu.Lock()
+	defer checkpointMu.Unlock()
+	if checkpointErr != nil {
+		return checkpointErr
+	}
+	return err
 }
 
 func boolPtr(value bool) *bool {
@@ -1019,18 +1069,42 @@ func fetchShopInfo(ctx context.Context, state *shopifyState) (*shopifyShop, erro
 	return &payload.Shop, nil
 }
 
+func fetchShopHealthIdentity(ctx context.Context, state *shopifyState) (string, error) {
+	response, err := executeShopifyGraphQL(
+		ctx,
+		state,
+		"query NexAdapterHealth { shop { id } }",
+		map[string]any{},
+		"NexAdapterHealth",
+	)
+	if err != nil {
+		return "", err
+	}
+	shop, ok := response.Data["shop"].(map[string]any)
+	if !ok {
+		return "", errors.New("Shopify health response missing shop")
+	}
+	shopID, _ := shop["id"].(string)
+	shopID = strings.TrimSpace(shopID)
+	if shopID == "" {
+		return "", errors.New("Shopify health response missing shop id")
+	}
+	return shopID, nil
+}
+
 func fetchShopifyAccessToken(ctx context.Context, state *shopifyState) (string, error) {
 	if tokenCache != nil &&
 		tokenCache.ShopDomain == state.ShopDomain &&
 		tokenCache.ClientID == state.ClientID &&
 		tokenCache.ClientSecret == state.ClientSecret &&
 		time.Now().Before(tokenCache.ExpiresAt) {
+		recordShopifyHealthTokenSource(ctx, "memory_cache")
 		return tokenCache.AccessToken, nil
 	}
 	return sharedShopifyAccessToken(ctx, state, fetchFreshShopifyAccessToken)
 }
 
-func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (string, error) {
+func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (shopifyAccessToken, error) {
 
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
@@ -1040,43 +1114,50 @@ func fetchFreshShopifyAccessToken(ctx context.Context, state *shopifyState) (str
 	tokenURL := fmt.Sprintf("https://%s/admin/oauth/access_token", state.ShopDomain)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("build Shopify token request: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("build Shopify token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := doShopifyRequest(ctx, state, req)
 	if err != nil {
-		return "", fmt.Errorf("Shopify token exchange failed: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("Shopify token exchange failed: %w", err)
 	}
 	defer res.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(res.Body, maxOAuthResponseBytes))
 	bodyText := strings.TrimSpace(string(bodyBytes))
 	if res.StatusCode >= 400 {
-		return "", fmt.Errorf("Shopify token exchange failed (%d): %s", res.StatusCode, bodyText)
+		return shopifyAccessToken{}, fmt.Errorf("Shopify token exchange failed (%d): %s", res.StatusCode, bodyText)
 	}
 
 	var payload struct {
 		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
 	}
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		return "", fmt.Errorf("parse Shopify token response: %w", err)
+		return shopifyAccessToken{}, fmt.Errorf("parse Shopify token response: %w", err)
 	}
 	if strings.TrimSpace(payload.AccessToken) == "" {
-		return "", errors.New("Shopify token exchange returned empty access_token")
+		return shopifyAccessToken{}, errors.New("Shopify token exchange returned empty access_token")
 	}
+	ttl := defaultTokenTTL
+	if payload.ExpiresIn > 0 {
+		ttl = time.Duration(payload.ExpiresIn) * time.Second
+	}
+	expiresAt := time.Now().UTC().Add(ttl)
 
 	tokenCache = &shopifyTokenCache{
 		ShopDomain:   state.ShopDomain,
 		ClientID:     state.ClientID,
 		ClientSecret: state.ClientSecret,
 		AccessToken:  strings.TrimSpace(payload.AccessToken),
-		ExpiresAt:    time.Now().Add(defaultTokenTTL),
+		ExpiresAt:    expiresAt,
 	}
-	return tokenCache.AccessToken, nil
+	return shopifyAccessToken{Value: tokenCache.AccessToken, ExpiresAt: expiresAt}, nil
 }
 
-func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify order build: %v", err)
@@ -1091,11 +1172,11 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 	row := normalizedOrderRow(state.ShopDomain, order)
 	bridgeAttributes := extractBridgeAttributes(order)
 	logicalRowID := fmt.Sprintf("%s:%s", state.ShopDomain, orderID)
-	typedRevisionInput := map[string]any{
+	typedSnapshotInput := map[string]any{
 		"row":               row,
 		"bridge_attributes": bridgeAttributes,
 	}
-	revision := revisionHash(providerRevisionInput(order.rawProviderPayload, typedRevisionInput))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(order.rawProviderPayload, typedSnapshotInput))
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	threadName := firstNonBlank(order.Name, orderID)
 	providerIDs := map[string]any{
@@ -1130,27 +1211,28 @@ func buildOrderRecord(state *shopifyState, order shopifyOrder, sourceRequest sho
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:order:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), orderID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:order:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), orderID, fingerprint),
 			Timestamp:        orderTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("order %s total=%s financial_status=%s fulfillment_status=%s", threadName, firstNonBlank(order.TotalPrice, "0"), firstNonBlank(order.FinancialStatus, "unknown"), firstNonBlank(order.FulfillmentStatus, "unknown")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(order.rawProviderJSON, order.rawProviderPayload, order),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "order",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": bridgeAttributes,
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "order",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           bridgeAttributes,
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
 }
 
-func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopifyLineItem, sourceRequest shopifySourceRequest) nexadapter.AdapterInboundRecord {
+func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopifyLineItem, sourceRequest shopifySourceRequest) (record nexadapter.AdapterInboundRecord) {
+	defer func() { record = bindShopifyImmutableRecord(state, record) }()
 	connectionID, err := nexadapter.RequireConnection(state.ConnectionID)
 	if err != nil {
 		nexadapter.LogError("shopify line item build: %v", err)
@@ -1164,7 +1246,7 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 	}
 
 	row := normalizedLineItemRow(state.ShopDomain, order, lineItem)
-	revision := revisionHash(providerRevisionInput(lineItem.rawProviderPayload, row))
+	fingerprint := snapshotFingerprint(providerSnapshotInput(lineItem.rawProviderPayload, row))
 	logicalRowID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, orderID, lineItemID)
 	threadID := fmt.Sprintf("%s:order:%s", state.ShopDomain, orderID)
 	providerIDs := map[string]any{
@@ -1199,21 +1281,21 @@ func buildLineItemRecord(state *shopifyState, order shopifyOrder, lineItem shopi
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:line_item:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), orderID, lineItemID, revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:line_item:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), orderID, lineItemID, fingerprint),
 			Timestamp:        lineItemTimestamp(order).UnixMilli(),
 			Content:          fmt.Sprintf("line_item order=%s line_item=%s quantity=%d price=%s", firstNonBlank(order.Name, orderID), lineItemID, lineItem.Quantity, firstNonBlank(lineItem.Price, "0")),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(lineItem.rawProviderJSON, lineItem.rawProviderPayload, lineItem),
 			Metadata: map[string]any{
-				"connection_id":     connectionID,
-				"adapter_id":        platformID,
-				"family":            "line_item",
-				"logical_row_id":    logicalRowID,
-				"revision_hash":     revision,
-				"provider_ids":      providerIDs,
-				"row":               row,
-				"bridge_attributes": map[string]any{},
-				"source_request":    sourceRequest.metadata(),
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      "line_item",
+				"logical_row_id":              logicalRowID,
+				"snapshot_fingerprint_sha256": fingerprint,
+				"provider_ids":                providerIDs,
+				"row":                         row,
+				"bridge_attributes":           map[string]any{},
+				"source_request":              sourceRequest.metadata(),
 			},
 		},
 	}
@@ -1400,13 +1482,78 @@ func (r shopifySourceRequest) metadata() map[string]any {
 	}
 }
 
-func revisionHash(value any) string {
+func snapshotFingerprint(value any) string {
 	body, err := json.Marshal(value)
 	if err != nil {
 		return "unhashable"
 	}
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
+}
+
+func bindShopifyImmutableRecord(state *shopifyState, record nexadapter.AdapterInboundRecord) nexadapter.AdapterInboundRecord {
+	if state == nil || record.Operation == "" {
+		return record
+	}
+	family, _ := record.Payload.Metadata["family"].(string)
+	providerIDs, _ := record.Payload.Metadata["provider_ids"].(map[string]any)
+	externalRecordID := shopifyProviderExternalRecordID(family, providerIDs)
+	if externalRecordID == "" {
+		nexadapter.LogError("shopify %s snapshot omitted provider identity", family)
+		return nexadapter.AdapterInboundRecord{}
+	}
+	providerAccountRef := strings.TrimSpace(state.ShopDomain)
+	sourceRecordType := "shopify." + strings.TrimSpace(family)
+	record.Routing.ProviderAccountRef = &providerAccountRef
+	record.Payload.SourceRecordType = &sourceRecordType
+	record.Payload.ProviderVersionRef = nil
+	record.Payload.ExternalRecordID = externalRecordID
+	return record
+}
+
+func shopifyProviderExternalRecordID(family string, providerIDs map[string]any) string {
+	parts := []string{strings.TrimSpace(family)}
+	keys := []string{"provider_id"}
+	switch strings.TrimSpace(family) {
+	case "order":
+		keys = []string{"order_id"}
+	case "line_item":
+		keys = []string{"order_id", "line_item_id"}
+	case "customer":
+		keys = []string{"customer_id", "customer_gid"}
+	case "product":
+		keys = []string{"product_id", "product_gid"}
+	case "collection":
+		keys = []string{"collection_id", "collection_gid"}
+	case "inventory":
+		keys = []string{"inventory_level_gid"}
+	case "fulfillment":
+		keys = []string{"fulfillment_order_id", "fulfillment_order_gid"}
+	case "discount":
+		keys = []string{"discount_id", "discount_gid"}
+	case "marketing":
+		keys = []string{"marketing_id", "marketing_gid"}
+	}
+	if len(parts) == 0 || parts[0] == "" {
+		return ""
+	}
+	for _, key := range keys {
+		value := rawScalarString(providerIDs[key])
+		if value == "" {
+			continue
+		}
+		parts = append(parts, nexadapter.SafeIDToken(value))
+		if strings.TrimSpace(family) != "line_item" {
+			break
+		}
+	}
+	if strings.TrimSpace(family) == "line_item" && len(parts) != 3 {
+		return ""
+	}
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.Join(parts, ":")
 }
 
 func mustJSONObject(value any) map[string]any {
@@ -1482,7 +1629,7 @@ func parseOrderUpdatedAt(order shopifyOrder) time.Time {
 }
 
 func orderTimestamp(order shopifyOrder) time.Time {
-	if ts := firstParsedTime(order.ProcessedAt, order.CreatedAt, order.UpdatedAt); !ts.IsZero() {
+	if ts := firstParsedTime(order.UpdatedAt, order.ProcessedAt, order.CreatedAt); !ts.IsZero() {
 		return ts
 	}
 	return time.Now().UTC()

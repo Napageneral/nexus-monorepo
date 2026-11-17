@@ -24,6 +24,7 @@ const AdapterRuntimeContextFileSchema = z
     connection_id: z.string(),
     config: z.record(z.string(), z.unknown()).default({}),
     credential: AdapterRuntimeCredentialSchema.optional(),
+    checkpoints: z.record(z.string(), z.unknown()).optional(),
   })
   .catchall(z.unknown());
 
@@ -34,6 +35,12 @@ export type AdapterRuntimeContext = {
   connection_id: string;
   config: Record<string, unknown>;
   credential?: AdapterRuntimeCredential;
+  /**
+   * Runtime context version 2 (P-9.2): the adapter's durable cursors as the runtime persisted
+   * them, keyed `<scope>/<key>`. Undefined means the runtime predates checkpoints; an empty object
+   * means the runtime owns them and none exists yet (cold start). See emitAdapterCheckpoint.
+   */
+  checkpoints?: Record<string, unknown>;
   raw?: Record<string, unknown>;
 };
 
@@ -46,6 +53,7 @@ export function readAdapterRuntimeContextFile(pathValue: string): AdapterRuntime
     connection_id: file.connection_id,
     config: file.config,
     ...(file.credential ? { credential: file.credential } : {}),
+    ...(file.checkpoints ? { checkpoints: file.checkpoints } : {}),
     raw: file as unknown as Record<string, unknown>,
   };
 }

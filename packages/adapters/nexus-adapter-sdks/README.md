@@ -85,6 +85,7 @@ Changes that usually belong in this workspace:
 - adapter CLI/runtime harness behavior
 - runtime context parsing
 - canonical ingress helpers for `record.ingest`
+- immutable Record provenance fields and complete-provider-snapshot helpers
 - shared delivery target parsing
 - shared monitor/backfill control helpers
 - adapter packaging helpers and release-kit behavior

@@ -28,7 +28,7 @@ func TestCaptureShopifyPaymentsPagePreservesExactRowsAndPagination(t *testing.T)
 			_, _ = response.Write([]byte(`{"transactions":[{"id":"txn-2","processed_at":"2026-07-22T11:00:00Z","amount":"4.00","fee":"-0.10","net":"3.90"}]}`))
 			return
 		}
-		next := server.URL + "/admin/api/2026-01/shopify_payments/balance/transactions.json?page_info=next-page&limit=100"
+		next := server.URL + "/admin/api/2026-01/shopify_payments/balance/transactions.json?page_info=next-page&limit=250"
 		response.Header().Set("Link", "<"+next+">; rel=\"next\"")
 		_, _ = response.Write([]byte(`{"transactions":[{"id":900719925474099312345,"processed_at":"2026-07-22T10:00:00Z","amount":"10.00","fee":"-0.30","net":"9.70"}]}`))
 	}))
@@ -48,20 +48,23 @@ func TestCaptureShopifyPaymentsPagePreservesExactRowsAndPagination(t *testing.T)
 	spec := shopifyPaymentsPageRequest{
 		Family: "finance.transactions", ContainerID: "balance_transaction",
 		Path: "/shopify_payments/balance/transactions.json", ResponseField: "transactions",
-		SinceParam: "payout_date_min", ThroughParam: "payout_date_max",
-		TimestampKeys: []string{"processed_at", "payout_date"},
+		ProviderCursorParam: "since_id",
+		TimestampKeys:       []string{"processed_at", "payout_date"},
 	}
 	since := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
 	through := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
-	records, next, complete, err := captureShopifyPaymentsPage(context.Background(), state, spec, since, through, "")
+	records, next, complete, err := captureShopifyPaymentsPage(context.Background(), state, spec, since, through, "900719925474099300000", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(records) != 1 || next == "" || complete {
 		t.Fatalf("first page records=%d next=%q complete=%v", len(records), next, complete)
 	}
-	if !strings.Contains(queries[0], "payout_date_min=2026-07-20") || !strings.Contains(queries[0], "limit=100") {
+	if !strings.Contains(queries[0], "since_id=900719925474099300000") || !strings.Contains(queries[0], "limit=250") {
 		t.Fatalf("first query = %q", queries[0])
+	}
+	if strings.Contains(queries[0], "payout_date") {
+		t.Fatalf("finance query used an unsupported date cursor: %q", queries[0])
 	}
 	payload := records[0].Payload.Payload
 	if payload["provider_object_json"] != `{"id":900719925474099312345,"processed_at":"2026-07-22T10:00:00Z","amount":"10.00","fee":"-0.30","net":"9.70"}` {
@@ -72,15 +75,52 @@ func TestCaptureShopifyPaymentsPagePreservesExactRowsAndPagination(t *testing.T)
 		t.Fatalf("large provider id lost precision: %#v", metadata)
 	}
 
-	records, next, complete, err = captureShopifyPaymentsPage(context.Background(), state, spec, since, through, next)
+	records, next, complete, err = captureShopifyPaymentsPage(context.Background(), state, spec, since, through, "900719925474099300000", next)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(records) != 1 || next != "" || !complete {
 		t.Fatalf("last page records=%d next=%q complete=%v", len(records), next, complete)
 	}
-	if queries[1] != "page_info=next-page&limit=100" {
+	if queries[1] != "page_info=next-page&limit=250" {
 		t.Fatalf("pagination URL drifted: %q", queries[1])
+	}
+}
+
+func TestCaptureShopifyPaymentsPageRejectsOversizedProviderPage(t *testing.T) {
+	t.Cleanup(resetShopifyGlobals)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		_, _ = response.Write([]byte(`{"transactions":[` + strings.Repeat(`{},`, shopifyPaymentsPageSize) + `{}` + `]}`))
+	}))
+	defer server.Close()
+	shopifyHTTPClient = server.Client()
+	state := &shopifyState{
+		ConnectionID: "shopify-primary",
+		ShopDomain:   strings.TrimPrefix(server.URL, "https://"),
+		ClientID:     "client",
+		ClientSecret: "secret",
+		APIVersion:   "2026-01",
+	}
+	tokenCache = &shopifyTokenCache{
+		ShopDomain: state.ShopDomain, ClientID: state.ClientID, ClientSecret: state.ClientSecret,
+		AccessToken: "token", ExpiresAt: time.Now().Add(time.Hour),
+	}
+	_, _, _, err := captureShopifyPaymentsPage(
+		context.Background(),
+		state,
+		shopifyPaymentsPageRequest{
+			Family: "finance.transactions", ContainerID: "balance_transaction",
+			Path: "/shopify_payments/balance/transactions.json", ResponseField: "transactions",
+			ProviderCursorParam: "since_id",
+			TimestampKeys:       []string{"processed_at", "payout_date"},
+		},
+		time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC),
+		"900719925474099300000",
+		"",
+	)
+	if err == nil || !strings.Contains(err.Error(), "exceeded the 250-row provider page") {
+		t.Fatalf("oversized provider page error = %v", err)
 	}
 }
 

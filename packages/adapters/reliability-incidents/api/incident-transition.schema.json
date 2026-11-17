@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.ai/schemas/reliability-incidents/incident-transition-v1.json",
+  "title": "Reliability Incident Transition V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "incident_id",
+    "source_id",
+    "detector_id",
+    "occurred_at",
+    "transition",
+    "status",
+    "incident_class",
+    "severity",
+    "title",
+    "summary",
+    "affected_components",
+    "customer_impact"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "event_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "incident_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "source_id": { "$ref": "#/$defs/stableIdentifier" },
+    "detector_id": { "$ref": "#/$defs/stableIdentifier" },
+    "occurred_at": { "type": ["string", "number"] },
+    "observed_at": { "type": ["string", "number"] },
+    "transition": {
+      "enum": [
+        "detected",
+        "updated",
+        "acknowledged",
+        "mitigation_started",
+        "mitigated",
+        "recovered",
+        "closed",
+        "reopened",
+        "blocked",
+        "escalated"
+      ]
+    },
+    "status": {
+      "enum": ["open", "investigating", "mitigating", "monitoring", "recovered", "closed", "blocked"]
+    },
+    "incident_class": { "$ref": "#/$defs/stableIdentifier" },
+    "severity": { "enum": ["info", "warning", "critical"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "affected_components": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "customer_impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["none", "possible", "confirmed", "unknown"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "correlation_key": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "owner": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref_type"],
+        "properties": {
+          "ref_type": { "$ref": "#/$defs/stableIdentifier" },
+          "uri": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "digest": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "change_refs": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "remediation": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "validation": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "metadata": { "type": "object" }
+  },
+  "$defs": {
+    "stableIdentifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
+    }
+  }
+}

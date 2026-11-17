@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -115,6 +116,55 @@ func TestRunMethodParsesNamespacedOperation(t *testing.T) {
 	}
 	if payload["status"] != "Done" {
 		t.Fatalf("result status = %#v", payload["status"])
+	}
+}
+
+func TestRunMethodParsesPayloadFile(t *testing.T) {
+	payloadPath := filepath.Join(t.TempDir(), "payload.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"issue_key":"VT-456","target_status":"Done"}`), 0o600); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+
+	var captured AdapterMethodRequest
+	adapter := Adapter{
+		Operations: AdapterOperations{
+			AdapterInfo: func(ctx context.Context) (*AdapterInfo, error) {
+				return &AdapterInfo{
+					Platform: "jira",
+					Name:     "Jira Cloud",
+					Version:  "1.0.0",
+					Methods:  []AdapterMethod{testAdapterMethod()},
+				}, nil
+			},
+			Methods: map[string]func(ctx context.Context, req AdapterMethodRequest) (any, error){
+				"jira.issues.transition": func(ctx context.Context, req AdapterMethodRequest) (any, error) {
+					captured = req
+					return map[string]any{"ok": true}, nil
+				},
+			},
+		},
+	}
+
+	if err := runMethod(adapter, "jira.issues.transition", []string{
+		"--connection", "vrtly-jira",
+		"--payload-file", payloadPath,
+	}); err != nil {
+		t.Fatalf("runMethod: %v", err)
+	}
+	if got := captured.Payload["issue_key"]; got != "VT-456" {
+		t.Fatalf("issue_key = %#v", got)
+	}
+}
+
+func TestParsePayloadFlagsRejectsMultipleSources(t *testing.T) {
+	payloadPath := filepath.Join(t.TempDir(), "payload.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"issue_key":"VT-456"}`), 0o600); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+
+	_, err := parsePayloadFlags(`{"issue_key":"VT-123"}`, payloadPath)
+	if err == nil || err.Error() != "--payload-json and --payload-file are mutually exclusive" {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

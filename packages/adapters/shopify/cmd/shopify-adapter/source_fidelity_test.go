@@ -84,10 +84,10 @@ func TestShopifyOrderPreservesExactSourceObjectBeforeTypedProjection(t *testing.
 	}
 }
 
-func TestUnknownShopifyProviderFieldChangesImmutableRevision(t *testing.T) {
+func TestUnknownShopifyProviderFieldChangesImmutableSnapshot(t *testing.T) {
 	decodeOrder := func(t *testing.T, marker string) shopifyOrder {
 		t.Helper()
-		input := []byte(`{"id":101,"name":"#101","created_at":"2026-07-20T10:00:00Z","updated_at":"2026-07-20T10:05:00Z","currency":"USD","total_price":"199.00","provider_revision_marker":"` + marker + `"}`)
+		input := []byte(`{"id":101,"name":"#101","created_at":"2026-07-20T10:00:00Z","updated_at":"2026-07-20T10:05:00Z","currency":"USD","total_price":"199.00","provider_snapshot_marker":"` + marker + `"}`)
 		var order shopifyOrder
 		if err := json.Unmarshal(input, &order); err != nil {
 			t.Fatalf("decode order: %v", err)
@@ -97,18 +97,18 @@ func TestUnknownShopifyProviderFieldChangesImmutableRevision(t *testing.T) {
 	state := &shopifyState{ConnectionID: "shopify-primary", ShopDomain: "moonsleepco.myshopify.com"}
 	first := buildOrderRecord(state, decodeOrder(t, "first"), shopifySourceRequest{})
 	second := buildOrderRecord(state, decodeOrder(t, "second"), shopifySourceRequest{})
-	firstRevision := first.Payload.Metadata["revision_hash"]
-	secondRevision := second.Payload.Metadata["revision_hash"]
-	if firstRevision == secondRevision {
-		t.Fatalf("provider-only change was suppressed under one revision: %#v", firstRevision)
+	firstFingerprint := first.Payload.Metadata["snapshot_fingerprint_sha256"]
+	secondFingerprint := second.Payload.Metadata["snapshot_fingerprint_sha256"]
+	if firstFingerprint == secondFingerprint {
+		t.Fatalf("provider-only change was suppressed under one fingerprint: %#v", firstFingerprint)
 	}
-	for label, revision := range map[string]any{"first": firstRevision, "second": secondRevision} {
-		text, ok := revision.(string)
+	for label, fingerprint := range map[string]any{"first": firstFingerprint, "second": secondFingerprint} {
+		text, ok := fingerprint.(string)
 		if !ok || len(text) != sha256.Size*2 {
-			t.Fatalf("%s revision is not a full SHA-256: %#v", label, revision)
+			t.Fatalf("%s fingerprint is not a full SHA-256: %#v", label, fingerprint)
 		}
 		if _, err := hex.DecodeString(text); err != nil {
-			t.Fatalf("%s revision is not lowercase hex: %#v", label, revision)
+			t.Fatalf("%s fingerprint is not lowercase hex: %#v", label, fingerprint)
 		}
 	}
 }
@@ -190,6 +190,32 @@ func assertProviderPayloadEnvelope(t *testing.T, envelope map[string]any, source
 	}
 	if _, present := envelope["provider_object"]; present {
 		t.Fatal("decoded provider object must not cross the JavaScript JSON boundary")
+	}
+}
+
+func TestProviderPayloadEnvelopeHashesTheUTF8StringThatCrossesJSON(t *testing.T) {
+	sourceJSON := []byte{'{', '"', 'n', 'o', 't', 'e', '"', ':', '"', 0xff, '"', '}'}
+	envelope := providerPayloadEnvelope(
+		json.RawMessage(sourceJSON),
+		map[string]any{"note": "\ufffd"},
+		nil,
+	)
+
+	transport, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatalf("marshal provider envelope: %v", err)
+	}
+	var received map[string]any
+	if err := json.Unmarshal(transport, &received); err != nil {
+		t.Fatalf("unmarshal transported provider envelope: %v", err)
+	}
+	providerJSON, ok := received["provider_object_json"].(string)
+	if !ok {
+		t.Fatalf("transported provider JSON is not a string: %#v", received)
+	}
+	digest := sha256.Sum256([]byte(providerJSON))
+	if got := received["provider_object_sha256"]; got != hex.EncodeToString(digest[:]) {
+		t.Fatalf("transport changed provider JSON without changing its digest: %#v", got)
 	}
 }
 

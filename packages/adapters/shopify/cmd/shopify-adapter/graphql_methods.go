@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
@@ -198,7 +199,7 @@ func shopifyProjection() *nexadapter.AdapterProjection {
 			ThreadsSupported: true,
 		},
 		RecordIDs: &nexadapter.AdapterProjectionRecordIDs{
-			Record:    "shop_domain + family provider identity + revision_hash",
+			Record:    "family + provider identity; snapshot fingerprint is checkpoint-only",
 			Container: "family",
 			Thread:    "shop_domain + per-family provider identity",
 		},
@@ -215,7 +216,7 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		methods[name] = method
 	}
 	methods["shopify.source.capture"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
-		Description: "Capture one bounded page for one Shopify source family without advancing its durable cursor.",
+		Description: "Capture one bounded provider page or one verified immutable observation for a Shopify source family without advancing its durable cursor.",
 		Action:      "read",
 		Params: map[string]any{
 			"type": "object",
@@ -224,6 +225,7 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 					"type": "string",
 					"enum": shopifySourceFamilyValues,
 				},
+				"observation": shopifyImmutableObservationSchema(),
 			},
 			"required":             []string{"family"},
 			"additionalProperties": false,
@@ -231,21 +233,24 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		Response: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"version":        map[string]any{"type": "integer", "enum": []int{1}},
-				"family":         map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
-				"connection_id":  map[string]any{"type": "string"},
-				"shop_domain":    map[string]any{"type": "string"},
-				"capture_id":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
-				"request_since":  map[string]any{"type": "string"},
-				"window_through": map[string]any{"type": "string"},
-				"page_cursor":    map[string]any{"type": "string"},
-				"next_cursor":    map[string]any{"type": "string"},
-				"complete":       map[string]any{"type": "boolean"},
+				"version":              map[string]any{"type": "integer", "enum": []int{1}},
+				"family":               map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
+				"connection_id":        map[string]any{"type": "string"},
+				"shop_domain":          map[string]any{"type": "string"},
+				"capture_id":           map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+				"request_since":        map[string]any{"type": "string"},
+				"window_through":       map[string]any{"type": "string"},
+				"provider_cursor":      map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+				"page_cursor":          map[string]any{"type": "string"},
+				"next_cursor":          map[string]any{"type": "string"},
+				"next_provider_cursor": map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+				"complete":             map[string]any{"type": "boolean"},
 				"records": map[string]any{
 					"type":     "array",
 					"maxItems": shopifySourceMaxRecords,
 					"items":    map[string]any{"type": "object"},
 				},
+				"checkpoint": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			},
 			"required":             []string{"version", "family", "connection_id", "shop_domain", "capture_id", "request_since", "window_through", "complete", "records"},
 			"additionalProperties": false,
@@ -382,13 +387,15 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		Response: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"version":        map[string]any{"type": "integer", "enum": []int{1}},
-				"family":         map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
-				"capture_id":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
-				"cursor_iso":     map[string]any{"type": "string"},
-				"page_cursor":    map[string]any{"type": "string"},
-				"window_through": map[string]any{"type": "string"},
-				"complete":       map[string]any{"type": "boolean"},
+				"version":         map[string]any{"type": "integer", "enum": []int{1}},
+				"family":          map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
+				"capture_id":      map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
+				"cursor_iso":      map[string]any{"type": "string"},
+				"provider_cursor": map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+				"page_cursor":     map[string]any{"type": "string"},
+				"window_through":  map[string]any{"type": "string"},
+				"complete":        map[string]any{"type": "boolean"},
+				"checkpoint":      map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			},
 			"required":             []string{"version", "family", "capture_id", "cursor_iso", "complete"},
 			"additionalProperties": false,
@@ -397,6 +404,53 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 		MutatesRemote:      boolPtr(false),
 		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
 			return handleShopifySourceCommit(ctx, req.Payload)
+		},
+	})
+	methods["shopify.source.checkpoint.adopt"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
+		Description: "Adopt one exact local Shopify Finance since_id checkpoint after binding it to the current durable source state.",
+		Action:      "write",
+		Params: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"family":                map[string]any{"type": "string", "enum": []string{"finance.transactions"}},
+				"provider_cursor":       map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+				"expected_state_sha256": map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				"confirmation":          map[string]any{"type": "string", "enum": []string{shopifyFinanceCheckpointConfirmation}},
+			},
+			"required":             []string{"family", "provider_cursor", "expected_state_sha256", "confirmation"},
+			"additionalProperties": false,
+		},
+		Response: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"version":                  map[string]any{"type": "integer", "enum": []int{1}},
+				"family":                   map[string]any{"type": "string", "enum": []string{"finance.transactions"}},
+				"previous_state_sha256":    map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				"current_state_sha256":     map[string]any{"type": "string", "pattern": "^[0-9a-f]{64}$"},
+				"previous_provider_cursor": map[string]any{"type": "string"},
+				"provider_cursor":          map[string]any{"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
+				"cleared_in_progress":      map[string]any{"type": "boolean"},
+				"provider_calls":           map[string]any{"type": "integer", "enum": []int{0}},
+				"provider_write_authority": map[string]any{"type": "boolean", "enum": []bool{false}},
+				"checkpoint":               map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+			},
+			"required": []string{
+				"version",
+				"family",
+				"previous_state_sha256",
+				"current_state_sha256",
+				"previous_provider_cursor",
+				"provider_cursor",
+				"cleared_in_progress",
+				"provider_calls",
+				"provider_write_authority",
+			},
+			"additionalProperties": false,
+		},
+		ConnectionRequired: boolPtr(true),
+		MutatesRemote:      boolPtr(false),
+		Handler: func(ctx nexadapter.AdapterContext[struct{}], req nexadapter.AdapterMethodRequest) (any, error) {
+			return handleShopifySourceCheckpointAdopt(ctx, req.Payload)
 		},
 	})
 	methods["shopify.source.abort"] = nexadapter.Method(nexadapter.DeclaredMethod[struct{}]{
@@ -421,6 +475,7 @@ func declaredShopifyMethods() map[string]nexadapter.DeclaredMethod[struct{}] {
 				"family":     map[string]any{"type": "string", "enum": shopifySourceFamilyValues},
 				"capture_id": map[string]any{"type": "string", "pattern": "^[0-9a-f]{32}$"},
 				"aborted":    map[string]any{"type": "boolean", "enum": []bool{true}},
+				"checkpoint": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			},
 			"required":             []string{"version", "family", "capture_id", "aborted"},
 			"additionalProperties": false,
@@ -1012,7 +1067,10 @@ func executeShopifyGraphQL(
 	variables map[string]any,
 	operationName string,
 ) (*shopifyGraphQLResponse, error) {
+	totalStartedAt := time.Now()
+	tokenStartedAt := time.Now()
 	accessToken, err := fetchShopifyAccessToken(ctx, state)
+	recordShopifyHealthLatency(ctx, "token", tokenStartedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1040,6 +1098,7 @@ func executeShopifyGraphQL(
 	}
 	defer res.Body.Close()
 
+	bodyStartedAt := time.Now()
 	bodyBytes, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBodyBytes))
 	if readErr != nil {
 		return nil, fmt.Errorf("read Shopify graphql response: %w", readErr)
@@ -1053,8 +1112,10 @@ func executeShopifyGraphQL(
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 		return nil, fmt.Errorf("parse Shopify graphql response: %w", err)
 	}
+	recordShopifyHealthLatency(ctx, "body_read_decode", bodyStartedAt)
 	if len(payload.Errors) > 0 {
 		return nil, fmt.Errorf("Shopify graphql query failed: %s", strings.TrimSpace(payload.Errors[0].Message))
 	}
+	recordShopifyHealthLatency(ctx, "provider_verification_total", totalStartedAt)
 	return &payload, nil
 }

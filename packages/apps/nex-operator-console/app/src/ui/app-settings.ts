@@ -21,11 +21,14 @@ import { loadIngressCredentials } from "./controllers/ingress-credentials.ts";
 import { loadIntegrations } from "./controllers/integrations.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadMemoryRuns } from "./controllers/memory-review.ts";
+import {
+  loadSemanticReviewBatches,
+  restoreSemanticReviewRoute,
+} from "./controllers/semantic-review.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { refreshRecordsSurface } from "./controllers/records.ts";
 import { loadAutomationMeeseeks, loadScheduleJobs } from "./controllers/schedules.ts";
 import { loadSessions } from "./controllers/sessions.ts";
-import { loadSkills } from "./controllers/skills.ts";
 import { loadUsage } from "./controllers/usage.ts";
 import {
   inferBasePathFromPathname,
@@ -73,6 +76,9 @@ const MEMORY_SCOPED_QUERY_KEYS = [
   "memory_bucket",
   "memory_detail_kind",
   "memory_detail_id",
+  "memory_tab",
+  "memory_batch",
+  "memory_item",
 ] as const;
 
 function canonicalConsoleTab(tab: Tab, _basePath: string): Tab {
@@ -300,7 +306,12 @@ export async function refreshActiveTab(host: SettingsHost) {
     if (!host.memorySearchQuery?.trim()) {
       host.memorySearchType = "all";
     }
-    await loadMemoryRuns(host as unknown as NexusApp);
+    const memoryHost = host as unknown as NexusApp;
+    if (restoreSemanticReviewRoute(memoryHost)) {
+      await loadSemanticReviewBatches(memoryHost, { keepSelection: true });
+    } else {
+      await loadMemoryRuns(memoryHost);
+    }
   }
   if (host.tab === "operations") {
     const operationsSubTab = (host as unknown as NexusApp).operationsSubTab;

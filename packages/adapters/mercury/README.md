@@ -74,7 +74,7 @@ The fake-provider suite covers:
 - exact capture-receipt binding;
 - accounts, transactions, recipients, approval requests and statements;
 - deposit and credit-account indexes needed for exact account binding;
-- payment, scheduled-payment and attachment revision projection;
+- payment, scheduled-payment and attachment snapshot projection;
 - incomplete, tampered and inconsistent capture rejection;
 - primary/AP role-specific backfill scope.
 - exact record metadata persistence across the canonical Nex ingest boundary;
@@ -109,7 +109,7 @@ package configuration.
 
 Successful reads retain exact provider response bytes as either UTF-8 JSON or
 base64, plus SHA-256. `records.backfill` and `adapter.monitor.start` now emit
-content-addressed immutable record revisions and page-level capture receipts.
+stable provider identities, complete immutable snapshots, and page-level capture receipts.
 The companion `mercury-provenance` binary verifies those stored record hashes,
 extracts atomic typed facts, resolves current versioned observations, and emits
 idempotent parameter objects for Nex `memory.facts.create` and

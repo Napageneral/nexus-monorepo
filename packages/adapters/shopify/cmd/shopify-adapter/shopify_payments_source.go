@@ -17,14 +17,17 @@ import (
 	nexadapter "github.com/nexus-project/adapter-sdk-go"
 )
 
+const shopifyPaymentsPageSize = 250
+
 type shopifyPaymentsPageRequest struct {
-	Family        string
-	ContainerID   string
-	Path          string
-	ResponseField string
-	SinceParam    string
-	ThroughParam  string
-	TimestampKeys []string
+	Family              string
+	ContainerID         string
+	Path                string
+	ResponseField       string
+	ProviderCursorParam string
+	SinceParam          string
+	ThroughParam        string
+	TimestampKeys       []string
 }
 
 func shopifyPaymentsWindowValue(value time.Time, timestamp bool) string {
@@ -40,6 +43,7 @@ func captureShopifyPaymentsPage(
 	spec shopifyPaymentsPageRequest,
 	since time.Time,
 	through time.Time,
+	providerCursor string,
 	pageCursor string,
 ) ([]nexadapter.AdapterInboundRecord, string, bool, error) {
 	accessToken, err := fetchShopifyAccessToken(ctx, state)
@@ -54,10 +58,18 @@ func captureShopifyPaymentsPage(
 			return nil, "", false, err
 		}
 		query := parsed.Query()
-		query.Set("limit", "100")
-		isTimestamp := spec.Family == "disputes.delta"
-		query.Set(spec.SinceParam, shopifyPaymentsWindowValue(since, isTimestamp))
-		query.Set(spec.ThroughParam, shopifyPaymentsWindowValue(through, isTimestamp))
+		query.Set("limit", fmt.Sprintf("%d", shopifyPaymentsPageSize))
+		if spec.ProviderCursorParam != "" {
+			providerCursor, err = normalizeShopifyProviderCursor(providerCursor)
+			if err != nil {
+				return nil, "", false, err
+			}
+			query.Set(spec.ProviderCursorParam, providerCursor)
+		} else {
+			isTimestamp := spec.Family == "disputes.delta"
+			query.Set(spec.SinceParam, shopifyPaymentsWindowValue(since, isTimestamp))
+			query.Set(spec.ThroughParam, shopifyPaymentsWindowValue(through, isTimestamp))
+		}
 		parsed.RawQuery = query.Encode()
 		requestURL = parsed.String()
 	}
@@ -93,19 +105,24 @@ func captureShopifyPaymentsPage(
 	if err := json.Unmarshal(rawRows, &rows); err != nil {
 		return nil, "", false, fmt.Errorf("decode Shopify %s rows: %w", spec.Family, err)
 	}
-	if len(rows) > 100 {
-		return nil, "", false, fmt.Errorf("Shopify %s response exceeded the 100-row provider page", spec.Family)
+	if len(rows) > shopifyPaymentsPageSize {
+		return nil, "", false, fmt.Errorf(
+			"Shopify %s response exceeded the %d-row provider page",
+			spec.Family,
+			shopifyPaymentsPageSize,
+		)
 	}
 	sourceRequest := shopifySourceRequest{
 		APIBaseURL: fmt.Sprintf(defaultShopifyBaseURL, state.ShopDomain, state.APIVersion),
 		Path:       spec.Path,
 		Request: map[string]any{
-			"operation":      spec.Family,
-			"page_size":      100,
-			"api_version":    state.APIVersion,
-			"request_since":  since.UTC().Format(time.RFC3339Nano),
-			"window_through": through.UTC().Format(time.RFC3339Nano),
-			"request_cursor": emptyToNil(pageCursor),
+			"operation":       spec.Family,
+			"page_size":       shopifyPaymentsPageSize,
+			"api_version":     state.APIVersion,
+			"request_since":   since.UTC().Format(time.RFC3339Nano),
+			"window_through":  through.UTC().Format(time.RFC3339Nano),
+			"provider_cursor": emptyToNil(providerCursor),
+			"request_cursor":  emptyToNil(pageCursor),
 		},
 	}
 	records := make([]nexadapter.AdapterInboundRecord, 0, len(rows))
@@ -153,7 +170,12 @@ func buildShopifyPaymentsRecord(
 	spec shopifyPaymentsPageRequest,
 	raw json.RawMessage,
 	sourceRequest shopifySourceRequest,
-) (nexadapter.AdapterInboundRecord, error) {
+) (record nexadapter.AdapterInboundRecord, err error) {
+	defer func() {
+		if err == nil {
+			record = bindShopifyImmutableRecord(state, record)
+		}
+	}()
 	row, err := decodeProviderJSONObject(raw)
 	if err != nil {
 		return nexadapter.AdapterInboundRecord{}, err
@@ -167,7 +189,7 @@ func buildShopifyPaymentsRecord(
 		return nexadapter.AdapterInboundRecord{}, err
 	}
 	digest := sha256.Sum256(raw)
-	revision := hex.EncodeToString(digest[:])
+	fingerprint := hex.EncodeToString(digest[:])
 	threadID := fmt.Sprintf("%s:%s:%s", state.ShopDomain, spec.ContainerID, nexadapter.SafeIDToken(providerID))
 	return nexadapter.AdapterInboundRecord{
 		Operation: "record.ingest",
@@ -193,17 +215,17 @@ func buildShopifyPaymentsRecord(
 			},
 		},
 		Payload: nexadapter.AdapterInboundPayload{
-			ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), spec.ContainerID, nexadapter.SafeIDToken(providerID), revision),
+			ExternalRecordID: fmt.Sprintf("%s:%s:%s:%s:%s", platformID, nexadapter.SafeIDToken(connectionID), spec.ContainerID, nexadapter.SafeIDToken(providerID), fingerprint),
 			Timestamp:        providerTimestamp(row, spec.TimestampKeys).UnixMilli(),
 			Content:          fmt.Sprintf("%s %s", spec.ContainerID, providerID),
 			ContentType:      "text",
 			Payload:          providerPayloadEnvelope(raw, row, row),
 			Metadata: map[string]any{
-				"connection_id":  connectionID,
-				"adapter_id":     platformID,
-				"family":         spec.Family,
-				"logical_row_id": fmt.Sprintf("%s:%s", state.ShopDomain, providerID),
-				"revision_hash":  revision,
+				"connection_id":               connectionID,
+				"adapter_id":                  platformID,
+				"family":                      spec.Family,
+				"logical_row_id":              fmt.Sprintf("%s:%s", state.ShopDomain, providerID),
+				"snapshot_fingerprint_sha256": fingerprint,
 				"provider_ids": map[string]any{
 					"shop_domain": state.ShopDomain,
 					"provider_id": providerID,

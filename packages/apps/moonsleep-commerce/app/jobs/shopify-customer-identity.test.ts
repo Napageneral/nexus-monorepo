@@ -8,8 +8,12 @@ import shopifyCustomerIdentityJob, {
 function sourceEnvelope(source: Record<string, unknown>) {
   const providerObjectJson = JSON.stringify(source);
   return {
-    provider_object_json: providerObjectJson,
-    provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+    source_metadata: {
+      provider_payload: {
+        provider_object_json: providerObjectJson,
+        provider_object_sha256: createHash("sha256").update(providerObjectJson).digest("hex"),
+      },
+    },
   };
 }
 
@@ -18,7 +22,10 @@ function customerRecord(overrides: Record<string, unknown> = {}) {
   return {
     id: "record-row-1",
     record_id: "shopify:primary:customer:7123456789:revision-1",
+    payload_sha256: "b".repeat(64),
     platform: "shopify",
+    source_record_type: "shopify.customer",
+    source_space_id: "moonsleepco.myshopify.com",
     space_id: "moonsleepco.myshopify.com",
     timestamp: 1_721_234_567_890,
     payload: sourceEnvelope({
@@ -48,7 +55,7 @@ function customerRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function nexFixture(options: { replayed?: boolean; tags?: string[]; canonicalId?: string } = {}) {
+function nexFixture(options: { replayed?: boolean; canonicalId?: string } = {}) {
   const canonicalId = options.canonicalId ?? "entity-shopify-customer-1";
   const record = customerRecord();
   const observe = vi.fn(async (params: Record<string, unknown>) => ({
@@ -70,20 +77,104 @@ function nexFixture(options: { replayed?: boolean; tags?: string[]; canonicalId?
       merge_candidate: null,
     },
   }));
-  const resolve = vi.fn(async () => ({ ok: true, payload: { canonical_id: canonicalId, hops: 0 } }));
-  const list = vi.fn(async () => ({
-    ok: true,
-    payload: { tags: options.tags ?? ["Customer", "Shopify"] },
-  }));
   const get = vi.fn(async () => ({ ok: true, payload: { record } }));
+  const getMany = vi.fn(async () => ({ ok: true, payload: { records: [record] } }));
+  let attachment: Record<string, unknown> | null = options.replayed
+    ? {
+        id: "facet-customer-1",
+        facet_definition_id: "moonsleep.customer.v1",
+        definition_version: 1,
+        subject_class: "nex.entity",
+        subject_id: canonicalId,
+        domain_scope: "moonsleep",
+        attachment_slot: "customer",
+        instance_key: null,
+        lifecycle_state: "active",
+        privacy_class: "restricted",
+        basis: { basis_type: "accepted_observation", observation_id: "observation-customer-1" },
+        observation_refs: [],
+        values: {},
+        relationships: [],
+        redacted_fields: ["observation_refs", "relationships"],
+      }
+    : null;
+  const facetsGet = vi.fn(async (params: Record<string, unknown>) => {
+    if (!attachment) throw new Error(`Facet ${String(params.id)} not found`);
+    if (options.replayed && attachment.id === "facet-customer-1") {
+      attachment = { ...attachment, id: params.id };
+    }
+    if (attachment.id !== params.id) throw new Error(`Facet ${String(params.id)} not found`);
+    return { attachment };
+  });
+  const profilesList = vi.fn(async () => ({
+    items: [
+      {
+        profile_id: "commerce.customer.reference_fact.v1",
+        profile_version: "1.0.0",
+        element_type: "fact",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+      {
+        profile_id: "commerce.customer.current.v1",
+        profile_version: "1.0.0",
+        element_type: "observation",
+        owner_package: "@moonsleep/continuous-evidence",
+        source_manifest_sha256: "4cd81823b8380e5414d278d3f67e89fae037a20f8c31d2df29f33660048bf93c",
+        status: "active",
+      },
+    ],
+  }));
+  const profileRegister = vi.fn(async (input: Record<string, unknown>) => ({
+    item: {
+      profile_id: input.profileId,
+      profile_version: input.profileVersion,
+      element_type: input.elementType,
+      owner_package: input.ownerPackage,
+      source_manifest_sha256: input.sourceManifestSha256,
+      status: "active",
+    },
+    reused: false,
+  }));
+  const semanticsApply = vi.fn(async (input: Record<string, unknown>) => {
+    const observations = input.observations as Array<Record<string, unknown>>;
+    const objects = input.objects as Array<Record<string, unknown>>;
+    const observationResults = Object.fromEntries(
+      observations.map((item, index) => [
+        item.ref,
+        {
+          observationId: `observation-customer-${index + 1}`,
+          receiptId: `receipt-customer-${index + 1}`,
+          reused: false,
+        },
+      ]),
+    );
+    const objectResults = Object.fromEntries(
+      objects.map((item, index) => [
+        item.ref,
+        { objectId: item.id, objectType: "facet_attachment", reused: false },
+      ]),
+    );
+    return {
+      status: "committed",
+      reused: false,
+      observations: observationResults,
+      objects: objectResults,
+      receiptSha256: "d".repeat(64),
+      actionAuthority: false,
+    };
+  });
   return {
     record,
     nex: {
-      records: { get },
+      records: { get, get_many: getMany },
       contacts: { observe },
-      entities: { resolve, tags: { list } },
+      memory: { evidence: { profiles: { list: profilesList, register: profileRegister } } },
+      semantics: { apply: semanticsApply },
+      facets: { attachments: { get: facetsGet } },
     },
-    calls: { get, observe, resolve, list },
+    calls: { get, getMany, observe, facetsGet, profilesList, profileRegister, semanticsApply },
   };
 }
 
@@ -93,7 +184,7 @@ describe("Shopify customer identity projection", () => {
       platform: "shopify",
       space_id: "moonsleepco.myshopify.com",
       contact_id: "gid://shopify/Customer/7123456789",
-      source_observation_id: "shopify:primary:customer:7123456789:revision-1",
+      source_observation_id: `record-row-1:${"b".repeat(64)}`,
       observed_at: 1_721_234_567_890,
       contact_name: "Rina Alvarez",
       entity_name: "Rina Alvarez",
@@ -101,9 +192,22 @@ describe("Shopify customer identity projection", () => {
     });
   });
 
-  it("observes, resolves and verifies the canonical customer entity through public Nex operations", async () => {
+  it("binds the contact observation identity to the immutable Record payload", () => {
+    const first = buildShopifyCustomerObservation(customerRecord());
+    const second = buildShopifyCustomerObservation(
+      customerRecord({ payload_sha256: "c".repeat(64) }),
+    );
+
+    expect(first.source_observation_id).toBe(`record-row-1:${"b".repeat(64)}`);
+    expect(second.source_observation_id).toBe(`record-row-1:${"c".repeat(64)}`);
+    expect(second.source_observation_id).not.toBe(first.source_observation_id);
+  });
+
+  it("observes the customer and applies its evidence and Facet in one deep operation", async () => {
     const fixture = nexFixture();
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).resolves.toMatchObject({
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
       projected: true,
       created_entity: true,
       created_contact: true,
@@ -113,19 +217,78 @@ describe("Shopify customer identity projection", () => {
       tags: ["Customer", "Shopify"],
     });
     expect(fixture.calls.observe).toHaveBeenCalledOnce();
-    expect(fixture.calls.resolve).toHaveBeenCalledWith({ entity_id: "entity-shopify-customer-1" });
-    expect(fixture.calls.list).toHaveBeenCalledWith({ entity_id: "entity-shopify-customer-1" });
+    expect(fixture.calls.semanticsApply).toHaveBeenCalledOnce();
+    expect(fixture.calls.semanticsApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        records: { customer0: { recordId: "record-row-1", payloadSha256: "b".repeat(64) } },
+        facts: [
+          expect.objectContaining({
+            profileId: "commerce.customer.reference_fact.v1",
+            evidence: ["customer0"],
+          }),
+        ],
+        observations: [
+          expect.objectContaining({
+            profileId: "commerce.customer.current.v1",
+            previous: null,
+          }),
+        ],
+        objects: [
+          expect.objectContaining({
+            objectType: "facet_attachment",
+            attributes: expect.objectContaining({
+              facetDefinitionId: "moonsleep.customer.v1",
+              subject: { subjectClass: "nex.entity", subjectId: "entity-shopify-customer-1" },
+              privacyClass: "restricted",
+            }),
+          }),
+        ],
+      }),
+    );
+    expect(fixture.calls.profileRegister).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds evidence idempotency to the immutable Record payload", async () => {
+    const first = nexFixture();
+    const second = nexFixture();
+    second.record.payload_sha256 = "c".repeat(64);
+
+    await projectShopifyCustomerIdentity(first.nex, first.record);
+    await projectShopifyCustomerIdentity(second.nex, second.record);
+
+    expect(first.calls.semanticsApply.mock.calls[0]?.[0].idempotencyKey).not.toBe(
+      second.calls.semanticsApply.mock.calls[0]?.[0].idempotencyKey,
+    );
   });
 
   it("replays the same immutable observation without changing entity binding", async () => {
     const fixture = nexFixture({ replayed: true });
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).resolves.toMatchObject({
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
       projected: true,
       replayed: true,
       created_entity: false,
       created_contact: false,
       canonical_entity_id: "entity-shopify-customer-1",
+      customer_observation_outcome: "adopted_existing",
+      customer_facet_outcome: "adopted_existing",
     });
+    expect(fixture.calls.profilesList).not.toHaveBeenCalled();
+    expect(fixture.calls.profileRegister).not.toHaveBeenCalled();
+    expect(fixture.calls.semanticsApply).not.toHaveBeenCalled();
+  });
+
+  it("loads an existing deterministic customer facet directly without a global list", async () => {
+    const fixture = nexFixture({ replayed: true });
+
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
+      projected: true,
+      customer_facet_outcome: "adopted_existing",
+    });
+    expect(fixture.calls.facetsGet).toHaveBeenCalledOnce();
   });
 
   it("loads the committed record from a record.ingested event before projection", async () => {
@@ -144,12 +307,104 @@ describe("Shopify customer identity projection", () => {
     expect(fixture.calls.get).toHaveBeenCalledWith({ id: "record-row-1" });
   });
 
+  it("loads and projects a grouped customer event batch", async () => {
+    const fixture = nexFixture({ replayed: true });
+    await expect(
+      shopifyCustomerIdentityJob({
+        input: {
+          events: [
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: fixture.record.id },
+            },
+          ],
+        },
+        nex: fixture.nex,
+      }),
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 1,
+      customers: 1,
+      ignored: 0,
+      projection_receipts: [
+        {
+          projector: "moonsleep-commerce.shopify-customer-identity",
+          family: "customer",
+          record_id: "record-row-1",
+          status: "completed",
+          canonical_entity_id: "entity-shopify-customer-1",
+          customer_facet_attachment_id: expect.stringContaining(
+            "facet-attachment:moonsleep.customer.v1:",
+          ),
+          projection_receipt_id: expect.stringMatching(
+            /^shopify_customer_projection_[0-9a-f]{32}$/,
+          ),
+          result_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+      ],
+    });
+    expect(fixture.calls.getMany).toHaveBeenCalledWith({ ids: ["record-row-1"] });
+    expect(fixture.calls.get).not.toHaveBeenCalled();
+    expect(fixture.calls.semanticsApply).not.toHaveBeenCalled();
+  });
+
+  it("quarantines one invalid customer Record without poisoning valid projections", async () => {
+    const fixture = nexFixture({ replayed: true });
+    const invalid = customerRecord({ id: "record-row-invalid" });
+    (invalid.metadata as Record<string, unknown>).provider_ids = {
+      customer_gid: "gid://shopify/Customer/999",
+      customer_id: "999",
+    };
+    fixture.nex.records.get_many = vi.fn(async () => ({
+      ok: true,
+      payload: { records: [fixture.record, invalid] },
+    }));
+
+    await expect(
+      shopifyCustomerIdentityJob({
+        input: {
+          events: [
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: fixture.record.id },
+            },
+            {
+              type: "record.ingested",
+              properties: { platform: "shopify", record_id: invalid.id },
+            },
+          ],
+        },
+        nex: fixture.nex,
+      }),
+    ).resolves.toMatchObject({
+      projected: true,
+      records: 2,
+      customers: 2,
+      completed: 1,
+      quarantined: 1,
+      projection_receipts: [
+        { record_id: "record-row-1", status: "completed" },
+        {
+          record_id: "record-row-invalid",
+          status: "quarantined",
+          error_code: "invalid_customer_record",
+          error: "Shopify customer identity anchors disagree",
+        },
+      ],
+    });
+  });
+
   it("skips non-customer Shopify records without touching identity", async () => {
     const fixture = nexFixture();
     fixture.record.metadata = { family: "order" };
     await expect(
       shopifyCustomerIdentityJob({
-        input: { event: { type: "record.ingested", properties: { platform: "shopify", record_id: "record-row-1" } } },
+        input: {
+          event: {
+            type: "record.ingested",
+            properties: { platform: "shopify", record_id: "record-row-1" },
+          },
+        },
         nex: fixture.nex,
       }),
     ).resolves.toEqual({ projected: false, reason: "not_customer", record_id: "record-row-1" });
@@ -158,7 +413,12 @@ describe("Shopify customer identity projection", () => {
 
   it("fails closed when exact provider JSON does not match its bound hash", () => {
     const record = customerRecord();
-    (record.payload as Record<string, unknown>).provider_object_json = JSON.stringify({ id: "other" });
+    const sourceMetadata = (record.payload as Record<string, unknown>).source_metadata as Record<
+      string,
+      unknown
+    >;
+    const providerPayload = sourceMetadata.provider_payload as Record<string, unknown>;
+    providerPayload.provider_object_json = JSON.stringify({ id: "other" });
     expect(() => buildShopifyCustomerObservation(record)).toThrow(/hash does not match/);
   });
 
@@ -171,11 +431,46 @@ describe("Shopify customer identity projection", () => {
     };
     const raw = `{"id":"${source.id}","displayName":"${source.displayName}","provider_large_integer":9007199254740993123456789}`;
     record.payload = {
-      provider_object_json: raw,
-      provider_object_sha256: createHash("sha256").update(raw).digest("hex"),
+      source_metadata: {
+        provider_payload: {
+          provider_object_json: raw,
+          provider_object_sha256: createHash("sha256").update(raw).digest("hex"),
+        },
+      },
     };
     expect(buildShopifyCustomerObservation(record).contact_id).toBe(source.id);
-    expect(record.payload).not.toHaveProperty("provider_object");
+    expect(
+      ((record.payload as Record<string, unknown>).source_metadata as Record<string, unknown>)
+        .provider_payload,
+    ).not.toHaveProperty("provider_object");
+  });
+
+  it("accepts the exact Shopify REST customer identity shape from a failed production Record", () => {
+    const customerId = "11278589558946";
+    const customerGid = `gid://shopify/Customer/${customerId}`;
+    const record = customerRecord({
+      id: "record_07ca74bab35fcde06e5a2d2754baac20398d265c6ca05be721f9d80f1d102599",
+    });
+    const source = {
+      id: Number(customerId),
+      admin_graphql_api_id: customerGid,
+      first_name: "",
+      last_name: "",
+    };
+    record.payload = sourceEnvelope(source);
+    (record.metadata as Record<string, unknown>).provider_ids = {
+      customer_gid: customerGid,
+      customer_id: customerId,
+    };
+    ((record.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_gid =
+      customerGid;
+    ((record.metadata as Record<string, unknown>).row as Record<string, unknown>).customer_id =
+      customerId;
+
+    expect(buildShopifyCustomerObservation(record)).toMatchObject({
+      contact_id: customerGid,
+      source_observation_id: `record_07ca74bab35fcde06e5a2d2754baac20398d265c6ca05be721f9d80f1d102599:${"b".repeat(64)}`,
+    });
   });
 
   it("fails closed when source, normalized and provider identity anchors disagree", () => {
@@ -187,8 +482,30 @@ describe("Shopify customer identity projection", () => {
   });
 
   it("fails closed when the record is rebound to another Shopify shop", () => {
-    const record = customerRecord({ space_id: "foreign-shop.myshopify.com" });
+    const record = customerRecord({ source_space_id: "foreign-shop.myshopify.com" });
     expect(() => buildShopifyCustomerObservation(record)).toThrow(/space does not match/);
+  });
+
+  it("fails closed when immutable Record type differs from shopify.customer", () => {
+    const record = customerRecord({ source_record_type: "shopify.order" });
+    expect(() => buildShopifyCustomerObservation(record)).toThrow(/shopify.customer Records/);
+  });
+
+  it("projects an exact legacy text Record from its immutable normalized row only when enabled", () => {
+    const record = customerRecord({
+      source_record_type: "text",
+      provider_account_ref: "moonsleepco.myshopify.com",
+      provider_record_id: "shopify:shopify:shopify-primary:customer:7123456789:revision-1",
+      payload: { source_metadata: {} },
+    });
+    (record.metadata as Record<string, unknown>).connection_id = "shopify-primary";
+    expect(() => buildShopifyCustomerObservation(record)).toThrow(
+      "expected shopify.customer Records",
+    );
+    expect(buildShopifyCustomerObservation(record, { allowLegacyText: true })).toMatchObject({
+      contact_id: "gid://shopify/Customer/7123456789",
+      contact_name: "Rina Alvarez",
+    });
   });
 
   it("does not merge or anchor customers by email, phone or display name", () => {
@@ -200,18 +517,14 @@ describe("Shopify customer identity projection", () => {
     expect(observation).not.toHaveProperty("phone");
   });
 
-  it("fails closed when canonical resolution disagrees with the observation", async () => {
-    const fixture = nexFixture({ canonicalId: "entity-canonical" });
-    fixture.calls.resolve.mockResolvedValueOnce({ ok: true, payload: { canonical_id: "entity-other", hops: 1 } });
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).rejects.toThrow(
-      /resolution disagrees/,
-    );
-  });
-
-  it("fails closed when the canonical entity is missing required customer classification", async () => {
-    const fixture = nexFixture({ tags: ["Shopify"] });
-    await expect(projectShopifyCustomerIdentity(fixture.nex, fixture.record)).rejects.toThrow(
-      /missing Customer tag/,
-    );
+  it("treats Entity tags as compatibility hints rather than customer-role authority", async () => {
+    const fixture = nexFixture();
+    await expect(
+      projectShopifyCustomerIdentity(fixture.nex, fixture.record),
+    ).resolves.toMatchObject({
+      tags: ["Customer", "Shopify"],
+      tag_contract: "compatibility_hint",
+      customer_facet_outcome: "attached",
+    });
   });
 });

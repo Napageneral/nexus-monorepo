@@ -1,61 +1,85 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NexusApp } from "./app.ts";
+import { render } from "lit";
+import { describe, expect, it } from "vitest";
+import { renderChat, type ChatProps } from "./views/chat.ts";
 
-// oxlint-disable-next-line typescript/unbound-method
-const originalConnect = NexusApp.prototype.connect;
-
-function mountApp(pathname: string) {
-  window.history.replaceState({}, "", pathname);
-  const app = document.createElement("nexus-app") as NexusApp;
-  document.body.append(app);
-  return app;
+function createProps(overrides: Partial<ChatProps> = {}): ChatProps {
+  return {
+    conversationId: "",
+    onConversationIdChange: () => undefined,
+    thinkingLevel: null,
+    showThinking: false,
+    loading: false,
+    sending: false,
+    messages: [],
+    toolMessages: [],
+    stream: null,
+    streamStartedAt: null,
+    draft: "",
+    queue: [],
+    connected: true,
+    canSend: true,
+    disabledReason: null,
+    error: null,
+    conversations: null,
+    sessions: null,
+    focusMode: false,
+    assistantName: "Nexus",
+    assistantAvatar: null,
+    onRefresh: () => undefined,
+    onToggleFocusMode: () => undefined,
+    onDraftChange: () => undefined,
+    onSend: () => undefined,
+    onQueueRemove: () => undefined,
+    onNewSession: () => undefined,
+    ...overrides,
+  };
 }
 
-beforeEach(() => {
-  NexusApp.prototype.connect = () => {
-    // no-op: avoid real runtime WS connections in browser tests
-  };
-  window.__NEXUS_OPERATOR_CONSOLE_BASE_PATH__ = undefined;
-  localStorage.clear();
-  document.body.innerHTML = "";
-});
-
-afterEach(() => {
-  NexusApp.prototype.connect = originalConnect;
-  window.__NEXUS_OPERATOR_CONSOLE_BASE_PATH__ = undefined;
-  localStorage.clear();
-  document.body.innerHTML = "";
-});
-
 describe("chat markdown rendering", () => {
-  it("renders markdown inside tool output sidebar", async () => {
-    const app = mountApp("/console");
-    await app.updateComplete;
+  it("renders markdown inside the tool output sidebar", () => {
+    const container = document.createElement("div");
+    let sidebarContent: string | null = null;
 
-    const timestamp = Date.now();
-    app.chatMessages = [
-      {
-        role: "assistant",
-        content: [
-          { type: "toolcall", name: "noop", arguments: {} },
-          { type: "toolresult", name: "noop", text: "Hello **world**" },
-        ],
-        timestamp,
-      },
-    ];
+    const draw = () => {
+      render(
+        renderChat(
+          createProps({
+            showThinking: true,
+            messages: [
+              {
+                role: "assistant",
+                content: [
+                  { type: "toolcall", name: "noop", arguments: {} },
+                  { type: "toolresult", name: "noop", text: "Hello **world**" },
+                ],
+                timestamp: 1,
+              },
+            ],
+            sidebarOpen: sidebarContent !== null,
+            sidebarContent,
+            onOpenSidebar: (content) => {
+              sidebarContent = content;
+              draw();
+            },
+            onCloseSidebar: () => {
+              sidebarContent = null;
+              draw();
+            },
+          }),
+        ),
+        container,
+      );
+    };
 
-    await app.updateComplete;
+    draw();
 
-    const toolCards = Array.from(app.querySelectorAll<HTMLElement>(".chat-tool-card"));
-    const toolCard = toolCards.find((card) =>
-      card.querySelector(".chat-tool-card__preview, .chat-tool-card__inline"),
+    const toolCard = Array.from(container.querySelectorAll<HTMLElement>(".chat-tool-card")).find(
+      (card) => card.querySelector(".chat-tool-card__preview, .chat-tool-card__inline"),
     );
     expect(toolCard).not.toBeUndefined();
     toolCard?.click();
 
-    await app.updateComplete;
-
-    const strong = app.querySelector(".sidebar-markdown strong");
+    const strong = container.querySelector(".sidebar-markdown strong");
     expect(strong?.textContent).toBe("world");
   });
 });

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { NexClient } from "../../../../../nex/src/runtime/internal-runtime-client.js";
+import { listEveryPage } from "../jobs/nex-runtime-lists.js";
 import { SHOPIFY_SOURCE_SCHEDULES } from "../jobs/shopify-source-schedules.js";
 
 type RuntimeRow = Record<string, unknown>;
@@ -21,6 +22,50 @@ const COMMERCE_JOB_SCRIPT_PATH = fileURLToPath(
 const SOURCE_JOB_SCRIPT_PATH = fileURLToPath(
   new URL("../jobs/shopify-source-observation.ts", import.meta.url),
 );
+const PAID_ORDER_EFFECTS_JOB_NAME = "moonsleep-commerce.shopify-paid-order-effects";
+const PAID_ORDER_EFFECTS_JOB_SPEC = Object.freeze({
+  name: PAID_ORDER_EFFECTS_JOB_NAME,
+  description:
+    "Reserve provider-write-disabled effect intents for one paid Shopify order work group",
+  scriptPath: fileURLToPath(new URL("../jobs/shopify-paid-order-effects.ts", import.meta.url)),
+  status: "active",
+});
+const PROJECTOR_JOB_LANE_ID = "automation";
+const SOURCE_JOB_LANE_ID = "adapter_io";
+const SOURCE_JOB_TIMEOUT_MS = 15 * 60 * 1000;
+const SOURCE_JOB_PROFILE_REVISION_ID = "job_profile_adapter_capture_r1";
+const PROJECTOR_JOB_PROFILE_REVISION_ID = "job_profile_adapter_projection_r1";
+const PAID_ORDER_EFFECTS_TIMEOUT_MS = 5 * 60 * 1000;
+const PAID_ORDER_EFFECTS_PROFILE_REVISION_ID = "job_profile_bulk_compute_r1";
+const SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "record.ingest",
+  "record.ingest_many",
+  "shopify.source.abort",
+  "shopify.source.capture",
+  "shopify.source.commit",
+]);
+const CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "contacts.observe",
+  "facets.attachments.get",
+  "memory.evidence.profiles.list",
+  "memory.evidence.profiles.register",
+  "records.get",
+  "records.get_many",
+  "semantics.apply",
+]);
+const COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST = JSON.stringify([
+  "commerce.line-items.observe",
+  "commerce.line-items.observe_many",
+  "commerce.orders.get",
+  "commerce.orders.observe",
+  "commerce.orders.observe_many",
+  "contacts.observe",
+  "contacts.resolve",
+  "entities.resolve",
+  "records.get",
+  "records.get_many",
+]);
+const PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST = JSON.stringify(["jobs.effects.perform"]);
 const JOB_SPECS = Object.freeze([
   {
     name: CUSTOMER_JOB_NAME,
@@ -41,8 +86,7 @@ const JOB_SPECS = Object.freeze([
   },
   {
     name: "moonsleep-commerce.shopify-source.orders-delta",
-    description:
-      "Capture one bounded Shopify order delta page and durably ingest its exact records",
+    description: "Drain bounded Shopify order delta pages and durably ingest their exact records",
     scriptPath: SOURCE_JOB_SCRIPT_PATH,
     status: "active",
     config: { family: "orders.delta" },
@@ -187,6 +231,12 @@ const JOB_SPECS = Object.freeze([
   },
 ]);
 const LEGACY_SHOPIFY_MATCH_JSON = JSON.stringify({ platform: "shopify" });
+const SOURCE_CONNECTION_ID_RE = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
+type OwnedJobSpec = (typeof JOB_SPECS)[number] | typeof PAID_ORDER_EFFECTS_JOB_SPEC;
+
+function ownedJobSpecs(): readonly OwnedJobSpec[] {
+  return [JOB_SPECS[0]!, JOB_SPECS[1]!, PAID_ORDER_EFFECTS_JOB_SPEC, ...JOB_SPECS.slice(2)];
+}
 
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
@@ -214,8 +264,43 @@ function unwrapPayload(value: unknown): RuntimeRow {
   return Object.keys(payload).length > 0 ? payload : row;
 }
 
+function sourceJobHasConfiguredConnection(existing: RuntimeRow, expectedFamily: string): boolean {
+  let config: RuntimeRow;
+  try {
+    config = asRecord(JSON.parse(asString(existing.config_json)));
+  } catch {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has invalid config JSON`);
+  }
+  const keys = Object.keys(config).sort();
+  if (asString(config.family) !== expectedFamily) {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has an unexpected family`);
+  }
+  if (keys.length === 1 && keys[0] === "family") {
+    return false;
+  }
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "connection_id" ||
+    keys[1] !== "family" ||
+    !SOURCE_CONNECTION_ID_RE.test(asString(config.connection_id))
+  ) {
+    throw new Error(`MoonSleep commerce source job ${expectedFamily} has unexpected config`);
+  }
+  return true;
+}
+
 async function listJobs(runtime: NexClient): Promise<RuntimeRow[]> {
-  return asArray(unwrapPayload(await runtime.jobs.list({})).jobs);
+  return listEveryPage("jobs.list", async (page) => unwrapPayload(await runtime.jobs.list(page)));
+}
+
+// Find-or-create needs one answer per name: with two definitions of one owned
+// job, updating either would leave the other running under the old contract.
+function findOwnedJob(jobs: RuntimeRow[], name: string): RuntimeRow | undefined {
+  const matches = jobs.filter((row) => asString(row.name) === name);
+  if (matches.length > 1) {
+    throw new Error(`MoonSleep commerce job ${name} has duplicate definitions`);
+  }
+  return matches[0];
 }
 
 async function listSubscriptions(
@@ -233,23 +318,65 @@ async function listSubscriptions(
 }
 
 async function listSchedules(runtime: NexClient): Promise<RuntimeRow[]> {
-  return asArray(unwrapPayload(await runtime.schedules.list({})).schedules);
+  return listEveryPage("schedules.list", async (page) =>
+    unwrapPayload(await runtime.schedules.list(page)),
+  );
 }
 
 async function ensureJob(
   runtime: NexClient,
   appId: string,
-  spec: (typeof JOB_SPECS)[number],
+  spec: OwnedJobSpec,
+  projectorLive = false,
 ): Promise<string> {
-  const existing = (await listJobs(runtime)).find((row) => asString(row.name) === spec.name);
+  const existing = findOwnedJob(await listJobs(runtime), spec.name);
   const configJson = "config" in spec ? JSON.stringify(spec.config) : "";
+  const isPaidOrderEffects = spec.name === PAID_ORDER_EFFECTS_JOB_NAME;
+  const laneId =
+    "config" in spec || isPaidOrderEffects ? SOURCE_JOB_LANE_ID : PROJECTOR_JOB_LANE_ID;
+  const timeoutMs = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_TIMEOUT_MS
+    : "config" in spec
+      ? SOURCE_JOB_TIMEOUT_MS
+      : null;
+  const executionProfileRevisionId = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_PROFILE_REVISION_ID
+    : "config" in spec
+      ? SOURCE_JOB_PROFILE_REVISION_ID
+      : PROJECTOR_JOB_PROFILE_REVISION_ID;
+  const runtimeMethodAllowlist = isPaidOrderEffects
+    ? PAID_ORDER_EFFECTS_RUNTIME_METHOD_ALLOWLIST
+    : "config" in spec
+      ? SOURCE_JOB_RUNTIME_METHOD_ALLOWLIST
+      : spec.name === CUSTOMER_JOB_NAME
+        ? CUSTOMER_PROJECTOR_RUNTIME_METHOD_ALLOWLIST
+        : COMMERCE_PROJECTOR_RUNTIME_METHOD_ALLOWLIST;
   if (existing) {
     const id = asString(existing.id);
+    // A projector stays (or comes back) active while it is live: active now, or still carrying an enabled
+    // subscription it expects (a deactivate before an upgrade leaves those enabled; Nex sends no event to an
+    // inactive job, so the subscription is what says the projector was live).
+    const status =
+      !("config" in spec) && (asString(existing.status) === "active" || projectorLive)
+        ? "active"
+        : spec.status;
+    let configNeedsUpdate = false;
+    if (configJson !== "") {
+      if ("schedule" in spec) {
+        sourceJobHasConfiguredConnection(existing, spec.config.family);
+      } else {
+        configNeedsUpdate = asString(existing.config_json) !== configJson;
+      }
+    }
     const needsUpdate =
       asString(existing.description) !== spec.description ||
       asString(existing.script_path) !== spec.scriptPath ||
-      (configJson !== "" && asString(existing.config_json) !== configJson) ||
-      asString(existing.status) !== spec.status;
+      configNeedsUpdate ||
+      asString(existing.lane_id) !== laneId ||
+      (timeoutMs !== null && asInteger(existing.timeout_ms) !== timeoutMs) ||
+      asString(existing.execution_profile_revision_id) !== executionProfileRevisionId ||
+      asString(existing.runtime_method_allowlist) !== runtimeMethodAllowlist ||
+      asString(existing.status) !== status;
     if (!needsUpdate) {
       return id;
     }
@@ -258,8 +385,12 @@ async function ensureJob(
         id,
         description: spec.description,
         script_path: spec.scriptPath,
-        ...(configJson ? { config_json: configJson } : {}),
-        status: spec.status,
+        ...(configNeedsUpdate ? { config_json: configJson } : {}),
+        ...(laneId ? { lane_id: laneId } : {}),
+        ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
+        execution_profile_revision_id: executionProfileRevisionId,
+        runtime_method_allowlist: runtimeMethodAllowlist,
+        status,
         created_by: appId,
       }),
     );
@@ -272,6 +403,10 @@ async function ensureJob(
       description: spec.description,
       script_path: spec.scriptPath,
       ...(configJson ? { config_json: configJson } : {}),
+      ...(laneId ? { lane_id: laneId } : {}),
+      ...(timeoutMs !== null ? { timeout_ms: timeoutMs } : {}),
+      execution_profile_revision_id: executionProfileRevisionId,
+      runtime_method_allowlist: runtimeMethodAllowlist,
       status: spec.status,
       created_by: appId,
     }),
@@ -283,10 +418,11 @@ async function ensureJob(
   return id;
 }
 
-async function ensureDisabledSchedule(
+async function ensureSourceSchedule(
   runtime: NexClient,
   jobDefinitionId: string,
   scheduleSpec: { name: string; expression: string },
+  preserveEnabled: boolean,
 ): Promise<string> {
   const matches = (await listSchedules(runtime)).filter(
     (row) => asString(row.name) === scheduleSpec.name,
@@ -300,17 +436,22 @@ async function ensureDisabledSchedule(
       throw new Error("MoonSleep commerce source schedule is bound to a different job");
     }
     const id = asString(existing.id);
+    const existingEnabled = asInteger(existing.enabled);
+    if (existingEnabled !== 0 && existingEnabled !== 1) {
+      throw new Error("MoonSleep commerce source schedule has an invalid enabled state");
+    }
+    const enabled = preserveEnabled && existingEnabled === 1;
     if (
       asString(existing.expression) !== scheduleSpec.expression ||
       asString(existing.timezone) !== "UTC" ||
-      asInteger(existing.enabled) !== 0
+      existingEnabled !== (enabled ? 1 : 0)
     ) {
       const updated = unwrapPayload(
         await runtime.schedules.update({
           id,
           expression: scheduleSpec.expression,
           timezone: "UTC",
-          enabled: false,
+          enabled,
         }),
       );
       return asString(asRecord(updated.schedule).id) || id;
@@ -337,6 +478,7 @@ async function ensureSubscriptions(
   runtime: NexClient,
   jobDefinitionId: string,
   matches: ReadonlyArray<Readonly<Record<string, string>>>,
+  projectorLive = false,
 ): Promise<string[]> {
   const subscriptions = await listSubscriptions(runtime, jobDefinitionId);
   const expectedJson = matches.map((match) => JSON.stringify(match));
@@ -365,7 +507,9 @@ async function ensureSubscriptions(
     const existing = matchesForContract[0];
     if (existing) {
       const id = asString(existing.id);
-      if (asInteger(existing.enabled) !== 0) {
+      // A live projector keeps its subscriptions: production writes every new Shopify order and customer into Nex
+      // through them (decided 2026-11-12; the channel-intake worker's own call is the fallback).
+      if (asInteger(existing.enabled) !== 0 && !projectorLive) {
         const updated = unwrapPayload(
           await runtime.events.subscriptions.update({ id, match, enabled: false }),
         );
@@ -380,7 +524,7 @@ async function ensureSubscriptions(
         job_definition_id: jobDefinitionId,
         event_type: EVENT_TYPE,
         match,
-        enabled: false,
+        enabled: projectorLive,
       }),
     );
     const id = asString(asRecord(created.subscription).id);
@@ -392,6 +536,24 @@ async function ensureSubscriptions(
   return ids;
 }
 
+// Live: active now, or still carrying an enabled subscription it expects (what a deactivate leaves behind).
+async function projectorIsLive(
+  runtime: NexClient,
+  spec: (typeof JOB_SPECS)[number],
+): Promise<boolean> {
+  const existing = findOwnedJob(await listJobs(runtime), spec.name);
+  if (!existing) {
+    return false;
+  }
+  if (asString(existing.status) === "active") {
+    return true;
+  }
+  const expected = spec.matches.map((match) => JSON.stringify(match));
+  return (await listSubscriptions(runtime, asString(existing.id))).some(
+    (row) => expected.includes(asString(row.match_json)) && asInteger(row.enabled) !== 0,
+  );
+}
+
 export async function ensureMoonSleepCommerceRuntimeWork(params: {
   runtime: NexClient;
   appId: string;
@@ -400,28 +562,49 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
   subscriptionIds: string[];
   commerceJobDefinitionId: string;
   commerceSubscriptionIds: string[];
+  paidOrderEffectsJobDefinitionId: string;
   sourceJobDefinitionIds: string[];
   sourceScheduleIds: string[];
 }> {
-  const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!);
+  const customerLive = await projectorIsLive(params.runtime, JOB_SPECS[0]!);
+  const jobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[0]!, customerLive);
   const subscriptionIds = await ensureSubscriptions(
     params.runtime,
     jobDefinitionId,
     JOB_SPECS[0]!.matches,
+    customerLive,
   );
-  const commerceJobDefinitionId = await ensureJob(params.runtime, params.appId, JOB_SPECS[1]!);
+  const commerceLive = await projectorIsLive(params.runtime, JOB_SPECS[1]!);
+  const commerceJobDefinitionId = await ensureJob(
+    params.runtime,
+    params.appId,
+    JOB_SPECS[1]!,
+    commerceLive,
+  );
   const commerceSubscriptionIds = await ensureSubscriptions(
     params.runtime,
     commerceJobDefinitionId,
     JOB_SPECS[1]!.matches,
+    commerceLive,
+  );
+  const paidOrderEffectsJobDefinitionId = await ensureJob(
+    params.runtime,
+    params.appId,
+    PAID_ORDER_EFFECTS_JOB_SPEC,
   );
   const sourceJobDefinitionIds: string[] = [];
   const sourceScheduleIds: string[] = [];
   for (const spec of JOB_SPECS.slice(2)) {
+    const existing = findOwnedJob(await listJobs(params.runtime), spec.name);
+    const preserveEnabled = existing
+      ? sourceJobHasConfiguredConnection(existing, spec.config.family)
+      : false;
     const jobId = await ensureJob(params.runtime, params.appId, spec);
     sourceJobDefinitionIds.push(jobId);
     if ("schedule" in spec) {
-      sourceScheduleIds.push(await ensureDisabledSchedule(params.runtime, jobId, spec.schedule));
+      sourceScheduleIds.push(
+        await ensureSourceSchedule(params.runtime, jobId, spec.schedule, preserveEnabled),
+      );
     }
   }
   return {
@@ -429,6 +612,7 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
     subscriptionIds,
     commerceJobDefinitionId,
     commerceSubscriptionIds,
+    paidOrderEffectsJobDefinitionId,
     sourceJobDefinitionIds,
     sourceScheduleIds,
   };
@@ -436,26 +620,14 @@ export async function ensureMoonSleepCommerceRuntimeWork(params: {
 
 export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
-  const schedules = await listSchedules(runtime);
-  for (const spec of JOB_SPECS) {
+  for (const spec of ownedJobSpecs()) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;
     }
     const jobId = asString(job.id);
-    for (const schedule of schedules) {
-      if (asString(schedule.job_definition_id) === jobId && asInteger(schedule.enabled) !== 0) {
-        await runtime.schedules.update({ id: asString(schedule.id), enabled: false });
-      }
-    }
-    for (const subscription of await listSubscriptions(runtime, jobId)) {
-      if (asInteger(subscription.enabled) !== 0) {
-        await runtime.events.subscriptions.update({
-          id: asString(subscription.id),
-          enabled: false,
-        });
-      }
-    }
+    // Subscriptions are left as they are: Nex sends no event to an inactive job, and an enabled subscription is how
+    // the next release's ensure knows a projector was live and turns it back on (0.3.39).
     if (asString(job.status) !== "inactive") {
       await runtime.jobs.update({ id: jobId, status: "inactive" });
     }
@@ -465,7 +637,7 @@ export async function disableMoonSleepCommerceRuntimeWork(runtime: NexClient): P
 export async function removeMoonSleepCommerceRuntimeWork(runtime: NexClient): Promise<void> {
   const jobs = await listJobs(runtime);
   const schedules = await listSchedules(runtime);
-  for (const spec of JOB_SPECS) {
+  for (const spec of ownedJobSpecs()) {
     const job = jobs.find((row) => asString(row.name) === spec.name);
     if (!job) {
       continue;

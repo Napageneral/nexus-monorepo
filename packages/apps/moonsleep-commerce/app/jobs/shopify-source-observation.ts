@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 type RuntimeRow = Record<string, unknown>;
 
 type ShopifySourceJobContext = {
@@ -27,13 +29,17 @@ const SOURCE_FAMILIES = new Set([
   "payouts.delta",
 ]);
 const CAPTURE_ID_RE = /^[0-9a-f]{32}$/;
-const INGEST_WRITE_BATCH_SIZE = 25;
-const INGEST_WRITE_BATCH_PAUSE_MS = 2_500;
+const RECORD_ID_RE = /^record_[0-9a-f]{64}$/;
+const BATCH_SOURCE_RECORD_TYPES = new Set([
+  "shopify.customer",
+  "shopify.inventory",
+  "shopify.order",
+  "shopify.line_item",
+]);
+const ORDERS_MAX_PAGES_PER_RUN = 10;
 
 function asRecord(value: unknown): RuntimeRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RuntimeRow)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
@@ -66,9 +72,81 @@ function requireString(row: RuntimeRow, field: string): string {
   return value;
 }
 
-async function pauseBetweenWriteBatches(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, INGEST_WRITE_BATCH_PAUSE_MS);
+function requireBatchRecordIds(value: unknown, expected: number): string[] {
+  if (!Array.isArray(value) || value.length !== expected) {
+    throw new Error("Shopify Record batch ingest returned incomplete Record ids");
+  }
+  const ids = value.map((entry) => asString(entry));
+  if (ids.some((id) => !RECORD_ID_RE.test(id)) || new Set(ids).size !== ids.length) {
+    throw new Error("Shopify Record batch ingest returned invalid Record ids");
+  }
+  return ids;
+}
+
+function exactMetadataField(params: {
+  metadata: RuntimeRow;
+  field: "provider_account_ref" | "source_record_type" | "provider_version_ref";
+  value: unknown;
+}): void {
+  if (params.value === undefined) {
+    return;
+  }
+  const current = params.metadata[params.field];
+  if (current !== undefined && JSON.stringify(current) !== JSON.stringify(params.value)) {
+    throw new Error(`Shopify Record ${params.field} custody disagrees with metadata`);
+  }
+  params.metadata[params.field] = params.value;
+}
+
+function recordIngestParams(record: RuntimeRow): { routing: RuntimeRow; payload: RuntimeRow } {
+  const routing = { ...asRecord(record.routing) };
+  const payload = { ...asRecord(record.payload) };
+  const routingMetadata = { ...asRecord(routing.metadata) };
+  const payloadMetadata = { ...asRecord(payload.metadata) };
+
+  exactMetadataField({
+    metadata: routingMetadata,
+    field: "provider_account_ref",
+    value: routing.provider_account_ref,
+  });
+  exactMetadataField({
+    metadata: payloadMetadata,
+    field: "source_record_type",
+    value: payload.source_record_type,
+  });
+  exactMetadataField({
+    metadata: payloadMetadata,
+    field: "provider_version_ref",
+    value: payload.provider_version_ref,
+  });
+  delete routing.provider_account_ref;
+  delete payload.source_record_type;
+  delete payload.provider_version_ref;
+  if (Object.keys(routingMetadata).length > 0) {
+    routing.metadata = routingMetadata;
+  }
+  if (Object.keys(payloadMetadata).length > 0) {
+    payload.metadata = payloadMetadata;
+  }
+  return { routing, payload };
+}
+
+function canUseShopifySourceBatch(
+  records: Array<{ routing: RuntimeRow; payload: RuntimeRow }>,
+): boolean {
+  let sharedRoute = "";
+  return records.every(({ routing, payload }, index) => {
+    const sourceRecordType = asString(asRecord(payload.metadata).source_record_type);
+    const route = JSON.stringify({
+      adapter: routing.adapter ?? null,
+      platform: routing.platform ?? null,
+      connection_id: routing.connection_id ?? null,
+      sender_id: routing.sender_id ?? null,
+      receiver_id: routing.receiver_id ?? null,
+      space_id: routing.space_id ?? null,
+    });
+    if (index === 0) sharedRoute = route;
+    return BATCH_SOURCE_RECORD_TYPES.has(sourceRecordType) && route === sharedRoute;
   });
 }
 
@@ -77,8 +155,7 @@ function sourceJobConfig(ctx: ShopifySourceJobContext): {
   connectionId: string;
 } {
   const family = asString(ctx.input.family) || asString(ctx.job.config.family);
-  const connectionId =
-    asString(ctx.input.connection_id) || asString(ctx.job.config.connection_id);
+  const connectionId = asString(ctx.input.connection_id) || asString(ctx.job.config.connection_id);
   if (!SOURCE_FAMILIES.has(family)) {
     throw new Error("Shopify source job received an unsupported family");
   }
@@ -111,77 +188,151 @@ export default async function shopifySourceObservationJob(
   ctx: ShopifySourceJobContext,
 ): Promise<RuntimeRow> {
   const { family, connectionId } = sourceJobConfig(ctx);
-  const capture = unwrap(
-    await ctx.nex.shopify.source.capture({
-      connection_id: connectionId,
-      family,
-    }),
-  );
-  const captureId = requireString(capture, "capture_id");
-  if (!CAPTURE_ID_RE.test(captureId) || requireString(capture, "family") !== family) {
-    throw new Error("Shopify source capture returned an invalid receipt");
-  }
-  const records = asArray(capture.records);
+  const observation = asRecord(ctx.input.observation);
+  const isImmutableObservation = Object.keys(observation).length > 0;
+  const maxPages =
+    family === "orders.delta" && !isImmutableObservation ? ORDERS_MAX_PAGES_PER_RUN : 1;
   let inserted = 0;
   let replayed = 0;
+  let recordCount = 0;
+  let recordIds: string[] = [];
+  let pages = 0;
+  let currentCaptureId = "";
+  let currentCaptureCommitted = false;
+  let lastCommit: RuntimeRow = {};
+  const familyCounts: RuntimeRow = {};
+
   try {
-    for (const [index, record] of records.entries()) {
-      if (asString(record.operation) !== "record.ingest") {
-        throw new Error("Shopify source capture returned an unsupported operation");
-      }
-      const routing = asRecord(record.routing);
-      const payload = asRecord(record.payload);
-      if (Object.keys(routing).length === 0 || Object.keys(payload).length === 0) {
-        throw new Error("Shopify source capture returned an incomplete record envelope");
-      }
-      const result = unwrap(await ctx.nex.record.ingest({ routing, payload }));
-      const status = asString(result.status) || asString(asRecord(result.result).status);
-      if (status && status !== "completed" && status !== "skipped") {
-        throw new Error(`Shopify record ingest returned ${status}`);
-      }
-      if (status === "skipped" || result.inserted === false || result.replayed === true) {
-        replayed += 1;
-      } else {
-        inserted += 1;
-      }
+    while (pages < maxPages) {
+      const capture = unwrap(
+        await ctx.nex.shopify.source.capture({
+          connection_id: connectionId,
+          family,
+          ...(isImmutableObservation ? { observation } : {}),
+        }),
+      );
+      currentCaptureId = requireString(capture, "capture_id");
+      currentCaptureCommitted = false;
       if (
-        index + 1 < records.length &&
-        (index + 1) % INGEST_WRITE_BATCH_SIZE === 0
+        !CAPTURE_ID_RE.test(currentCaptureId)
+        || requireString(capture, "family") !== family
       ) {
-        ctx.log.info(
-          `Shopify source ${family} pausing after bounded write batch ${index + 1}/${records.length}`,
-        );
-        await pauseBetweenWriteBatches();
+        throw new Error("Shopify source capture returned an invalid receipt");
+      }
+      const records = asArray(capture.records);
+      let pageInserted = 0;
+      let pageReplayed = 0;
+      let pageRecordIds: string[] = [];
+      const ingestRecords: Array<{ routing: RuntimeRow; payload: RuntimeRow }> = [];
+      for (const record of records) {
+        if (asString(record.operation) !== "record.ingest") {
+          throw new Error("Shopify source capture returned an unsupported operation");
+        }
+        const { routing, payload } = recordIngestParams(record);
+        if (Object.keys(routing).length === 0 || Object.keys(payload).length === 0) {
+          throw new Error("Shopify source capture returned an incomplete record envelope");
+        }
+        const metadata = asRecord(payload.metadata);
+        const sourceRecordType = asString(metadata.source_record_type);
+        const recordFamily = asString(metadata.family) || asString(routing.container_id);
+        if (!recordFamily) {
+          throw new Error("Shopify source capture returned a Record without a family");
+        }
+        familyCounts[recordFamily] = Number(familyCounts[recordFamily] || 0) + 1;
+        ingestRecords.push({ routing, payload });
+      }
+      if (ingestRecords.length > 0 && canUseShopifySourceBatch(ingestRecords)) {
+        const result = unwrap(await ctx.nex.record.ingest_many({ records: ingestRecords }));
+        pageInserted = Number(result.inserted);
+        pageReplayed = Number(result.replayed);
+        if (
+          !Number.isSafeInteger(pageInserted)
+          || pageInserted < 0
+          || !Number.isSafeInteger(pageReplayed)
+          || pageReplayed < 0
+          || pageInserted + pageReplayed !== ingestRecords.length
+        ) {
+          throw new Error("Shopify Record batch ingest returned invalid counts");
+        }
+        pageRecordIds = requireBatchRecordIds(result.record_ids, ingestRecords.length);
+      } else {
+        for (const record of ingestRecords) {
+          const result = unwrap(await ctx.nex.record.ingest(record));
+          const status = asString(result.status) || asString(asRecord(result.result).status);
+          if (status && status !== "completed" && status !== "skipped") {
+            throw new Error(`Shopify Record ingest returned ${status}`);
+          }
+          if (status === "skipped" || result.inserted === false || result.replayed === true) {
+            pageReplayed += 1;
+          } else {
+            pageInserted += 1;
+          }
+        }
+      }
+      const commit = unwrap(
+        await ctx.nex.shopify.source.commit({
+          connection_id: connectionId,
+          family,
+          capture_id: currentCaptureId,
+        }),
+      );
+      if (requireString(commit, "capture_id") !== currentCaptureId) {
+        throw new Error("Shopify source commit returned a different capture id");
+      }
+      currentCaptureCommitted = true;
+      pages += 1;
+      recordCount += records.length;
+      inserted += pageInserted;
+      replayed += pageReplayed;
+      recordIds = recordIds.concat(pageRecordIds);
+      lastCommit = commit;
+      ctx.log.info(
+        `Shopify source ${family} committed page ${pages} with ${records.length} records (${pageInserted} inserted, ${pageReplayed} replayed)`,
+      );
+      if (commit.complete === true) {
+        break;
       }
     }
-    const commit = unwrap(
-      await ctx.nex.shopify.source.commit({
-        connection_id: connectionId,
-        family,
-        capture_id: captureId,
-      }),
-    );
-    if (requireString(commit, "capture_id") !== captureId) {
-      throw new Error("Shopify source commit returned a different capture id");
+
+    if (lastCommit.complete !== true && pages === maxPages) {
+      ctx.log.warn(
+        `Shopify source ${family} reached its ${maxPages}-page run bound with a continuation pending`,
+      );
     }
-    ctx.log.info(
-      `Shopify source ${family} committed ${records.length} records (${inserted} inserted, ${replayed} replayed)`,
+    const sortedFamilyCounts = Object.fromEntries(
+      Object.entries(familyCounts).sort(([left], [right]) => left.localeCompare(right)),
     );
-    return {
+    const terminal = {
       ok: true,
+      status: recordCount > 0 && inserted === 0 ? "replay" : "completed",
       family,
       connection_id: connectionId,
-      capture_id: captureId,
-      records: records.length,
+      capture_id: currentCaptureId,
+      pages,
+      records: recordCount,
+      family_counts: sortedFamilyCounts,
+      ...(recordIds.length > 0 ? { record_ids: recordIds } : {}),
       inserted,
       replayed,
-      complete: commit.complete === true,
-      cursor_iso: asString(commit.cursor_iso) || null,
-      page_cursor_present: Boolean(asString(commit.page_cursor)),
+      complete: lastCommit.complete === true,
+      cursor_iso: asString(lastCommit.cursor_iso) || null,
+      page_cursor_present: Boolean(asString(lastCommit.page_cursor)),
+      ...(isImmutableObservation
+        ? {
+            projection_work_id: asString(observation.projection_work_id),
+            observation_receipt_id: asString(observation.observation_receipt_id),
+          }
+        : {}),
       provider_write_authority: false,
     };
+    return {
+      ...terminal,
+      result_sha256: createHash("sha256").update(JSON.stringify(terminal), "utf8").digest("hex"),
+    };
   } catch (error) {
-    await abortCapture({ ctx, family, connectionId, captureId });
+    if (currentCaptureId && !currentCaptureCommitted) {
+      await abortCapture({ ctx, family, connectionId, captureId: currentCaptureId });
+    }
     throw error;
   }
 }

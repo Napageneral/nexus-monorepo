@@ -1,17 +1,13 @@
 import { createHash } from "node:crypto";
-import type { NexAppMethodHandler } from "../../../../../nex/src/runtime/domains/apps/context.js";
+import type {
+  NexAppMethodContext,
+  NexAppMethodHandler,
+} from "../../../../../nex/src/runtime/domains/apps/context.js";
+import { listEveryPage } from "../jobs/nex-runtime-lists.js";
 import {
   buildShopifyCustomerObservation,
-  projectShopifyCustomerIdentity,
+  projectShopifyCustomerIdentities,
 } from "../jobs/shopify-customer-identity.js";
-import {
-  parseShopifyLineItemRecord,
-  parseShopifyOrderRecord,
-  projectParsedShopifyLineItem,
-  projectParsedShopifyOrder,
-  type ParsedShopifyCommerceRecord,
-  type ShopifyCommerceClient,
-} from "../jobs/shopify-order-commerce.js";
 import {
   SHOPIFY_SOURCE_SCHEDULES,
   type ShopifySourceFamily,
@@ -19,13 +15,7 @@ import {
 
 type RuntimeRow = Record<string, unknown>;
 
-const MAX_COHORT_RECORDS = 50;
-const MAX_BACKFILL_BATCH_RECORDS = 250;
-const MAX_COMMERCE_BATCH_RECORDS = 50;
-const MAX_INSPECTED_CUSTOMER_RECORDS = 20_000;
-const MAX_INSPECTED_COMMERCE_RECORDS = 40_000;
-const RECORD_SCAN_PAGE_SIZE = 1_000;
-const MAX_RECORDS_SCANNED = 100_000;
+const MAX_COHORT_RECORDS = 100;
 const SHOPIFY_SOURCE_IDENTITY_OBSERVED_AT = Date.UTC(2026, 6, 20);
 const MOONSLEEP_OPS_ENTITY_ID = "entity_moonsleep_ops";
 const SOURCE_JOB_NAMES = Object.freeze({
@@ -58,7 +48,22 @@ const PROJECTION_SPECS = Object.freeze({
   },
 });
 const SOURCE_REQUEST_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
+// A quarantined observation Run whose lineage the intake worker abandoned
+// (its copied execution envelope is refused by the current runtime). The
+// re-issue folds that run id into the idempotency key so jobs.invoke mints a
+// new Run with a fresh envelope instead of replaying the dead one.
+const SOURCE_REISSUE_OF_RE = /^jobrun_[a-zA-Z0-9-]{1,80}$/;
 const SOURCE_CONNECTION_ID_RE = /^[a-zA-Z0-9._-]{1,128}$/;
+const PROJECTION_WORK_ID_RE = /^channelprojection_[0-9a-f]{32}$/;
+const OBSERVATION_RECEIPT_ID_RE = /^channelobs_[0-9a-f]{32}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const OBSERVATION_STREAM_FAMILIES = Object.freeze({
+  "orders/paid": "orders.delta",
+  "orders/updated": "orders.delta",
+  "orders/cancelled": "orders.delta",
+  "customers/created": "customers.delta",
+  "customers/updated": "customers.delta",
+});
 
 type ShopifySourceIdentityObservation = {
   role: "store" | "integration";
@@ -72,13 +77,94 @@ type ShopifySourceIdentityObservation = {
   entity_type: "store" | "integration";
   tags: string[];
 };
-
 function asRecord(value: unknown): RuntimeRow {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RuntimeRow) : {};
 }
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function requireExactObservationString(row: RuntimeRow, field: string, maximum = 512): string {
+  const value = asString(row[field]);
+  if (!value || row[field] !== value || Buffer.byteLength(value, "utf8") > maximum) {
+    throw new Error(`observation.${field} must be a trimmed non-empty string`);
+  }
+  return value;
+}
+
+function requireShopifyObservation(value: unknown, family: string): RuntimeRow | null {
+  if (value === undefined) return null;
+  const observation = asRecord(value);
+  if (Object.keys(observation).length === 0) {
+    throw new Error("observation must be an object");
+  }
+  const projectionWorkId = requireExactObservationString(observation, "projection_work_id", 50);
+  const observationReceiptId = requireExactObservationString(
+    observation,
+    "observation_receipt_id",
+    43,
+  );
+  if (!PROJECTION_WORK_ID_RE.test(projectionWorkId)) {
+    throw new Error("observation.projection_work_id is malformed");
+  }
+  if (!OBSERVATION_RECEIPT_ID_RE.test(observationReceiptId)) {
+    throw new Error("observation.observation_receipt_id is malformed");
+  }
+  if (requireExactObservationString(observation, "projection_target", 16) !== "nex") {
+    throw new Error("observation.projection_target must be nex");
+  }
+  if (requireExactObservationString(observation, "source_system", 16) !== "shopify") {
+    throw new Error("observation.source_system must be shopify");
+  }
+  if (requireExactObservationString(observation, "source_account_ref", 64) !== "moonsleep") {
+    throw new Error("observation.source_account_ref must be moonsleep");
+  }
+  const sourceStream = requireExactObservationString(observation, "source_stream", 64);
+  if (
+    OBSERVATION_STREAM_FAMILIES[sourceStream as keyof typeof OBSERVATION_STREAM_FAMILIES] !== family
+  ) {
+    throw new Error("observation.source_stream does not match family");
+  }
+  const externalReceiptId = requireExactObservationString(observation, "external_receipt_id");
+  const semanticRevisionId = requireExactObservationString(observation, "semantic_revision_id");
+  const verificationIssuer = requireExactObservationString(observation, "verification_issuer", 64);
+  if (verificationIssuer !== "shopify-hmac-sha256") {
+    throw new Error("observation.verification_issuer must be shopify-hmac-sha256");
+  }
+  const digests: RuntimeRow = {};
+  for (const field of [
+    "raw_body_sha256",
+    "verification_receipt_sha256",
+    "observation_sha256",
+    "immutable_facts_sha256",
+  ]) {
+    const digest = requireExactObservationString(observation, field, 64);
+    if (!SHA256_RE.test(digest)) {
+      throw new Error(`observation.${field} must be a lowercase SHA-256 digest`);
+    }
+    digests[field] = digest;
+  }
+  const immutableFacts = asRecord(observation.immutable_facts);
+  if (Object.keys(immutableFacts).length === 0) {
+    throw new Error("observation.immutable_facts must be a non-empty object");
+  }
+  return {
+    projection_work_id: projectionWorkId,
+    observation_receipt_id: observationReceiptId,
+    projection_target: "nex",
+    source_system: "shopify",
+    source_account_ref: "moonsleep",
+    source_stream: sourceStream,
+    external_receipt_id: externalReceiptId,
+    semantic_revision_id: semanticRevisionId,
+    raw_body_sha256: digests.raw_body_sha256,
+    verification_issuer: verificationIssuer,
+    verification_receipt_sha256: digests.verification_receipt_sha256,
+    observation_sha256: digests.observation_sha256,
+    immutable_facts_sha256: digests.immutable_facts_sha256,
+    immutable_facts: immutableFacts,
+  };
 }
 
 function unwrapPayload(value: unknown): RuntimeRow {
@@ -89,6 +175,16 @@ function unwrapPayload(value: unknown): RuntimeRow {
   }
   const payload = asRecord(row.payload);
   return Object.keys(payload).length > 0 ? payload : row;
+}
+
+function listJobs(ctx: NexAppMethodContext): Promise<RuntimeRow[]> {
+  return listEveryPage("jobs.list", async (page) => unwrapPayload(await ctx.nex.jobs.list(page)));
+}
+
+function listSchedules(ctx: NexAppMethodContext): Promise<RuntimeRow[]> {
+  return listEveryPage("schedules.list", async (page) =>
+    unwrapPayload(await ctx.nex.schedules.list(page)),
+  );
 }
 
 function requireCohortRecordIds(params: RuntimeRow): string[] {
@@ -120,39 +216,6 @@ function requireRecordIds(params: RuntimeRow, maximum: number, requireSorted: bo
   return ids;
 }
 
-export function shopifyCustomerRecordSetSha256(recordIds: readonly string[]): string {
-  return createHash("sha256").update(JSON.stringify(recordIds), "utf8").digest("hex");
-}
-
-export const shopifyCommerceRecordSetSha256 = shopifyCustomerRecordSetSha256;
-
-function requireBackfillRecordIds(params: RuntimeRow): string[] {
-  const ids = requireRecordIds(params, MAX_BACKFILL_BATCH_RECORDS, true);
-  const expectedSha256 = asString(params.record_set_sha256);
-  if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
-    throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");
-  }
-  if (shopifyCustomerRecordSetSha256(ids) !== expectedSha256) {
-    throw new Error("record_set_sha256 does not match the exact ordered record_ids");
-  }
-  return ids;
-}
-
-function requireCommerceRecordIds(params: RuntimeRow): string[] {
-  // Commerce manifests are dependency-ordered, not globally lexical: every
-  // order revision precedes line-item revisions. The exact ordered set remains
-  // hash-bound and unique.
-  const ids = requireRecordIds(params, MAX_COMMERCE_BATCH_RECORDS, false);
-  const expectedSha256 = asString(params.record_set_sha256);
-  if (!/^[0-9a-f]{64}$/.test(expectedSha256)) {
-    throw new Error("record_set_sha256 must be a lowercase SHA-256 digest");
-  }
-  if (shopifyCommerceRecordSetSha256(ids) !== expectedSha256) {
-    throw new Error("record_set_sha256 does not match the exact ordered record_ids");
-  }
-  return ids;
-}
-
 function requireShopDomain(value: unknown): string {
   const domain = asString(value);
   if (
@@ -172,213 +235,6 @@ function requireConnectionId(value: unknown): string {
   }
   return connectionId;
 }
-
-async function discoverShopifyCustomerRecordIds(params: {
-  nex: unknown;
-  shopDomain: string;
-  connectionId: string;
-}): Promise<string[]> {
-  const recordsClient = (
-    params.nex as {
-      records: {
-        list: (input: {
-          platform: "shopify";
-          connection_id: string;
-          limit: number;
-          offset: number;
-        }) => Promise<unknown>;
-      };
-    }
-  ).records;
-  const customerIds: string[] = [];
-  let scanned = 0;
-
-  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
-    const response = unwrapPayload(
-      await recordsClient.list({
-        platform: "shopify",
-        connection_id: params.connectionId,
-        limit: RECORD_SCAN_PAGE_SIZE,
-        offset,
-      }),
-    );
-    if (!Array.isArray(response.records)) {
-      throw new Error("records.list did not return a records array");
-    }
-    const rows = response.records.map(asRecord);
-    scanned += rows.length;
-    if (scanned > MAX_RECORDS_SCANNED) {
-      throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
-    }
-    for (const record of rows) {
-      const metadata = asRecord(record.metadata);
-      if (asString(metadata.family) !== "customer") {
-        continue;
-      }
-      if (asString(record.platform) !== "shopify") {
-        throw new Error("Shopify customer scan returned a foreign platform record");
-      }
-      if (asString(record.space_id) !== params.shopDomain) {
-        throw new Error("Shopify customer scan returned a foreign shop record");
-      }
-      buildShopifyCustomerObservation(record);
-      const id = asString(record.id);
-      if (!id || Buffer.byteLength(id, "utf8") > 512) {
-        throw new Error("Shopify customer scan returned an invalid record id");
-      }
-      customerIds.push(id);
-    }
-    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
-      break;
-    }
-    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
-      throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
-    }
-  }
-
-  customerIds.sort((left, right) => left.localeCompare(right));
-  if (customerIds.length < 1 || customerIds.length > MAX_INSPECTED_CUSTOMER_RECORDS) {
-    throw new Error(
-      `Shopify customer record set must contain between 1 and ${MAX_INSPECTED_CUSTOMER_RECORDS} records`,
-    );
-  }
-  if (new Set(customerIds).size !== customerIds.length) {
-    throw new Error("Shopify customer record scan returned duplicate record ids");
-  }
-  return customerIds;
-}
-
-async function discoverShopifyCommerceRecordIds(params: {
-  nex: unknown;
-  shopDomain: string;
-  connectionId: string;
-}): Promise<string[]> {
-  const recordsClient = (
-    params.nex as {
-      records: {
-        list: (input: {
-          platform: "shopify";
-          connection_id: string;
-          limit: number;
-          offset: number;
-        }) => Promise<unknown>;
-      };
-    }
-  ).records;
-  const orderRecordIds: string[] = [];
-  const lineItemRecordIds: string[] = [];
-  let scanned = 0;
-
-  for (let offset = 0; offset < MAX_RECORDS_SCANNED; offset += RECORD_SCAN_PAGE_SIZE) {
-    const response = unwrapPayload(
-      await recordsClient.list({
-        platform: "shopify",
-        connection_id: params.connectionId,
-        limit: RECORD_SCAN_PAGE_SIZE,
-        offset,
-      }),
-    );
-    if (!Array.isArray(response.records)) {
-      throw new Error("records.list did not return a records array");
-    }
-    const rows = response.records.map(asRecord);
-    scanned += rows.length;
-    if (scanned > MAX_RECORDS_SCANNED) {
-      throw new Error(`Shopify record scan exceeds ${MAX_RECORDS_SCANNED} rows`);
-    }
-    for (const record of rows) {
-      const family = asString(asRecord(record.metadata).family);
-      if (family !== "order" && family !== "line_item") {
-        continue;
-      }
-      if (asString(record.platform) !== "shopify") {
-        throw new Error("Shopify commerce scan returned a foreign platform record");
-      }
-      if (asString(record.space_id) !== params.shopDomain) {
-        throw new Error("Shopify commerce scan returned a foreign shop record");
-      }
-      if (family === "order") {
-        parseShopifyOrderRecord(record);
-      } else {
-        parseShopifyLineItemRecord(record);
-      }
-      const id = asString(record.id);
-      if (!id || Buffer.byteLength(id, "utf8") > 512) {
-        throw new Error("Shopify commerce scan returned an invalid record id");
-      }
-      if (family === "order") {
-        orderRecordIds.push(id);
-      } else {
-        lineItemRecordIds.push(id);
-      }
-    }
-    if (rows.length < RECORD_SCAN_PAGE_SIZE) {
-      break;
-    }
-    if (offset + RECORD_SCAN_PAGE_SIZE >= MAX_RECORDS_SCANNED) {
-      throw new Error(`Shopify record scan reached the ${MAX_RECORDS_SCANNED}-row guard`);
-    }
-  }
-
-  // This order is part of the manifest contract. Sorting one combined set can
-  // put line-item batches ahead of their parent-order batches. Keep each family
-  // deterministic, but place every order revision before every line item.
-  orderRecordIds.sort((left, right) => left.localeCompare(right));
-  lineItemRecordIds.sort((left, right) => left.localeCompare(right));
-  const recordIds = [...orderRecordIds, ...lineItemRecordIds];
-  if (recordIds.length < 1 || recordIds.length > MAX_INSPECTED_COMMERCE_RECORDS) {
-    throw new Error(
-      `Shopify commerce record set must contain between 1 and ${MAX_INSPECTED_COMMERCE_RECORDS} records`,
-    );
-  }
-  if (new Set(recordIds).size !== recordIds.length) {
-    throw new Error("Shopify commerce record scan returned duplicate record ids");
-  }
-  return recordIds;
-}
-
-export const inspectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
-  const shopDomain = requireShopDomain(ctx.params.shop_domain);
-  const connectionId = requireConnectionId(ctx.params.connection_id);
-  const recordIds = await discoverShopifyCustomerRecordIds({
-    nex: ctx.nex,
-    shopDomain,
-    connectionId,
-  });
-  return {
-    state: "ready",
-    shop_domain: shopDomain,
-    connection_id: connectionId,
-    record_count: recordIds.length,
-    record_ids: recordIds,
-    record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
-    first_record_id: recordIds[0],
-    last_record_id: recordIds.at(-1),
-    provider_write_authority: false,
-  };
-};
-
-export const inspectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
-  const shopDomain = requireShopDomain(ctx.params.shop_domain);
-  const connectionId = requireConnectionId(ctx.params.connection_id);
-  const recordIds = await discoverShopifyCommerceRecordIds({
-    nex: ctx.nex,
-    shopDomain,
-    connectionId,
-  });
-  return {
-    state: "ready",
-    shop_domain: shopDomain,
-    connection_id: connectionId,
-    record_count: recordIds.length,
-    record_ids: recordIds,
-    record_set_sha256: shopifyCommerceRecordSetSha256(recordIds),
-    first_record_id: recordIds[0],
-    last_record_id: recordIds.at(-1),
-    provider_read_authority: false,
-    provider_write_authority: false,
-  };
-};
 
 export function buildShopifySourceIdentityObservations(
   params: RuntimeRow,
@@ -600,9 +456,7 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
     shopify_source_identity: "available_replay_safe_public_operation",
     shopify_customer_identity: "dormant_ready_full_postgres_activation_gates",
     shopify_customer_cohort: "available_bounded_manual_replay",
-    shopify_customer_backfill: "available_bounded_checkpointed_batches",
-    shopify_customer_complete_backfill: "removed_unbounded_operation",
-    shopify_order_commerce: "dormant_bounded_checkpointed_batches",
+    shopify_order_commerce: "available_event_projector",
   },
   provider_write_authority: false,
 });
@@ -610,7 +464,6 @@ const healthcheck: NexAppMethodHandler = async (ctx) => ({
 export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   const family = asString(ctx.params.family) as keyof typeof SOURCE_JOB_NAMES;
   const connectionId = asString(ctx.params.connection_id);
-  const requestId = asString(ctx.params.request_id);
   const jobName = SOURCE_JOB_NAMES[family];
   if (!jobName) {
     throw new Error("family is not an installed Shopify source job");
@@ -618,12 +471,20 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   if (!SOURCE_CONNECTION_ID_RE.test(connectionId)) {
     throw new Error("connection_id is malformed");
   }
+  const observation = requireShopifyObservation(ctx.params.observation, family);
+  const projectionWorkId = observation ? asString(observation.projection_work_id) : "";
+  const requestId = asString(ctx.params.request_id) || projectionWorkId;
   if (!SOURCE_REQUEST_ID_RE.test(requestId)) {
     throw new Error("request_id is malformed");
   }
-  const listed = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listed.jobs) ? listed.jobs.map(asRecord) : [];
-  const matches = jobs.filter((job) => asString(job.name) === jobName);
+  const reissueOf = asString(ctx.params.reissue_of);
+  if (reissueOf && !SOURCE_REISSUE_OF_RE.test(reissueOf)) {
+    throw new Error("reissue_of is malformed");
+  }
+  if (reissueOf && !observation) {
+    throw new Error("reissue_of requires an observation");
+  }
+  const matches = (await listJobs(ctx)).filter((job) => asString(job.name) === jobName);
   if (matches.length !== 1) {
     throw new Error("Shopify source job is missing or duplicated");
   }
@@ -638,10 +499,18 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
   const invoked = unwrapPayload(
     await ctx.nex.jobs.invoke({
       job_id: jobId,
-      input: { family, connection_id: connectionId },
-      trigger_source: "moonsleep-commerce-manual",
+      input: {
+        family,
+        connection_id: connectionId,
+        ...(observation ? { observation } : {}),
+      },
+      trigger_source: observation
+        ? "moonsleep-commerce-shopify-observation"
+        : "moonsleep-commerce-manual",
       max_attempts: 3,
-      idempotency_key: `shopify-source:${family}:${requestId}`,
+      idempotency_key: observation
+        ? `shopify-observation:${projectionWorkId}${reissueOf ? `:reissue:${reissueOf}` : ""}`
+        : `shopify-source:${family}:${requestId}`,
     }),
   );
   const run = asRecord(invoked.run);
@@ -654,6 +523,13 @@ export const triggerShopifySource: NexAppMethodHandler = async (ctx) => {
     family,
     connection_id: connectionId,
     request_id: requestId,
+    ...(reissueOf ? { reissue_of: reissueOf } : {}),
+    ...(observation
+      ? {
+          projection_work_id: projectionWorkId,
+          observation_receipt_id: asString(observation.observation_receipt_id),
+        }
+      : {}),
     job_definition_id: jobId,
     run_id: runId,
     provider_write_authority: false,
@@ -720,12 +596,8 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     throw new Error("confirmation does not authorize Shopify source schedule configuration");
   }
 
-  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
-  const listedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
-  const schedules = Array.isArray(listedSchedules.schedules)
-    ? listedSchedules.schedules.map(asRecord)
-    : [];
+  const jobs = await listJobs(ctx);
+  const schedules = await listSchedules(ctx);
 
   for (const target of plan.schedules) {
     const jobMatches = jobs.filter((job) => asString(job.name) === target.job_name);
@@ -748,11 +620,15 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
       throw new Error(`Shopify source schedule ${target.family} is bound to another job`);
     }
   }
+  const sourceSchedules = plan.schedules.map(
+    (target) => schedules.find((schedule) => asString(schedule.name) === target.schedule_name)!,
+  );
 
   try {
-    // Disable every schedule first. A failed reconfiguration can leave updated
-    // job metadata, but it can never leave a partially activated family set.
-    for (const schedule of schedules) {
+    // Disable only this app's exact source schedules first. A failed
+    // reconfiguration can leave updated job metadata, but it can never leave a
+    // partially activated family set or mutate another package's schedule.
+    for (const schedule of sourceSchedules) {
       await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
     }
     for (const target of plan.schedules) {
@@ -775,7 +651,7 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     }
   } catch (error) {
     const rollbackErrors: string[] = [];
-    for (const schedule of schedules) {
+    for (const schedule of sourceSchedules) {
       try {
         await ctx.nex.schedules.update({ id: asString(schedule.id), enabled: false });
       } catch (rollbackError) {
@@ -793,12 +669,8 @@ export const configureShopifySourceSchedules: NexAppMethodHandler = async (ctx) 
     throw error;
   }
 
-  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const verifiedSchedules = unwrapPayload(await ctx.nex.schedules.list({}));
-  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
-  const scheduleRows = Array.isArray(verifiedSchedules.schedules)
-    ? verifiedSchedules.schedules.map(asRecord)
-    : [];
+  const jobRows = await listJobs(ctx);
+  const scheduleRows = await listSchedules(ctx);
   for (const target of plan.schedules) {
     const job = jobRows.find((entry) => asString(entry.name) === target.job_name);
     const schedule = scheduleRows.find((entry) => asString(entry.name) === target.schedule_name);
@@ -876,8 +748,7 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     throw new Error("confirmation does not authorize Shopify projection configuration");
   }
 
-  const listedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobs = Array.isArray(listedJobs.jobs) ? listedJobs.jobs.map(asRecord) : [];
+  const jobs = await listJobs(ctx);
   const bound: Array<{
     projection: ShopifyProjection;
     job: RuntimeRow;
@@ -964,8 +835,7 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     throw error;
   }
 
-  const verifiedJobs = unwrapPayload(await ctx.nex.jobs.list({}));
-  const jobRows = Array.isArray(verifiedJobs.jobs) ? verifiedJobs.jobs.map(asRecord) : [];
+  const jobRows = await listJobs(ctx);
   for (const target of plan.projections) {
     const enabled = target.enabled;
     const job = jobRows.find((row) => asString(row.name) === target.job_name);
@@ -984,11 +854,12 @@ export const configureShopifyProjections: NexAppMethodHandler = async (ctx) => {
     if (
       subscriptions.length !== target.matches.length ||
       subscriptions.some(
-        (subscription) =>
-          (subscription.enabled === true || subscription.enabled === 1) !== enabled,
+        (subscription) => (subscription.enabled === true || subscription.enabled === 1) !== enabled,
       )
     ) {
-      throw new Error(`Shopify projection ${target.projection} subscriptions failed exact readback`);
+      throw new Error(
+        `Shopify projection ${target.projection} subscriptions failed exact readback`,
+      );
     }
   }
   return { state: "applied", ...plan };
@@ -1000,20 +871,30 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
   // Validate the entire requested cohort before the first identity observation.
   // The observation itself is replay-safe, so a retry after a downstream failure
   // cannot create a second entity, contact, or observation for the same record.
-  const records: Array<{ id: string; record: RuntimeRow }> = [];
-  for (const id of recordIds) {
-    const response = unwrapPayload(await ctx.nex.records.get({ id }));
-    const record = asRecord(response.record);
-    buildShopifyCustomerObservation(record);
-    records.push({ id, record });
-  }
+  const loaded = unwrapPayload(await ctx.nex.records.get_many({ ids: recordIds }));
+  const loadedRecords = Array.isArray(loaded.records) ? loaded.records.map(asRecord) : [];
+  const byId = new Map(loadedRecords.map((record) => [asString(record.id), record]));
+  const records: Array<{ id: string; record: RuntimeRow }> = recordIds.map((id) => {
+    const record = byId.get(id) ?? {};
+    if (Object.keys(record).length === 0) {
+      throw new Error(`Shopify customer cohort did not load immutable Record ${id}`);
+    }
+    buildShopifyCustomerObservation(record, { allowLegacyText: true });
+    return { id, record };
+  });
 
-  const results: RuntimeRow[] = [];
-  const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
-  for (const entry of records) {
-    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record);
-    results.push({ record_id: entry.id, ...projected });
-  }
+  const identityClient = ctx.nex as unknown as Parameters<
+    typeof projectShopifyCustomerIdentities
+  >[0];
+  const projected = await projectShopifyCustomerIdentities(
+    identityClient,
+    records.map(({ record }) => record),
+    { allowLegacyText: true },
+  );
+  const results: RuntimeRow[] = projected.map((result, index) => ({
+    record_id: records[index]!.id,
+    ...result,
+  }));
 
   return {
     state: "succeeded",
@@ -1027,155 +908,11 @@ export const projectShopifyCustomerCohort: NexAppMethodHandler = async (ctx) => 
   };
 };
 
-export const projectShopifyCustomerBackfill: NexAppMethodHandler = async (ctx) => {
-  const recordIds = requireBackfillRecordIds(ctx.params);
-
-  // Each explicit batch is fetched and validated before its first identity
-  // observation. Production runners persist a checkpoint after every successful
-  // batch. A retry is safe because contacts.observe is bound to the immutable
-  // Shopify source observation ID.
-  const records: Array<{ id: string; record: RuntimeRow }> = [];
-  for (const id of recordIds) {
-    const response = unwrapPayload(await ctx.nex.records.get({ id }));
-    const record = asRecord(response.record);
-    buildShopifyCustomerObservation(record);
-    records.push({ id, record });
-  }
-
-  let createdEntities = 0;
-  let createdContacts = 0;
-  let replayed = 0;
-  const resultHash = createHash("sha256");
-  const identityClient = ctx.nex as unknown as Parameters<typeof projectShopifyCustomerIdentity>[0];
-  for (const entry of records) {
-    const projected = await projectShopifyCustomerIdentity(identityClient, entry.record);
-    createdEntities += projected.created_entity === true ? 1 : 0;
-    createdContacts += projected.created_contact === true ? 1 : 0;
-    replayed += projected.replayed === true ? 1 : 0;
-    resultHash.update(
-      [
-        entry.id,
-        asString(projected.source_observation_id),
-        asString(projected.contact_id),
-        asString(projected.canonical_entity_id),
-      ].join("\u0000") + "\n",
-      "utf8",
-    );
-  }
-
-  return {
-    state: "succeeded",
-    records_requested: recordIds.length,
-    records_projected: records.length,
-    record_set_sha256: shopifyCustomerRecordSetSha256(recordIds),
-    projection_result_sha256: resultHash.digest("hex"),
-    first_record_id: recordIds[0],
-    last_record_id: recordIds.at(-1),
-    created_entities: createdEntities,
-    created_contacts: createdContacts,
-    replayed,
-    provider_write_authority: false,
-  };
-};
-
-export const projectShopifyCommerceBackfill: NexAppMethodHandler = async (ctx) => {
-  const recordIds = requireCommerceRecordIds(ctx.params);
-
-  // Fetch and validate every immutable record in the explicit batch before the
-  // first commerce write. Orders are then committed before line items so a
-  // line-item revision can only bind to an existing stable parent order.
-  const parsed: ParsedShopifyCommerceRecord[] = [];
-  for (const id of recordIds) {
-    const response = unwrapPayload(await ctx.nex.records.get({ id }));
-    const record = asRecord(response.record);
-    const family = asString(asRecord(record.metadata).family);
-    const entry =
-      family === "order"
-        ? parseShopifyOrderRecord(record)
-        : family === "line_item"
-          ? parseShopifyLineItemRecord(record)
-          : null;
-    if (!entry) {
-      throw new Error(`Shopify commerce batch contains unsupported record family: ${family}`);
-    }
-    if (entry.sourceRecordId !== id) {
-      throw new Error("records.get returned a different internal record id");
-    }
-    parsed.push(entry);
-  }
-
-  const client = ctx.nex as unknown as ShopifyCommerceClient;
-  const resultHash = createHash("sha256");
-  let created = 0;
-  let replayed = 0;
-  let becameCurrent = 0;
-  let ordersProjected = 0;
-  let lineItemsProjected = 0;
-
-  for (const entry of parsed.filter(
-    (row): row is Extract<ParsedShopifyCommerceRecord, { family: "order" }> =>
-      row.family === "order",
-  )) {
-    const result = await projectParsedShopifyOrder(client, entry);
-    created += result.created === true ? 1 : 0;
-    replayed += result.replayed === true ? 1 : 0;
-    becameCurrent += result.became_current === true ? 1 : 0;
-    ordersProjected += 1;
-    resultHash.update(
-      [
-        entry.sourceRecordId,
-        asString(result.revision_id),
-        asString(result.projection_payload_sha256),
-      ].join("\u0000") + "\n",
-      "utf8",
-    );
-  }
-  for (const entry of parsed.filter(
-    (row): row is Extract<ParsedShopifyCommerceRecord, { family: "line_item" }> =>
-      row.family === "line_item",
-  )) {
-    const result = await projectParsedShopifyLineItem(client, entry);
-    created += result.created === true ? 1 : 0;
-    replayed += result.replayed === true ? 1 : 0;
-    becameCurrent += result.became_current === true ? 1 : 0;
-    lineItemsProjected += 1;
-    resultHash.update(
-      [
-        entry.sourceRecordId,
-        asString(result.revision_id),
-        asString(result.projection_payload_sha256),
-      ].join("\u0000") + "\n",
-      "utf8",
-    );
-  }
-
-  return {
-    state: "succeeded",
-    records_requested: recordIds.length,
-    records_projected: parsed.length,
-    orders_projected: ordersProjected,
-    line_items_projected: lineItemsProjected,
-    record_set_sha256: shopifyCommerceRecordSetSha256(recordIds),
-    projection_result_sha256: resultHash.digest("hex"),
-    first_record_id: recordIds[0],
-    last_record_id: recordIds.at(-1),
-    created,
-    replayed,
-    became_current: becameCurrent,
-    provider_read_authority: false,
-    provider_write_authority: false,
-  };
-};
-
 export default {
   "moonsleep-commerce.healthcheck": healthcheck,
   "moonsleep-commerce.shopify-source.seed-identities": seedShopifySourceIdentities,
   "moonsleep-commerce.shopify-source.trigger": triggerShopifySource,
   "moonsleep-commerce.shopify-source.configure-schedules": configureShopifySourceSchedules,
   "moonsleep-commerce.shopify-projections.configure": configureShopifyProjections,
-  "moonsleep-commerce.shopify-customers.inspect-backfill": inspectShopifyCustomerBackfill,
   "moonsleep-commerce.shopify-customers.project-cohort": projectShopifyCustomerCohort,
-  "moonsleep-commerce.shopify-customers.project-backfill": projectShopifyCustomerBackfill,
-  "moonsleep-commerce.shopify-commerce.inspect-backfill": inspectShopifyCommerceBackfill,
-  "moonsleep-commerce.shopify-commerce.project-backfill": projectShopifyCommerceBackfill,
 };

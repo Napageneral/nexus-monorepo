@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   constants,
   existsSync,
   fstatSync,
+  fsyncSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import type { Stats } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
@@ -18,6 +25,7 @@ import {
   type AdapterInboundRecord,
   defineAdapter,
 } from "@nexus-project/adapter-sdk-ts";
+import { normalizeAlibabaAttachmentMime } from "./attachment-mime.ts";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -29,6 +37,7 @@ type AlibabaRuntimeConfig = {
   poll_interval_ms: number;
   monitor_overlap_ms: number;
   attachment_text_limit: number;
+  adapter_state_dir?: string;
 };
 
 type SnapshotSummary = {
@@ -47,11 +56,13 @@ type SnapshotComplete = {
   conversationCount?: number;
   attachmentCount?: number;
   attachmentTextCount?: number;
+  identityDirectoryCount?: number;
   adapterProjection?: {
     messagesSha256?: string;
     conversationsSha256?: string;
     attachmentsSha256?: string;
     attachmentTextSha256?: string;
+    identityDirectorySha256?: string;
   };
   authority?: {
     capture?: string;
@@ -77,6 +88,7 @@ type AlibabaConversation = {
   companyName?: string | null;
   accountId?: string | null;
   aliId?: string | null;
+  conversationType?: "direct" | "group" | null;
 };
 
 type AlibabaMessage = {
@@ -88,10 +100,33 @@ type AlibabaMessage = {
   sentAt?: string | null;
   speaker?: string | null;
   direction?: string | null;
+  senderAliId?: string | null;
+  receiverAliId?: string | null;
+  senderName?: string | null;
+  receiverName?: string | null;
   msgType?: string | null;
   text?: string | null;
   provider_object_json: string;
   provider_object_sha256: string;
+};
+
+type AlibabaIdentityDirectoryRow = {
+  schema_version: number;
+  identity_type: "person" | "organization" | "conversation" | "participation" | "membership";
+  provider_identity_id: string;
+  ali_id?: string | null;
+  account_ids?: string[];
+  display_name?: string | null;
+  name_history?: string[];
+  aliases?: string[];
+  conversation_id?: string;
+  conversation_type?: "direct" | "group";
+  participant_provider_identity_ids?: string[];
+  person_provider_identity_id?: string;
+  organization_provider_identity_id?: string;
+  review_state?: string;
+  automatic_promotion_allowed?: boolean;
+  source_provenance?: UnknownRecord[];
 };
 
 type AlibabaAttachment = {
@@ -108,6 +143,10 @@ type AlibabaAttachment = {
   objectPath?: string | null;
   contentHash?: string | null;
   status?: string | null;
+  parentMessageCaptured?: boolean | null;
+  parentMessageDirection?: string | null;
+  parentMessageSpeaker?: string | null;
+  parentMessageTimestamp?: number | string | null;
   provider_object_json: string;
   provider_object_sha256: string;
 };
@@ -124,9 +163,15 @@ type LoadedSnapshot = {
   ref: SnapshotRef;
   conversations: Map<string, AlibabaConversation>;
   messages: AlibabaMessage[];
+  messagesById: Map<string, AlibabaMessage>;
+  attachments: AlibabaAttachment[];
   attachmentsByMessage: Map<string, AlibabaAttachment[]>;
   orphanAttachments: AlibabaAttachment[];
   textByFile: Map<string, AttachmentText>;
+  identityDirectory: AlibabaIdentityDirectoryRow[];
+  peopleByAliId: Map<string, AlibabaIdentityDirectoryRow>;
+  peopleByProviderIdentityId: Map<string, AlibabaIdentityDirectoryRow>;
+  channelIdentityByConversationId: Map<string, AlibabaIdentityDirectoryRow>;
 };
 
 type RuntimeContextLike = Pick<AdapterContext, "runtime" | "signal" | "log"> & {
@@ -134,6 +179,9 @@ type RuntimeContextLike = Pick<AdapterContext, "runtime" | "signal" | "log"> & {
 };
 
 const PLATFORM = "alibaba";
+const PERSON_CONTACT_SPACE = "moonsleep-alibaba:person";
+const CONVERSATION_CONTACT_SPACE = "moonsleep-alibaba:conversation";
+const IDENTITY_DIRECTORY_CONTRACT = "alibaba.identity-directory.v2";
 const DEFAULT_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const DEFAULT_MONITOR_OVERLAP_MS = 72 * 60 * 60 * 1000;
 const DEFAULT_ATTACHMENT_TEXT_LIMIT = 30_000;
@@ -144,8 +192,11 @@ const MAX_CONVERSATIONS_BYTES = 64 * 1024 * 1024;
 const MAX_MESSAGES_BYTES = 512 * 1024 * 1024;
 const MAX_ATTACHMENTS_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_INDEX_BYTES = 256 * 1024 * 1024;
+const MAX_IDENTITY_DIRECTORY_BYTES = 128 * 1024 * 1024;
 const MAX_ATTACHMENT_EVIDENCE_BYTES = 256 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_BYTES = 16 * 1024 * 1024;
+const MAX_BACKFILL_SELECTION_BYTES = 1 * 1024 * 1024;
+const BACKFILL_SELECTION_FILE = "backfill-selection.json";
 const SETUP_CONFIRMATION = "ATTACH_SANITIZED_ALIBABA_CAPTURE";
 const CONNECTION_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 
@@ -283,6 +334,9 @@ function readRuntimeConfig(ctx: RuntimeContextLike): AlibabaRuntimeConfig {
       config.attachment_text_limit,
       DEFAULT_ATTACHMENT_TEXT_LIMIT,
     ),
+    ...(textValue(process.env.NEXUS_ADAPTER_STATE_DIR)
+      ? { adapter_state_dir: resolve(String(process.env.NEXUS_ADAPTER_STATE_DIR)) }
+      : {}),
   };
 }
 
@@ -322,6 +376,139 @@ function readBoundFile(path: string, maxBytes: number): Buffer {
   }
 }
 
+function selectedBackfillRows(
+  rows: AdapterInboundRecord[],
+  snapshot: SnapshotRef,
+  connection: string,
+  adapterStateDir?: string,
+): AdapterInboundRecord[] {
+  if (!adapterStateDir) return rows;
+  const stateRoot = realpathSync(adapterStateDir);
+  const selectionPath = join(stateRoot, BACKFILL_SELECTION_FILE);
+  if (!existsSync(selectionPath)) return rows;
+  const named = lstatSync(selectionPath);
+  const expectedUid = process.geteuid?.();
+  const expectedGid = process.getegid?.();
+  if (
+    !named.isFile()
+    || named.isSymbolicLink()
+    || named.nlink !== 1
+    || (named.mode & 0o777) !== 0o400
+    || (expectedUid !== undefined && named.uid !== expectedUid)
+    || (expectedGid !== undefined && named.gid !== expectedGid)
+  ) {
+    throw new Error("Alibaba backfill selection custody is unsafe");
+  }
+  const bytes = readBoundFile(selectionPath, MAX_BACKFILL_SELECTION_BYTES);
+  const afterRead = lstatSync(selectionPath);
+  if (
+    !sameIdentity(named, afterRead)
+    || !afterRead.isFile()
+    || afterRead.isSymbolicLink()
+    || afterRead.nlink !== 1
+    || (afterRead.mode & 0o777) !== 0o400
+    || (expectedUid !== undefined && afterRead.uid !== expectedUid)
+    || (expectedGid !== undefined && afterRead.gid !== expectedGid)
+  ) {
+    throw new Error("Alibaba backfill selection changed during read");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error("Alibaba backfill selection is invalid JSON");
+  }
+  const selection = asRecord(parsed);
+  const commonKeys = [
+    "schemaVersion",
+    "purpose",
+    "snapshotId",
+    "snapshotReceiptSha256",
+    "connectionIdSha256",
+    "externalRecordIds",
+    "externalRecordIdsSha256",
+    "expectedRecordCount",
+    "authority",
+  ];
+  const legacySelection = selection.schemaVersion === "nexus.alibaba_backfill_selection.v1";
+  const exactSelection = selection.schemaVersion === "nexus.alibaba_backfill_selection.v2";
+  const allowedKeys = new Set([
+    ...commonKeys,
+    ...(legacySelection ? ["recordFamily"] : exactSelection ? ["recordFamilies"] : []),
+  ]);
+  if (Object.keys(selection).some((key) => !allowedKeys.has(key))) {
+    throw new Error("Alibaba backfill selection contains unexpected fields");
+  }
+  const externalRecordIds = selection.externalRecordIds;
+  const expectedRecordCount = selection.expectedRecordCount;
+  const selectedFamilies = legacySelection
+    ? ["attachment"]
+    : Array.isArray(selection.recordFamilies)
+      ? selection.recordFamilies.map((value) => textValue(value))
+      : [];
+  if (
+    (!legacySelection && !exactSelection)
+    || (
+      legacySelection
+        ? selection.purpose !== "recover_partial_attachment_ingestion"
+          || selection.recordFamily !== "attachment"
+        : selection.purpose !== "recover_partial_snapshot_ingestion"
+          || selectedFamilies.length < 1
+          || selectedFamilies.length > 2
+          || selectedFamilies.some((value) => value !== "message" && value !== "attachment")
+          || new Set(selectedFamilies).size !== selectedFamilies.length
+          || selectedFamilies.join("\n") !== [...selectedFamilies].sort().join("\n")
+    )
+    || selection.snapshotId !== snapshot.id
+    || selection.snapshotReceiptSha256 !== snapshot.complete_sha256
+    || selection.connectionIdSha256 !== sha256Bytes(Buffer.from(connection, "utf8"))
+    || !Array.isArray(externalRecordIds)
+    || externalRecordIds.length < 1
+    || externalRecordIds.length > 1_000
+    || !Number.isSafeInteger(expectedRecordCount)
+    || expectedRecordCount !== externalRecordIds.length
+    || asRecord(selection.authority).providerReadOnly !== true
+    || asRecord(selection.authority).remoteMutationEnabled !== false
+    || asRecord(selection.authority).businessMutationEnabled !== false
+  ) {
+    throw new Error("Alibaba backfill selection contract is invalid");
+  }
+  const identities = externalRecordIds.map((value) => textValue(value));
+  const familyForIdentity = (value: string): string | null => {
+    if (/^message:[A-Za-z0-9._-]+$/.test(value)) return "message";
+    if (/^attachment:[a-f0-9]{64}$/.test(value)) return "attachment";
+    return null;
+  };
+  if (
+    identities.some((value) => {
+      if (!value) return true;
+      const family = familyForIdentity(value);
+      return family === null || !selectedFamilies.includes(family);
+    })
+    || new Set(identities).size !== identities.length
+  ) {
+    throw new Error("Alibaba backfill selection identities are invalid");
+  }
+  const ordered = [...(identities as string[])].sort();
+  const digest = sha256Bytes(Buffer.from(`${ordered.join("\n")}\n`, "utf8"));
+  if (!SHA256.test(String(selection.externalRecordIdsSha256 ?? ""))
+      || selection.externalRecordIdsSha256 !== digest) {
+    throw new Error("Alibaba backfill selection identity digest differs");
+  }
+  const allowed = new Set(ordered);
+  const selected = rows.filter((row) => allowed.has(row.payload.external_record_id));
+  const actualFamilies = [...new Set(selected.map((row) => textValue(row.payload.metadata?.family)))]
+    .sort();
+  if (
+    selected.length !== allowed.size
+    || actualFamilies.some((value) => value !== "message" && value !== "attachment")
+    || actualFamilies.join("\n") !== [...selectedFamilies].sort().join("\n")
+  ) {
+    throw new Error("Alibaba backfill selection does not match the sealed snapshot");
+  }
+  return selected;
+}
+
 function readJson(path: string, maxBytes: number): UnknownRecord {
   return JSON.parse(readBoundFile(path, maxBytes).toString("utf8")) as UnknownRecord;
 }
@@ -351,14 +538,26 @@ function parseAttachmentJsonl(bytes: Buffer): AlibabaAttachment[] {
     .toString("utf8")
     .split(/\n+/)
     .filter(Boolean)
-    .map((line) => ({
-      ...(JSON.parse(line) as Omit<
+    .map((line) => {
+      const parsed = JSON.parse(line) as Omit<
         AlibabaAttachment,
         "provider_object_json" | "provider_object_sha256"
-      >),
-      provider_object_json: line,
-      provider_object_sha256: sha256Bytes(Buffer.from(line, "utf8")),
-    }));
+      >;
+      const {
+        // Capture-local filesystem coordinates are transport metadata, not
+        // Alibaba provider evidence. They remain available to the bounded
+        // attachment resolver but must never enter an immutable record payload.
+        localPath: _localPath,
+        objectPath: _objectPath,
+        ...portableProviderObject
+      } = parsed;
+      const providerObjectJson = stableJson(portableProviderObject);
+      return {
+        ...parsed,
+        provider_object_json: providerObjectJson,
+        provider_object_sha256: sha256Bytes(Buffer.from(providerObjectJson, "utf8")),
+      };
+    });
 }
 
 function sha256Bytes(bytes: Uint8Array): string {
@@ -397,6 +596,9 @@ function listSnapshots(snapshotRoot: string): SnapshotRef[] {
       join(path, "adapter", "conversations.jsonl"),
       join(path, "adapter", "attachments.jsonl"),
       join(path, "adapter", "attachment-text.jsonl"),
+      ...(completeReceiptVersion(rootCompletePath) === 2
+        ? [join(path, "adapter", "identity-directory.jsonl")]
+        : []),
     ];
     if (
       !existsSync(summaryPath) ||
@@ -433,7 +635,7 @@ function listSnapshots(snapshotRoot: string): SnapshotRef[] {
 }
 
 function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string): void {
-  if (complete.schemaVersion !== 1) {
+  if (complete.schemaVersion !== 1 && complete.schemaVersion !== 2) {
     throw new Error(`Alibaba snapshot receipt version is unsupported: ${snapshotId}`);
   }
   for (const [field, value] of Object.entries({
@@ -441,6 +643,9 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     conversationCount: complete.conversationCount,
     attachmentCount: complete.attachmentCount,
     attachmentTextCount: complete.attachmentTextCount,
+    ...(complete.schemaVersion === 2
+      ? { identityDirectoryCount: complete.identityDirectoryCount }
+      : {}),
   })) {
     if (!Number.isSafeInteger(value) || Number(value) < 0) {
       throw new Error(`Alibaba snapshot receipt ${field} is invalid: ${snapshotId}`);
@@ -453,6 +658,8 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     !SHA256.test(String(projection.conversationsSha256 ?? "")) ||
     !SHA256.test(String(projection.attachmentsSha256 ?? "")) ||
     !SHA256.test(String(projection.attachmentTextSha256 ?? ""))
+    || (complete.schemaVersion === 2
+      && !SHA256.test(String(projection.identityDirectorySha256 ?? "")))
   ) {
     throw new Error(`Alibaba snapshot projection digests are invalid: ${snapshotId}`);
   }
@@ -463,6 +670,15 @@ function validateCompleteReceipt(complete: SnapshotComplete, snapshotId: string)
     complete.authority?.businessMutation !== false
   ) {
     throw new Error(`Alibaba snapshot authority receipt is unsafe: ${snapshotId}`);
+  }
+}
+
+function completeReceiptVersion(path: string): number | undefined {
+  try {
+    return (JSON.parse(readBoundFile(path, MAX_COMPLETE_BYTES).toString("utf8")) as SnapshotComplete)
+      .schemaVersion;
+  } catch {
+    return undefined;
   }
 }
 
@@ -479,6 +695,7 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
   const messagePath = join(adapterDir, "messages.jsonl");
   const attachmentPath = join(adapterDir, "attachments.jsonl");
   const attachmentTextPath = join(adapterDir, "attachment-text.jsonl");
+  const identityDirectoryPath = join(adapterDir, "identity-directory.jsonl");
   const projection = ref.complete.adapterProjection!;
   const messageBytes = readBoundFile(messagePath, MAX_MESSAGES_BYTES);
   const conversationBytes = readBoundFile(conversationPath, MAX_CONVERSATIONS_BYTES);
@@ -487,11 +704,17 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     attachmentTextPath,
     MAX_ATTACHMENT_TEXT_INDEX_BYTES,
   );
+  const identityDirectoryBytes = ref.complete.schemaVersion === 2
+    ? readBoundFile(identityDirectoryPath, MAX_IDENTITY_DIRECTORY_BYTES)
+    : Buffer.from("");
   for (const [path, bytes, expected] of [
     [messagePath, messageBytes, projection.messagesSha256],
     [conversationPath, conversationBytes, projection.conversationsSha256],
     [attachmentPath, attachmentBytes, projection.attachmentsSha256],
     [attachmentTextPath, attachmentTextBytes, projection.attachmentTextSha256],
+    ...(ref.complete.schemaVersion === 2
+      ? [[identityDirectoryPath, identityDirectoryBytes, projection.identityDirectorySha256] as const]
+      : []),
   ] as const) {
     if (sha256Bytes(bytes) !== expected) {
       throw new Error(`Alibaba snapshot projection digest mismatch: ${basename(path)}`);
@@ -507,13 +730,25 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
     .sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
   const attachmentsByMessage = new Map<string, AlibabaAttachment[]>();
   const attachments = parseAttachmentJsonl(attachmentBytes);
+  const messagesById = new Map(messages.map((message) => [message.messageId, message]));
   const messageIds = new Set(messages.map((message) => message.messageId));
   const orphanAttachments: AlibabaAttachment[] = [];
+  const attachmentIdentities = new Set<string>();
   for (const attachment of attachments) {
+    const identity = attachmentLogicalIdentity(attachment);
+    if (attachmentIdentities.has(identity)) {
+      throw new Error(`Alibaba attachment identity is duplicated: ${identity}`);
+    }
+    attachmentIdentities.add(identity);
     const messageId = textValue(attachment.messageId);
-    if (!messageId || !messageIds.has(messageId)) {
+    const parentCaptured = attachment.parentMessageCaptured === true
+      || (attachment.parentMessageCaptured == null && Boolean(messageId && messageIds.has(messageId)));
+    if (!parentCaptured) {
       orphanAttachments.push(attachment);
       continue;
+    }
+    if (!messageId) {
+      throw new Error("Alibaba linked attachment has no provider message id");
     }
     const rows = attachmentsByMessage.get(messageId) ?? [];
     rows.push(attachment);
@@ -525,16 +760,72 @@ function loadSnapshot(ref: SnapshotRef): LoadedSnapshot {
       .filter((row) => textValue(row.fileName))
       .map((row) => [String(row.fileName), row]),
   );
+  const identityDirectory = ref.complete.schemaVersion === 2
+    ? parseJsonl<AlibabaIdentityDirectoryRow>(identityDirectoryBytes)
+    : [];
+  validateIdentityDirectory(identityDirectory, ref);
+  const peopleByAliId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "person" && textValue(row.ali_id))
+      .map((row) => [String(row.ali_id), row]),
+  );
+  const peopleByProviderIdentityId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "person")
+      .map((row) => [row.provider_identity_id, row]),
+  );
+  const channelIdentityByConversationId = new Map(
+    identityDirectory
+      .filter((row) => row.identity_type === "conversation" && textValue(row.conversation_id))
+      .map((row) => [String(row.conversation_id), row]),
+  );
   if (
     conversations.size !== ref.complete.conversationCount ||
     messages.length !== ref.complete.messageCount ||
     attachments.length !== ref.complete.attachmentCount ||
     attachmentTextRows.filter((row) => row.status === "extracted").length !==
       ref.complete.attachmentTextCount
+    || (ref.complete.schemaVersion === 2
+      && identityDirectory.length !== ref.complete.identityDirectoryCount)
   ) {
     throw new Error(`Alibaba snapshot receipt counts do not match projection: ${ref.id}`);
   }
-  return { ref, conversations, messages, attachmentsByMessage, orphanAttachments, textByFile };
+  return {
+    ref,
+    conversations,
+    messages,
+    messagesById,
+    attachments,
+    attachmentsByMessage,
+    orphanAttachments,
+    textByFile,
+    identityDirectory,
+    peopleByAliId,
+    peopleByProviderIdentityId,
+    channelIdentityByConversationId,
+  };
+}
+
+function validateIdentityDirectory(rows: AlibabaIdentityDirectoryRow[], ref: SnapshotRef): void {
+  const identities = new Set<string>();
+  for (const row of rows) {
+    if (row.schema_version !== 1 || !textValue(row.provider_identity_id)) {
+      throw new Error(`Alibaba identity directory row is invalid: ${ref.id}`);
+    }
+    if (!["person", "organization", "conversation", "participation", "membership"].includes(
+      row.identity_type,
+    )) {
+      throw new Error(`Alibaba identity directory type is unsupported: ${ref.id}`);
+    }
+    if (identities.has(row.provider_identity_id)) {
+      throw new Error(`Alibaba identity directory id is duplicated: ${row.provider_identity_id}`);
+    }
+    identities.add(row.provider_identity_id);
+    if (row.identity_type === "membership"
+      && (row.review_state !== "proposed" || row.automatic_promotion_allowed !== false)) {
+      throw new Error(`Alibaba identity membership is not review-only: ${row.provider_identity_id}`);
+    }
+  }
 }
 
 function messageTimestamp(message: AlibabaMessage): number {
@@ -566,23 +857,82 @@ function pathWithin(root: string, candidate: string): boolean {
   return value === "" || (!value.startsWith("..") && !isAbsolute(value));
 }
 
-function sha256File(path: string | undefined, maxBytes: number): string | undefined {
-  if (!path || !existsSync(path)) return undefined;
-  return sha256Bytes(readBoundFile(path, maxBytes));
+function requirePrivateDirectory(root: string, parent: string, name: string): string {
+  const candidate = join(parent, name);
+  if (!existsSync(candidate)) mkdirSync(candidate, { mode: 0o700 });
+  const metadata = lstatSync(candidate);
+  if (!metadata.isDirectory()) {
+    throw new Error(`Alibaba adapter attachment custody directory is unsafe: ${name}`);
+  }
+  chmodSync(candidate, 0o700);
+  const realCandidate = realpathSync(candidate);
+  if (!pathWithin(root, realCandidate)) {
+    throw new Error(`Alibaba adapter attachment custody directory escapes state: ${name}`);
+  }
+  return realCandidate;
 }
 
-function mimeType(attachment: AlibabaAttachment): string {
-  const explicit = textValue(attachment.contentType);
-  if (explicit && explicit !== "application/octet-stream") return explicit;
-  const name = String(attachment.fileName ?? "").toLowerCase();
-  if (name.includes(".pdf")) return "application/pdf";
-  if (/\.png(-|$)/.test(name)) return "image/png";
-  if (/\.jpe?g(-|$)/.test(name)) return "image/jpeg";
-  if (/\.webp(-|$)/.test(name)) return "image/webp";
-  if (/\.gif(-|$)/.test(name)) return "image/gif";
-  if (/\.(xlsx?)(-|$)/.test(name)) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  if (/\.(docx?)(-|$)/.test(name)) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  return "application/octet-stream";
+function materializeAttachmentCustody(
+  evidenceBytes: Buffer,
+  contentHash: string,
+  stateDir: string,
+): string {
+  if (!isAbsolute(stateDir)) {
+    throw new Error("Alibaba adapter state directory must be absolute");
+  }
+  if (!existsSync(stateDir)) mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  const rootMetadata = lstatSync(stateDir);
+  if (!rootMetadata.isDirectory()) {
+    throw new Error("Alibaba adapter state directory is unsafe");
+  }
+  const realRoot = realpathSync(stateDir);
+  const custodyRoot = requirePrivateDirectory(realRoot, realRoot, "attachment-custody");
+  const shaRoot = requirePrivateDirectory(realRoot, custodyRoot, "sha256");
+  const prefixRoot = requirePrivateDirectory(realRoot, shaRoot, contentHash.slice(0, 2));
+  const destination = join(prefixRoot, contentHash);
+
+  if (!existsSync(destination)) {
+    const temporary = join(prefixRoot, `.${contentHash}.${process.pid}.tmp`);
+    let fd: number | undefined;
+    try {
+      fd = openSync(
+        temporary,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o600,
+      );
+      writeFileSync(fd, evidenceBytes);
+      fsyncSync(fd);
+      const written = fstatSync(fd);
+      if (!written.isFile() || written.nlink !== 1 || written.size !== evidenceBytes.length) {
+        throw new Error("Alibaba adapter attachment custody write is incomplete");
+      }
+      closeSync(fd);
+      fd = undefined;
+      renameSync(temporary, destination);
+      chmodSync(destination, 0o600);
+    } catch (error) {
+      if (fd !== undefined) closeSync(fd);
+      try {
+        unlinkSync(temporary);
+      } catch {
+        // The temporary file may already have been atomically renamed.
+      }
+      throw error;
+    }
+  }
+
+  const realDestination = realpathSync(destination);
+  if (!pathWithin(realRoot, realDestination)) {
+    throw new Error("Alibaba adapter attachment custody path escapes state");
+  }
+  const materializedBytes = readBoundFile(realDestination, MAX_ATTACHMENT_EVIDENCE_BYTES);
+  if (
+    materializedBytes.length !== evidenceBytes.length ||
+    sha256Bytes(materializedBytes) !== contentHash
+  ) {
+    throw new Error("Alibaba adapter attachment custody digest mismatch");
+  }
+  return realDestination;
 }
 
 function readAttachmentText(
@@ -651,52 +1001,39 @@ function normalizeAttachment(
 ) {
   const localPath = resolveAttachmentPath(attachment, config, snapshot.ref);
   const fileName = textValue(attachment.fileName) ?? `attachment-${index + 1}`;
-  const contentHash = sha256File(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
   const sealedContentHash = textValue(attachment.contentHash);
-  if (sealedContentHash && (!SHA256.test(sealedContentHash) || sealedContentHash !== contentHash)) {
+  if (!localPath) {
+    throw new Error(`Alibaba attachment evidence is missing: ${fileName}`);
+  }
+  if (!sealedContentHash || !SHA256.test(sealedContentHash)) {
+    throw new Error(`Alibaba attachment sealed digest is invalid: ${fileName}`);
+  }
+  const evidenceBytes = readBoundFile(localPath, MAX_ATTACHMENT_EVIDENCE_BYTES);
+  const contentHash = sha256Bytes(evidenceBytes);
+  if (sealedContentHash !== contentHash) {
     throw new Error(`Alibaba attachment digest mismatch: ${fileName}`);
   }
+  const sealedBytes = Number(attachment.bytes);
+  if (!Number.isSafeInteger(sealedBytes) || sealedBytes < 0 || sealedBytes !== evidenceBytes.length) {
+    throw new Error(`Alibaba attachment sealed byte count mismatch: ${fileName}`);
+  }
+  const normalizedMime = normalizeAlibabaAttachmentMime(evidenceBytes, attachment.contentType);
+  const custodyPath = config.adapter_state_dir
+    ? materializeAttachmentCustody(evidenceBytes, contentHash, config.adapter_state_dir)
+    : localPath;
   return {
-    id: `alibaba:${textValue(attachment.messageId) ?? "unlinked"}:${index + 1}`,
+    id: `alibaba:attachment:${attachmentLogicalIdentity(attachment)}`,
     filename: fileName,
-    mime_type: mimeType(attachment),
+    mime_type: normalizedMime,
     ...(textValue(attachment.category) ? { media_type: String(attachment.category) } : {}),
-    ...(Number.isFinite(Number(attachment.bytes)) && Number(attachment.bytes) >= 0
-      ? { size: Math.floor(Number(attachment.bytes)) }
-      : {}),
-    ...(localPath && existsSync(localPath) ? { local_path: localPath } : {}),
-    ...(contentHash ? { content_hash: contentHash } : {}),
+    size: evidenceBytes.length,
+    local_path: custodyPath,
+    content_hash: contentHash,
     metadata: {
       evidence_status: textValue(attachment.status) ?? "unknown",
-      snapshot_id: snapshot.ref.id,
-      snapshot_receipt_sha256: snapshot.ref.complete_sha256,
       provider_object_sha256: attachment.provider_object_sha256,
     },
   };
-}
-
-function buildContent(
-  message: AlibabaMessage,
-  attachments: AlibabaAttachment[],
-  snapshot: LoadedSnapshot,
-  config: AlibabaRuntimeConfig,
-): string {
-  const sections: string[] = [];
-  const body = textValue(message.text);
-  if (body) sections.push(body);
-  let remaining = config.attachment_text_limit;
-  for (const attachment of attachments) {
-    const fileName = textValue(attachment.fileName) ?? "attachment";
-    const extracted = readAttachmentText(attachment, snapshot, config);
-    if (extracted && remaining > 0) {
-      const excerpt = extracted.slice(0, remaining);
-      sections.push(`[Attachment: ${fileName}]\n${excerpt}`);
-      remaining -= excerpt.length;
-    } else {
-      sections.push(`[Attachment: ${fileName}]`);
-    }
-  }
-  return sections.join("\n\n") || "[Alibaba message without a text body]";
 }
 
 function buildRecord(
@@ -706,9 +1043,51 @@ function buildRecord(
   connectionId: string,
 ): AdapterInboundRecord {
   const conversation = snapshot.conversations.get(message.cid);
-  const attachments = snapshot.attachmentsByMessage.get(message.messageId) ?? [];
-  const incoming = message.direction !== "outgoing";
-  const supplierId = textValue(conversation?.aliId) ?? `conversation:${message.cid}`;
+  const incoming = !isOutgoingDirection(message.direction);
+  const channelIdentity = snapshot.channelIdentityByConversationId.get(message.cid);
+  const containerKind = channelIdentity?.conversation_type
+    ?? conversation?.conversationType
+    ?? "direct";
+  const directoryParticipants = (channelIdentity?.participant_provider_identity_ids ?? [])
+    .map((id) => snapshot.peopleByProviderIdentityId.get(id))
+    .filter((row): row is AlibabaIdentityDirectoryRow => Boolean(row));
+  const legacySupplierId = textValue(conversation?.aliId) ?? `conversation:${message.cid}`;
+  // The sealed history legitimately observes MoonSleep's provider person id as
+  // well as the supplier in a direct conversation. The conversation contact is
+  // the provider's authoritative counterparty; counting all observed people
+  // would make older outbound messages with no explicit receiver ambiguous.
+  const directSupplier = containerKind === "direct"
+    ? snapshot.peopleByAliId.get(legacySupplierId)
+      ?? (directoryParticipants.length === 1 ? directoryParticipants[0] : undefined)
+    : undefined;
+  const senderAliId = textValue(message.senderAliId);
+  const receiverAliId = textValue(message.receiverAliId);
+  const senderPerson = senderAliId ? snapshot.peopleByAliId.get(senderAliId) : undefined;
+  const receiverPerson = receiverAliId ? snapshot.peopleByAliId.get(receiverAliId) : undefined;
+  const actualSenderId = incoming
+    ? senderAliId ?? textValue(directSupplier?.ali_id) ?? legacySupplierId
+    : config.account_id;
+  const actualReceiverId = incoming
+    ? receiverAliId ?? config.account_id
+    : receiverAliId
+      ?? (containerKind === "direct" ? textValue(directSupplier?.ali_id) : undefined)
+      ?? (snapshot.ref.complete.schemaVersion === 1 ? legacySupplierId : `conversation:${message.cid}`);
+  if (snapshot.ref.complete.schemaVersion === 2
+    && (
+      !actualSenderId
+      || !actualReceiverId
+      || (incoming && !senderAliId && !directSupplier)
+      || (!incoming && containerKind === "direct" && !receiverAliId && !directSupplier)
+    )) {
+    throw new Error(`Alibaba message ${message.messageId} has unresolved participant identity`);
+  }
+  const supplierId = incoming ? actualSenderId : actualReceiverId;
+  const senderContactSpaceId = incoming ? PERSON_CONTACT_SPACE : config.account_id;
+  const receiverContactSpaceId = incoming
+    ? config.account_id
+    : containerKind === "group"
+      ? CONVERSATION_CONTACT_SPACE
+      : PERSON_CONTACT_SPACE;
   const supplierName =
     textValue(message.conversationName) ??
     textValue(conversation?.name) ??
@@ -718,21 +1097,10 @@ function buildRecord(
   const timestamp = messageTimestamp(message);
   if (!timestamp) throw new Error(`Alibaba message ${message.messageId} has no timestamp`);
 
-  const normalizedAttachments = attachments.map((attachment, index) =>
-    normalizeAttachment(attachment, index, snapshot, config)
-  );
-
-  const content = buildContent(message, attachments, snapshot, config);
-  const revisionHash = sha256Bytes(Buffer.from(stableJson({
+  const content = textValue(message.text) ?? "[Alibaba message without a text body]";
+  const snapshotFingerprint = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: message.provider_object_sha256,
     content,
-    attachments: normalizedAttachments.map((attachment) => ({
-      id: attachment.id,
-      filename: attachment.filename,
-      size: attachment.size ?? null,
-      content_hash: attachment.content_hash ?? null,
-      evidence_status: attachment.metadata.evidence_status,
-    })),
   }), "utf8"));
   const logicalMessageId = `message:${message.messageId}`;
 
@@ -742,8 +1110,12 @@ function buildRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
-      sender_id: incoming ? supplierId : config.account_id,
-      sender_name: incoming ? textValue(message.speaker) ?? supplierName : config.account_label,
+      provider_account_ref: config.account_id,
+      sender_id: actualSenderId,
+      sender_name: incoming
+        ? textValue(message.senderName) ?? textValue(senderPerson?.display_name)
+          ?? textValue(message.speaker) ?? supplierName
+        : config.account_label,
       // Nex reserves the canonical receiver for the configured adapter account so
       // inbound integrity can bind every emitted record to this exact connection.
       // For outbound provider messages the supplier remains the actual recipient
@@ -754,7 +1126,7 @@ function buildRecord(
       receiver_name: config.account_label,
       space_id: config.account_id,
       space_name: config.account_label,
-      container_kind: "direct",
+      container_kind: containerKind,
       container_id: message.cid,
       container_name: supplierName,
       thread_id: message.cid,
@@ -765,48 +1137,91 @@ function buildRecord(
         supplier_account_id: textValue(conversation?.accountId) ?? null,
         company_name: textValue(message.companyName) ?? textValue(conversation?.companyName) ?? null,
         direction: incoming ? "incoming" : "outgoing",
+        identity_contract: snapshot.ref.complete.schemaVersion === 2
+          ? IDENTITY_DIRECTORY_CONTRACT
+          : "alibaba.legacy-conversation-identity.v1",
+        sender_contact_space_id: senderContactSpaceId,
+        message_receiver_id: actualReceiverId,
+        message_receiver_contact_space_id: receiverContactSpaceId,
+        message_receiver_name: incoming
+          ? textValue(message.receiverName) ?? config.account_label
+          : textValue(message.receiverName) ?? textValue(receiverPerson?.display_name)
+            ?? textValue(directSupplier?.display_name) ?? supplierName,
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:message:${safeIdToken(message.messageId)}:${revisionHash}`,
+      external_record_id: `message:${safeIdToken(message.messageId)}`,
+      source_record_type: "alibaba.message",
       timestamp,
       content,
       content_type: "text",
-      ...(!incoming ? { recipients: [supplierId] } : {}),
+      ...(snapshot.ref.complete.schemaVersion === 2 || !incoming
+        ? { recipients: [actualReceiverId] }
+        : {}),
       payload: {
         provider_object_json: message.provider_object_json,
         provider_object_sha256: message.provider_object_sha256,
-        source_snapshot_id: snapshot.ref.id,
-        source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        source_projection_messages_sha256: snapshot.ref.complete.adapterProjection!.messagesSha256!,
-        source_attachments: attachments.map((attachment) => ({
-          provider_object_json: attachment.provider_object_json,
-          provider_object_sha256: attachment.provider_object_sha256,
-        })),
         source_message_id: message.messageId,
         source_conversation_id: message.cid,
       },
-      ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       metadata: {
         source_system: "alibaba_messenger",
         source_connection_id: connectionId,
         family: "message",
         logical_record_id: logicalMessageId,
-        revision_hash: revisionHash,
+        snapshot_fingerprint_sha256: snapshotFingerprint,
         message_id: message.messageId,
         conversation_id: message.cid,
         message_type: textValue(message.msgType) ?? null,
         direction: incoming ? "incoming" : "outgoing",
-        snapshot_id: snapshot.ref.id,
-        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        snapshot_captured_at: snapshot.ref.captured_at,
         evidence_boundary: "sanitized_normalized_export",
+        identity_contract: snapshot.ref.complete.schemaVersion === 2
+          ? IDENTITY_DIRECTORY_CONTRACT
+          : "alibaba.legacy-conversation-identity.v1",
+        sender_contact_space_id: senderContactSpaceId,
+        message_receiver_id: actualReceiverId,
+        message_receiver_contact_space_id: receiverContactSpaceId,
+        adapter_contacts: adapterContactSeedsForConversation(
+          snapshot,
+          message.cid,
+          connectionId,
+          containerKind,
+        ),
       },
     },
   };
 }
 
-function buildOrphanAttachmentRecord(
+function isOutgoingDirection(value: unknown): boolean {
+  const normalized = textValue(value)?.toLowerCase();
+  return normalized === "outgoing" || normalized === "outbound" || normalized === "sent";
+}
+
+function adapterContactSeedsForConversation(
+  snapshot: LoadedSnapshot,
+  conversationId: string,
+  connectionId: string,
+  containerKind: "direct" | "group",
+): UnknownRecord[] {
+  const channel = snapshot.channelIdentityByConversationId.get(conversationId);
+  if (!channel) return [];
+  return (channel.participant_provider_identity_ids ?? [])
+    .map((id) => snapshot.peopleByProviderIdentityId.get(id))
+    .filter((row): row is AlibabaIdentityDirectoryRow => Boolean(row && textValue(row.ali_id)))
+    .map((row) => ({
+      platform: PLATFORM,
+      sender_id: row.ali_id,
+      sender_name: textValue(row.display_name),
+      aliases: row.aliases ?? [],
+      connection_id: connectionId,
+      space_id: PERSON_CONTACT_SPACE,
+      container_kind: containerKind,
+      container_id: conversationId,
+      thread_id: conversationId,
+    }));
+}
+
+function buildAttachmentRecord(
   attachment: AlibabaAttachment,
   snapshot: LoadedSnapshot,
   config: AlibabaRuntimeConfig,
@@ -814,6 +1229,14 @@ function buildOrphanAttachmentRecord(
 ): AdapterInboundRecord {
   const conversationId = textValue(attachment.cid) ?? "unresolved-conversation";
   const conversation = snapshot.conversations.get(conversationId);
+  const parentMessage = textValue(attachment.messageId)
+    ? snapshot.messagesById.get(String(attachment.messageId))
+    : undefined;
+  const linkedToProviderMessage = attachment.parentMessageCaptured === true || Boolean(parentMessage);
+  const parentDirection = textValue(parentMessage?.direction)
+    ?? textValue(attachment.parentMessageDirection);
+  const incoming = !isOutgoingDirection(parentDirection);
+  const supplierId = textValue(conversation?.aliId) ?? `conversation:${conversationId}`;
   const supplierName =
     textValue(conversation?.name) ??
     textValue(conversation?.companyName) ??
@@ -823,17 +1246,20 @@ function buildOrphanAttachmentRecord(
   const fileName = normalized.filename;
   const body = textValue(attachment.messageText);
   const content = [
-    `[Unlinked Alibaba attachment evidence: ${fileName}]`,
+    `[Alibaba attachment: ${fileName}]`,
     ...(body ? [body] : []),
-    ...(extracted ? [extracted] : []),
+    ...(extracted ? [extracted.slice(0, config.attachment_text_limit)] : []),
   ].join("\n\n");
-  const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
-  const revisionHash = sha256Bytes(Buffer.from(stableJson({
+  const timestamp = attachmentTimestamp(attachment, snapshot);
+  const snapshotFingerprint = sha256Bytes(Buffer.from(stableJson({
     provider_object_sha256: attachment.provider_object_sha256,
     content_hash: normalized.content_hash ?? null,
-    content,
+    extraction_sha256: extracted ? sha256Bytes(Buffer.from(extracted, "utf8")) : null,
   }), "utf8"));
-  const sourceIdentity = textValue(attachment.messageId) ?? attachment.provider_object_sha256;
+  const sourceIdentity = attachmentLogicalIdentity(attachment);
+  const sourceCoverageDisposition = linkedToProviderMessage
+    ? "linked_attachment_evidence"
+    : "orphan_attachment_evidence";
 
   return {
     operation: "record.ingest",
@@ -841,9 +1267,19 @@ function buildOrphanAttachmentRecord(
       adapter: PLATFORM,
       platform: PLATFORM,
       connection_id: connectionId,
-      sender_id: `${config.account_id}:evidence-capture`,
-      sender_name: `${config.account_label} evidence capture`,
-      receiver_id: config.account_id,
+      provider_account_ref: config.account_id,
+      sender_id: linkedToProviderMessage
+        ? incoming ? supplierId : config.account_id
+        : `${config.account_id}:evidence-capture`,
+      sender_name: linkedToProviderMessage
+        ? incoming
+          ? textValue(parentMessage?.speaker)
+            ?? textValue(attachment.parentMessageSpeaker)
+            ?? textValue(attachment.speaker)
+            ?? supplierName
+          : config.account_label
+        : `${config.account_label} evidence capture`,
+      receiver_id: connectionId,
       receiver_name: config.account_label,
       space_id: config.account_id,
       space_name: config.account_label,
@@ -854,42 +1290,62 @@ function buildOrphanAttachmentRecord(
       thread_name: supplierName,
       metadata: {
         source_system: "alibaba_messenger",
-        source_attribution: "unresolved_attachment_evidence",
+        source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
         supplier_ali_id: textValue(conversation?.aliId) ?? null,
         supplier_account_id: textValue(conversation?.accountId) ?? null,
       },
     },
     payload: {
-      external_record_id: `alibaba:${safeIdToken(connectionId)}:attachment-orphan:${safeIdToken(sourceIdentity)}:${revisionHash}`,
+      external_record_id: `attachment:${sourceIdentity}`,
+      source_record_type: "alibaba.attachment",
       timestamp,
       content,
       content_type: "text",
+      ...(!incoming && linkedToProviderMessage ? { recipients: [supplierId] } : {}),
       payload: {
-        provider_attachment_json: attachment.provider_object_json,
-        provider_attachment_sha256: attachment.provider_object_sha256,
-        source_snapshot_id: snapshot.ref.id,
-        source_snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        source_projection_attachments_sha256: snapshot.ref.complete.adapterProjection!.attachmentsSha256!,
+        provider_object_json: attachment.provider_object_json,
+        provider_object_sha256: attachment.provider_object_sha256,
         source_message_id: textValue(attachment.messageId) ?? null,
         source_conversation_id: textValue(attachment.cid) ?? null,
-        source_coverage_disposition: "orphan_attachment_evidence",
+        source_coverage_disposition: sourceCoverageDisposition,
+        extraction_status: textValue(snapshot.textByFile.get(fileName)?.status) ?? "not_available",
+        extraction_sha256: extracted ? sha256Bytes(Buffer.from(extracted, "utf8")) : null,
       },
       attachments: [normalized],
       metadata: {
         source_system: "alibaba_messenger",
         source_connection_id: connectionId,
-        family: "orphan_attachment",
-        logical_record_id: `orphan-attachment:${attachment.provider_object_sha256}`,
-        revision_hash: revisionHash,
-        snapshot_id: snapshot.ref.id,
-        snapshot_receipt_sha256: snapshot.ref.complete_sha256,
-        snapshot_captured_at: snapshot.ref.captured_at,
+        family: "attachment",
+        logical_record_id: `attachment:${sourceIdentity}`,
+        snapshot_fingerprint_sha256: snapshotFingerprint,
         evidence_boundary: "sanitized_normalized_export",
-        source_attribution: "unresolved_attachment_evidence",
-        timestamp_basis: parseTimestamp(attachment.sentAt) ? "provider_attachment_sent_at" : "snapshot_capture_time",
+        source_attribution: linkedToProviderMessage ? "linked_provider_message" : "unresolved_attachment_evidence",
+        timestamp_basis: parentMessage || parseTimestamp(attachment.parentMessageTimestamp)
+          ? "provider_message_timestamp"
+          : parseTimestamp(attachment.sentAt)
+            ? "provider_attachment_sent_at"
+            : "snapshot_capture_time",
       },
     },
   };
+}
+
+function attachmentLogicalIdentity(attachment: AlibabaAttachment): string {
+  return sha256Bytes(Buffer.from(stableJson({
+    conversation_id: textValue(attachment.cid) ?? null,
+    file_name: textValue(attachment.fileName) ?? null,
+    provider_message_id: textValue(attachment.messageId) ?? null,
+  }), "utf8"));
+}
+
+function attachmentTimestamp(attachment: AlibabaAttachment, snapshot: LoadedSnapshot): number {
+  const messageId = textValue(attachment.messageId);
+  const parentMessage = messageId ? snapshot.messagesById.get(messageId) : undefined;
+  return parentMessage
+    ? messageTimestamp(parentMessage)
+    : parseTimestamp(attachment.parentMessageTimestamp)
+      || parseTimestamp(attachment.sentAt)
+      || snapshot.ref.captured_at;
 }
 
 function safeIdToken(value: string): string {
@@ -904,7 +1360,7 @@ function stableJson(value: unknown): string {
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
-      throw new Error("Alibaba revision input contains an unsafe number");
+      throw new Error("Alibaba snapshot input contains an unsafe number");
     }
     return JSON.stringify(value);
   }
@@ -916,7 +1372,7 @@ function stableJson(value: unknown): string {
       .map((key) => `${JSON.stringify(key)}:${stableJson(row[key])}`)
       .join(",")}}`;
   }
-  throw new Error("Alibaba revision input is not JSON-safe");
+  throw new Error("Alibaba snapshot input is not JSON-safe");
 }
 
 function recordsForWindow(
@@ -930,15 +1386,15 @@ function recordsForWindow(
     .filter((message) => messageTimestamp(message) >= sinceMs)
     .filter((message) => toMs === undefined || messageTimestamp(message) <= toMs)
     .map((message) => buildRecord(message, snapshot, config, connectionId));
-  const orphanRecords = snapshot.orphanAttachments
+  const attachmentRecords = snapshot.attachments
     .filter((attachment) => {
-      const timestamp = parseTimestamp(attachment.sentAt) || snapshot.ref.captured_at;
+      const timestamp = attachmentTimestamp(attachment, snapshot);
       return timestamp >= sinceMs && (toMs === undefined || timestamp <= toMs);
     })
     .map((attachment) =>
-      buildOrphanAttachmentRecord(attachment, snapshot, config, connectionId)
+      buildAttachmentRecord(attachment, snapshot, config, connectionId)
     );
-  return [...messageRecords, ...orphanRecords].sort(
+  return [...messageRecords, ...attachmentRecords].sort(
     (left, right) => left.payload.timestamp - right.payload.timestamp
       || left.payload.external_record_id.localeCompare(right.payload.external_record_id),
   );
@@ -999,7 +1455,12 @@ async function backfill(
     args.since.getTime(),
     args.to?.getTime(),
   );
-  for (const row of rows) emit(row);
+  for (const row of selectedBackfillRows(
+    rows,
+    snapshot.ref,
+    connectionId(ctx),
+    config.adapter_state_dir,
+  )) emit(row);
 }
 
 async function monitor(
@@ -1023,18 +1484,21 @@ async function monitor(
 }
 
 export const __test__ = {
+  backfill,
+  buildAttachmentRecord,
   buildRecord,
   latestSnapshot,
   listSnapshots,
   loadSnapshot,
   readRuntimeConfig,
   recordsForWindow,
+  selectedBackfillRows,
 };
 
 export const alibabaAdapter = defineAdapter({
   platform: PLATFORM,
   name: "alibaba-messenger-adapter",
-  version: "0.2.4",
+  version: "0.4.2",
   multi_account: true,
   auth: {
     methods: [

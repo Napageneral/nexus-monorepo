@@ -101,7 +101,7 @@ func mercuryTransactionRowAt(id string, createdAt time.Time, status string, post
 func recordedTransactions(t *testing.T, records []nexadapter.AdapterInboundRecord) []string {
 	t.Helper()
 	recorded := []string{}
-	for _, record := range recordsForFamily(records, "transaction_revision") {
+	for _, record := range recordsForFamily(records, mercuryProjectionSources["listTransactions"].Family) {
 		payload, _ := record.Payload.Metadata["provider_payload"].(map[string]any)
 		status, _ := payload["status"].(string)
 		recorded = append(recorded, record.Payload.Metadata["provider_object_id"].(string)+" "+status)

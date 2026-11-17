@@ -1,6 +1,8 @@
 export const SHOPIFY_SOURCE_SCHEDULES = Object.freeze({
-  "orders.delta": "0 * * * * *",
-  "customers.delta": "20 * * * * *",
+  // A bounded provider page can take several minutes. Keep each family farther
+  // apart than its 15-minute job timeout and stagger the two heavy captures.
+  "orders.delta": "0 0-59/20 * * * *",
+  "customers.delta": "20 10-59/20 * * * *",
   "inventory.hot": "40 * * * * *",
   "inventory.reconcile": "5 1-59/5 * * * *",
   "fulfillment.delta": "15 2-59/5 * * * *",

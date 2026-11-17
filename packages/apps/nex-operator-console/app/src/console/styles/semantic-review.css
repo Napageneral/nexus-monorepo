@@ -1,0 +1,1215 @@
+.semantic-review-shell {
+  color: var(--console-text);
+}
+
+.semantic-review-toolbar,
+.semantic-review-panel-heading,
+.semantic-review-item-heading,
+.semantic-review-batch-heading,
+.semantic-review-toolbar-actions,
+.semantic-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+}
+
+.semantic-review-toolbar {
+  margin-bottom: var(--console-space-4);
+}
+
+.semantic-review-toolbar h2,
+.semantic-review-item-heading h2,
+.semantic-review-panel-heading h3,
+.semantic-review-subsection h4 {
+  margin: 0;
+  color: var(--console-text-strong);
+}
+
+.semantic-review-toolbar h2,
+.semantic-review-item-heading h2 {
+  font-size: var(--console-text-xl);
+}
+
+.semantic-review-panel-heading h3 {
+  font-size: var(--console-text-md);
+}
+
+.semantic-review-subsection h4 {
+  font-size: var(--console-text-sm);
+}
+
+.semantic-review-toolbar p,
+.semantic-review-item-heading p,
+.semantic-review-panel-heading p {
+  margin: 4px 0 0;
+  color: var(--console-text-muted);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-banner {
+  margin-bottom: var(--console-space-3);
+  border: 1px solid var(--console-border-strong);
+  border-radius: var(--console-radius-md);
+  padding: var(--console-space-3);
+  font-size: var(--console-text-sm);
+}
+
+.semantic-review-banner--error,
+.semantic-review-inline-error {
+  color: var(--console-danger);
+  background: var(--console-danger-muted);
+}
+
+.semantic-review-banner--success,
+.semantic-review-inline-success {
+  color: var(--console-success);
+  background: var(--console-success-muted);
+}
+
+.semantic-review-inline-error,
+.semantic-review-inline-success {
+  margin: var(--console-space-3) 0 0;
+  border-radius: var(--console-radius-sm);
+  padding: var(--console-space-2) var(--console-space-3);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-queue-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 278px) minmax(0, 1fr);
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-queue-panel {
+  border-right: 1px solid var(--console-border);
+  background: var(--console-bg);
+}
+
+.semantic-review-batch-list {
+  display: grid;
+}
+
+.semantic-review-batch {
+  display: grid;
+  gap: var(--console-space-1);
+  width: 100%;
+  padding: var(--console-space-3);
+  color: var(--console-text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--console-border);
+  cursor: pointer;
+  transition: background var(--console-transition-fast), box-shadow var(--console-transition-fast);
+}
+
+.semantic-review-batch:hover {
+  background: var(--console-bg-card-hover);
+}
+
+.semantic-review-batch:focus-visible,
+.semantic-review-item-chip:focus-visible,
+.semantic-review-candidate-select:focus-visible {
+  outline: 2px solid var(--console-gold);
+  outline-offset: -2px;
+}
+
+.semantic-review-batch--selected {
+  background: var(--console-bg-nav-pill-active);
+  box-shadow: inset 3px 0 0 var(--console-gold);
+}
+
+.semantic-review-batch-domain,
+.semantic-review-batch-progress,
+.semantic-review-batch .console-faint {
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-review-panel {
+  min-width: 0;
+}
+
+.semantic-review-item-strip {
+  display: flex;
+  gap: var(--console-space-2);
+  overflow-x: auto;
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+  background: var(--console-bg);
+}
+
+.semantic-review-item-chip {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: var(--console-space-2);
+  flex: 0 0 250px;
+  min-width: 0;
+  padding: var(--console-space-2);
+  color: var(--console-text);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-md);
+  cursor: pointer;
+}
+
+.semantic-review-item-chip:hover,
+.semantic-review-item-chip--selected {
+  background: var(--console-bg-card-hover);
+  border-color: var(--console-border-strong);
+}
+
+.semantic-review-item-chip--selected {
+  box-shadow: inset 0 -2px 0 var(--console-gold);
+}
+
+.semantic-review-item-ordinal,
+.semantic-review-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--console-radius-sm);
+  color: var(--console-gold);
+  background: color-mix(in srgb, var(--console-gold) 12%, transparent);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-xs);
+  font-weight: var(--console-weight-bold);
+}
+
+.semantic-review-item-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.semantic-review-item-copy strong,
+.semantic-review-item-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-review-item-copy strong {
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-item-copy small {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.semantic-review-evidence {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding: var(--console-space-4);
+  border-right: 1px solid var(--console-border);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-metadata {
+  display: grid;
+  gap: var(--console-space-2);
+  margin: var(--console-space-4) 0 0;
+}
+
+.semantic-review-metadata div {
+  display: grid;
+  gap: 2px;
+}
+
+.semantic-review-metadata dt,
+.semantic-review-terminal-grid span,
+.semantic-review-form-grid label > span {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-metadata dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--console-text);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-subsection {
+  margin-top: var(--console-space-4);
+  padding-top: var(--console-space-3);
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-members {
+  display: grid;
+  gap: var(--console-space-2);
+  margin: var(--console-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.semantic-review-members li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--console-space-2);
+}
+
+.semantic-review-members code {
+  overflow: hidden;
+  color: var(--console-text-muted);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-review-candidate-workspace {
+  min-width: 0;
+  padding: var(--console-space-4);
+}
+
+.semantic-review-item-heading {
+  align-items: flex-start;
+  margin-bottom: var(--console-space-4);
+}
+
+.semantic-review-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--console-space-3);
+}
+
+.semantic-review-candidate,
+.semantic-review-comparison-section,
+.semantic-review-decision {
+  min-width: 0;
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-md);
+  background: var(--console-bg-card);
+}
+
+.semantic-review-candidate {
+  overflow: hidden;
+}
+
+.semantic-review-candidate--selected {
+  border-color: var(--console-gold);
+  box-shadow: inset 0 0 0 1px var(--console-gold);
+}
+
+.semantic-review-candidate > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-2);
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-candidate-select {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+  min-width: 0;
+  padding: 0;
+  color: var(--console-text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.semantic-review-candidate-select:disabled {
+  cursor: default;
+}
+
+.semantic-review-candidate-select > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.semantic-review-candidate-select strong,
+.semantic-review-candidate-select small {
+  white-space: nowrap;
+}
+
+.semantic-review-candidate-select strong {
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-candidate-select small {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-json {
+  box-sizing: border-box;
+  min-height: 190px;
+  max-height: 430px;
+  margin: 0;
+  overflow: auto;
+  padding: var(--console-space-3);
+  color: var(--console-text);
+  background: var(--console-bg);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs);
+  line-height: var(--console-leading-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.semantic-review-json--head {
+  min-height: 0;
+  max-height: 260px;
+  margin-top: var(--console-space-2);
+  border-radius: var(--console-radius-sm);
+}
+
+.semantic-review-candidate > footer,
+.semantic-review-model-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--console-space-2);
+  padding: var(--console-space-2) var(--console-space-3);
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-model-reveal {
+  justify-content: flex-start;
+  color: var(--console-text-muted);
+  background: var(--console-success-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-model-reveal strong {
+  color: var(--console-text-strong);
+}
+
+.semantic-review-comparison-section,
+.semantic-review-decision {
+  margin-top: var(--console-space-4);
+  padding: var(--console-space-4);
+}
+
+.semantic-review-comparisons {
+  display: grid;
+  gap: var(--console-space-2);
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-diff {
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-diff summary,
+.semantic-review-correction summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-2);
+  padding: var(--console-space-2) var(--console-space-3);
+  color: var(--console-text);
+  font-size: var(--console-text-xs);
+  cursor: pointer;
+}
+
+.semantic-review-diff-table {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-diff-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--console-space-2);
+  padding: var(--console-space-2) var(--console-space-3);
+}
+
+.semantic-review-diff-row + .semantic-review-diff-row {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-diff-row code,
+.semantic-review-diff-row pre {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--console-text-muted);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs);
+  white-space: pre-wrap;
+}
+
+.semantic-review-form-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.5fr) minmax(280px, 1fr);
+  gap: var(--console-space-3);
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-form-grid label {
+  display: grid;
+  gap: var(--console-space-1);
+}
+
+.semantic-review-notes {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.semantic-review-correction {
+  margin-top: var(--console-space-3);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+}
+
+.semantic-review-correction-editor {
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  min-height: 240px;
+  margin: 0 var(--console-space-3) var(--console-space-3);
+  resize: vertical;
+}
+
+.semantic-review-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-terminal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--console-space-3);
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-terminal-grid div {
+  display: grid;
+  gap: var(--console-space-1);
+}
+
+.semantic-review-terminal-grid strong {
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-decision-notes {
+  margin: var(--console-space-3) 0 0;
+  padding: var(--console-space-3);
+  color: var(--console-text);
+  background: var(--console-bg-raised);
+  border-radius: var(--console-radius-sm);
+  font-size: var(--console-text-sm);
+}
+
+.semantic-review-loading {
+  display: grid;
+  gap: var(--console-space-2);
+  padding: var(--console-space-4);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-skeleton-line {
+  width: 100%;
+  height: 12px;
+}
+
+.semantic-review-skeleton-line--short {
+  width: 62%;
+}
+
+.semantic-review-empty {
+  min-height: 150px;
+}
+
+@media (max-width: 1180px) {
+  .semantic-review-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-review-evidence {
+    position: static;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--console-border);
+  }
+
+  .semantic-review-candidate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-review-json {
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 760px) {
+  .semantic-review-toolbar,
+  .semantic-review-panel-heading,
+  .semantic-review-item-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .semantic-review-toolbar-actions,
+  .semantic-review-actions {
+    width: 100%;
+  }
+
+  .semantic-review-toolbar-actions .console-btn,
+  .semantic-review-actions .console-btn {
+    flex: 1 1 140px;
+  }
+
+  .semantic-review-queue-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-review-queue-panel {
+    max-height: 240px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--console-border);
+  }
+
+  .semantic-review-form-grid,
+  .semantic-review-terminal-grid,
+  .semantic-review-diff-row {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-review-candidate-workspace,
+  .semantic-review-evidence {
+    padding: var(--console-space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .semantic-review-batch,
+  .semantic-review-item-chip {
+    transition: none;
+  }
+}
+
+/* Source-first evidence inbox */
+.semantic-review-review-body {
+  padding: var(--console-space-4);
+  background: var(--console-bg);
+}
+
+.semantic-review-item-heading {
+  margin-bottom: var(--console-space-4);
+  padding-bottom: var(--console-space-4);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.console-eyebrow {
+  margin: 0 0 4px !important;
+  color: var(--console-gold) !important;
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs) !important;
+  font-weight: var(--console-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.semantic-review-workspace {
+  grid-template-columns: minmax(420px, 1.08fr) minmax(420px, 0.92fr);
+  gap: var(--console-space-4);
+  align-items: start;
+}
+
+.semantic-review-evidence,
+.semantic-review-candidate-workspace {
+  padding: 0;
+}
+
+.semantic-review-evidence {
+  position: static;
+  max-height: none;
+  overflow: visible;
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-evidence > .semantic-review-panel-heading,
+.semantic-review-understanding,
+.semantic-review-contract {
+  padding: var(--console-space-4);
+}
+
+.semantic-review-source-stack {
+  display: grid;
+  gap: var(--console-space-3);
+  padding: 0 var(--console-space-4) var(--console-space-4);
+}
+
+.semantic-review-source-card,
+.semantic-review-fact-card,
+.semantic-review-agreement,
+.semantic-review-proposals {
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-md);
+  background: var(--console-bg-card);
+}
+
+.semantic-review-source-card {
+  overflow: hidden;
+}
+
+.semantic-review-source-header,
+.semantic-review-fact-card > header,
+.semantic-review-section-title,
+.semantic-review-preview > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+}
+
+.semantic-review-source-header {
+  align-items: center;
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-source-header > div {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+  min-width: 0;
+}
+
+.semantic-review-source-header strong {
+  overflow: hidden;
+  color: var(--console-text-strong);
+  font-size: var(--console-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-review-source-order {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  color: var(--console-gold);
+  background: color-mix(in srgb, var(--console-gold) 12%, transparent);
+  font-family: var(--console-font-mono);
+  font-size: var(--console-text-2xs);
+  font-weight: var(--console-weight-bold);
+}
+
+.semantic-review-message-header {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--console-space-2) var(--console-space-3);
+  margin: 0;
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-message-header div {
+  min-width: 0;
+}
+
+.semantic-review-message-header dt {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-message-header dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--console-text);
+  font-size: var(--console-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-review-message-body {
+  max-height: 300px;
+  overflow: auto;
+  padding: var(--console-space-4);
+  color: var(--console-text);
+  font-size: var(--console-text-sm);
+  line-height: var(--console-leading-relaxed);
+  white-space: pre-wrap;
+}
+
+.semantic-review-attachments {
+  padding: 0 var(--console-space-3) var(--console-space-3);
+}
+
+.semantic-review-attachments h4 {
+  margin: 0 0 var(--console-space-2);
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.semantic-review-attachment-context {
+  margin: calc(var(--console-space-1) * -1) var(--console-space-2) var(--console-space-2);
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+  line-height: var(--console-leading-relaxed);
+}
+
+.semantic-review-attachment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--console-space-2);
+  padding: var(--console-space-2);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-attachment--selected {
+  border-color: var(--console-gold);
+  box-shadow: inset 3px 0 0 var(--console-gold);
+}
+
+.semantic-review-attachment-action,
+.semantic-review-document-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+}
+
+.semantic-review-file-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--console-radius-sm);
+  color: var(--console-danger);
+  background: var(--console-danger-muted);
+  font-family: var(--console-font-mono);
+  font-size: 9px;
+  font-weight: var(--console-weight-bold);
+}
+
+.semantic-review-attachment-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.semantic-review-attachment-copy strong,
+.semantic-review-attachment-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.semantic-review-document-preview {
+  margin: 0 var(--console-space-3) var(--console-space-3);
+  overflow: hidden;
+  border: 1px solid var(--console-border-strong);
+  border-radius: var(--console-radius-md);
+  background: var(--console-bg-raised);
+}
+
+.semantic-review-document-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--console-space-3);
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-document-preview h4 {
+  margin: 0;
+  color: var(--console-text-strong);
+  font-size: var(--console-text-sm);
+}
+
+.semantic-review-document-preview iframe,
+.semantic-review-document-preview img {
+  display: block;
+  width: 100%;
+  height: min(660px, 68vh);
+  border: 0;
+  object-fit: contain;
+  background: #ededeb;
+}
+
+.semantic-review-document-fallback {
+  padding: var(--console-space-5);
+  color: var(--console-text-muted);
+  text-align: center;
+}
+
+.semantic-review-attachment-copy strong {
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-attachment-copy small {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-grounding {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 var(--console-space-3) var(--console-space-3);
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-grounding code {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--console-bg-raised);
+  font-size: inherit;
+}
+
+.semantic-review-missing-source {
+  padding: var(--console-space-4);
+  border: 1px dashed var(--console-border-strong);
+  border-radius: var(--console-radius-md);
+  color: var(--console-text-muted);
+}
+
+.semantic-review-missing-source strong {
+  color: var(--console-text-strong);
+}
+
+.semantic-review-missing-source p {
+  margin: 4px 0 0;
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-understanding {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-section-title h3,
+.semantic-review-preview h3 {
+  margin: 0;
+  color: var(--console-text-strong);
+  font-size: var(--console-text-md);
+}
+
+.semantic-review-section-title p {
+  margin: 4px 0 0;
+  color: var(--console-text-muted);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-section-title > span {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-fact-list {
+  display: grid;
+  gap: var(--console-space-2);
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-fact-card > header {
+  align-items: center;
+  padding: var(--console-space-3);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-fact-card > header > div {
+  display: grid;
+  gap: var(--console-space-1);
+}
+
+.semantic-review-fact-card > header strong {
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-fact-card > header time {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-field-table {
+  display: grid;
+  margin: 0;
+}
+
+.semantic-review-field-table > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.75fr) minmax(0, 1.25fr);
+  gap: var(--console-space-3);
+  padding: 9px var(--console-space-3);
+}
+
+.semantic-review-field-table > div + div {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-field-table dt {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-field-table dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+  font-weight: var(--console-weight-medium);
+}
+
+.semantic-review-technical,
+.semantic-review-contract {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-technical summary,
+.semantic-review-contract summary {
+  padding: var(--console-space-2) var(--console-space-3);
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+  cursor: pointer;
+}
+
+.semantic-review-history {
+  display: grid;
+  gap: 0;
+  margin: var(--console-space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.semantic-review-history li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: var(--console-space-2);
+}
+
+.semantic-review-history-marker {
+  position: relative;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid var(--console-gold);
+  border-radius: 50%;
+}
+
+.semantic-review-history li:not(:last-child) .semantic-review-history-marker::after {
+  position: absolute;
+  top: 11px;
+  left: 3px;
+  width: 1px;
+  height: calc(100% + 18px);
+  background: var(--console-border-strong);
+  content: "";
+}
+
+.semantic-review-history li > div {
+  margin-bottom: var(--console-space-3);
+  padding: var(--console-space-3);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  background: var(--console-bg-card);
+}
+
+.semantic-review-history header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--console-space-2);
+}
+
+.semantic-review-history header strong {
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-history header time {
+  color: var(--console-text-muted);
+  font-size: var(--console-text-2xs);
+}
+
+.semantic-review-history p {
+  margin: var(--console-space-2) 0;
+  color: var(--console-text);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-candidate-workspace {
+  display: grid;
+  gap: var(--console-space-4);
+}
+
+.semantic-review-proposals {
+  padding: var(--console-space-4);
+}
+
+.semantic-review-candidate-grid {
+  grid-template-columns: 1fr;
+  margin-top: var(--console-space-3);
+}
+
+.semantic-review-candidate .semantic-review-field-table,
+.semantic-review-agreement > .semantic-review-field-table {
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-agreement {
+  margin-top: var(--console-space-3);
+  overflow: hidden;
+}
+
+.semantic-review-agreement > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: var(--console-space-2);
+  padding: var(--console-space-3);
+}
+
+.semantic-review-agreement > div:first-child strong {
+  color: var(--console-text-strong);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-agreement-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--console-border);
+}
+
+.semantic-review-candidate--compact {
+  border: 0;
+  border-radius: 0;
+}
+
+.semantic-review-candidate--compact + .semantic-review-candidate--compact {
+  border-left: 1px solid var(--console-border);
+}
+
+.semantic-review-candidate--compact > header {
+  border-bottom: 0;
+}
+
+.semantic-review-comparison-section,
+.semantic-review-decision {
+  margin-top: 0;
+}
+
+.semantic-review-diff-row {
+  grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  font-size: var(--console-text-xs);
+}
+
+.semantic-review-preview-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--console-space-5);
+  background: rgb(5 8 14 / 78%);
+  backdrop-filter: blur(8px);
+}
+
+.semantic-review-preview {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1120px, 96vw);
+  height: min(860px, 92vh);
+  overflow: hidden;
+  border: 1px solid var(--console-border-strong);
+  border-radius: var(--console-radius-lg);
+  background: var(--console-bg-raised);
+  box-shadow: var(--console-shadow-xl);
+}
+
+.semantic-review-preview > header {
+  align-items: center;
+  padding: var(--console-space-3) var(--console-space-4);
+  border-bottom: 1px solid var(--console-border);
+}
+
+.semantic-review-preview iframe,
+.semantic-review-preview img {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+  background: #e8e8e8;
+}
+
+@media (max-width: 1280px) {
+  .semantic-review-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .semantic-review-review-body {
+    padding: var(--console-space-3);
+  }
+
+  .semantic-review-message-header,
+  .semantic-review-field-table > div,
+  .semantic-review-agreement-slots {
+    grid-template-columns: 1fr;
+  }
+
+  .semantic-review-candidate--compact + .semantic-review-candidate--compact {
+    border-top: 1px solid var(--console-border);
+    border-left: 0;
+  }
+
+  .semantic-review-history header,
+  .semantic-review-source-header,
+  .semantic-review-section-title {
+    flex-direction: column;
+  }
+
+  .semantic-review-attachment {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .semantic-review-attachment-action {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .semantic-review-document-preview > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .semantic-review-document-actions {
+    width: 100%;
+  }
+
+  .semantic-review-document-actions .console-btn {
+    flex: 1;
+  }
+}

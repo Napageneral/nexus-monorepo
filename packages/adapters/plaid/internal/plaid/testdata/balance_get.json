@@ -1,0 +1,20 @@
+{
+  "accounts": [
+    {
+      "account_id": "account-amex-synthetic",
+      "balances": {
+        "available": null,
+        "current": 70000.1,
+        "limit": 100000.001,
+        "iso_currency_code": "USD",
+        "unofficial_currency_code": null
+      },
+      "mask": "1000",
+      "name": "Business Gold",
+      "official_name": "Synthetic Business Gold Card",
+      "subtype": "credit card",
+      "type": "credit"
+    }
+  ],
+  "request_id": "req-balance-synthetic"
+}

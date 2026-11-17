@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,18 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	if record.Routing.ContainerID != "order" {
 		t.Fatalf("unexpected container id: %q", record.Routing.ContainerID)
 	}
+	if record.Payload.ExternalRecordID != "order:101" {
+		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
+	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.order" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
+	}
+	if record.Routing.ProviderAccountRef == nil || *record.Routing.ProviderAccountRef != "moonsleepco.myshopify.com" {
+		t.Fatalf("provider_account_ref: %#v", record.Routing.ProviderAccountRef)
+	}
+	if record.Payload.ProviderVersionRef != nil {
+		t.Fatalf("provider_version_ref must not reuse snapshot fingerprint: %#v", record.Payload.ProviderVersionRef)
+	}
 
 	metadata := record.Payload.Metadata
 	if metadata["family"] != "order" {
@@ -73,6 +86,83 @@ func TestBuildOrderRecordPreservesBridgeAttributes(t *testing.T) {
 	}
 	if bridge["utm_source"] != "google" {
 		t.Fatalf("unexpected utm_source: %#v", bridge["utm_source"])
+	}
+}
+
+func TestBuildOrderRecordUsesUpdatedAtForRevisionFreshness(t *testing.T) {
+	record := buildOrderRecord(
+		&shopifyState{
+			ConnectionID: "shopify-primary",
+			ShopDomain:   "moonsleepco.myshopify.com",
+		},
+		shopifyOrder{
+			ID:          101,
+			Name:        "#101",
+			CreatedAt:   "2026-07-30T21:30:49-05:00",
+			ProcessedAt: "2026-07-30T21:30:44-05:00",
+			UpdatedAt:   "2026-09-01T13:04:08-05:00",
+		},
+		shopifySourceRequest{},
+	)
+
+	want := time.Date(2026, time.September, 1, 18, 4, 8, 0, time.UTC).UnixMilli()
+	if record.Payload.Timestamp != want {
+		t.Fatalf("order timestamp=%d want updated_at=%d", record.Payload.Timestamp, want)
+	}
+}
+
+func TestShopifySnapshotFingerprintStoreRoundTrip(t *testing.T) {
+	t.Setenv(shopifyAdapterStateDirEnv, t.TempDir())
+	store, err := openShopifySnapshotFingerprintStore("shopify-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.close() })
+	duplicate, err := store.isDuplicate("order", "moonsleep:101", "fingerprint-1")
+	if err != nil || duplicate {
+		t.Fatalf("initial duplicate=%t err=%v", duplicate, err)
+	}
+	if err := store.put("order", "moonsleep:101", "fingerprint-1"); err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err = store.isDuplicate("order", "moonsleep:101", "fingerprint-1")
+	if err != nil || !duplicate {
+		t.Fatalf("stored duplicate=%t err=%v", duplicate, err)
+	}
+	duplicate, err = store.isDuplicate("order", "moonsleep:101", "fingerprint-2")
+	if err != nil || duplicate {
+		t.Fatalf("changed duplicate=%t err=%v", duplicate, err)
+	}
+}
+
+func TestShopifySnapshotFingerprintStoreMigratesLegacyCheckpoint(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv(shopifyAdapterStateDirEnv, stateDir)
+	dbPath := filepath.Join(stateDir, "shopify", "shopify-primary", "monitor-revisions.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE monitor_revisions (family TEXT NOT NULL, logical_row_id TEXT NOT NULL, revision_hash TEXT NOT NULL, updated_ts INTEGER NOT NULL, PRIMARY KEY (family, logical_row_id))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO monitor_revisions VALUES ('order', 'moonsleep:101', 'legacy-fingerprint', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openShopifySnapshotFingerprintStore("shopify-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.close() })
+	duplicate, err := store.isDuplicate("order", "moonsleep:101", "legacy-fingerprint")
+	if err != nil || !duplicate {
+		t.Fatalf("migrated duplicate=%t err=%v", duplicate, err)
 	}
 }
 
@@ -109,8 +199,11 @@ func TestBuildLineItemRecord(t *testing.T) {
 	if record.Routing.Adapter != platformID {
 		t.Fatalf("unexpected adapter id: %q", record.Routing.Adapter)
 	}
-	if !strings.Contains(record.Payload.ExternalRecordID, ":line_item:101:501:") {
+	if record.Payload.ExternalRecordID != "line_item:101:501" {
 		t.Fatalf("unexpected external record id: %q", record.Payload.ExternalRecordID)
+	}
+	if record.Payload.SourceRecordType == nil || *record.Payload.SourceRecordType != "shopify.line_item" {
+		t.Fatalf("source_record_type: %#v", record.Payload.SourceRecordType)
 	}
 }
 
@@ -124,21 +217,31 @@ func TestParseLinkHeader(t *testing.T) {
 	}
 }
 
-func TestHealthUsesShopifyShopEndpoint(t *testing.T) {
+func TestHealthUsesMinimalShopifyGraphQLIdentity(t *testing.T) {
 	t.Cleanup(resetShopifyGlobals)
+	t.Setenv(nexadapterStateDirEnvName, t.TempDir())
 
+	var capturedQuery string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/admin/oauth/access_token":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"access_token":"shopify-token"}`))
-		case "/admin/api/2026-01/shop.json":
+			_, _ = w.Write([]byte(`{"access_token":"shopify-token","expires_in":86399}`))
+		case "/admin/api/2026-01/graphql.json":
 			if got := r.Header.Get("X-Shopify-Access-Token"); got != "shopify-token" {
 				http.Error(w, "missing token", http.StatusUnauthorized)
 				return
 			}
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			capturedQuery = payload.Query
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"shop":{"id":123,"name":"MoonSleep","email":"ops@moonsleep.co","domain":"moonsleep.co","myshopify_domain":"moonsleepco.myshopify.com","primary_domain":{"host":"moonsleep.co"}}}`))
+			_, _ = w.Write([]byte(`{"data":{"shop":{"id":"gid://shopify/Shop/123"}}}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -157,12 +260,33 @@ func TestHealthUsesShopifyShopEndpoint(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	shop, err := fetchShopInfo(ctx, state)
+	trace := newShopifyHealthTrace()
+	shopID, err := fetchShopHealthIdentity(withShopifyHealthTrace(ctx, trace), state)
 	if err != nil {
-		t.Fatalf("fetchShopInfo: %v", err)
+		t.Fatalf("fetchShopHealthIdentity: %v", err)
 	}
-	if shop.ID != 123 || shop.Name != "MoonSleep" {
-		t.Fatalf("unexpected shop: %#v", shop)
+	if shopID != "gid://shopify/Shop/123" {
+		t.Fatalf("unexpected shop id: %q", shopID)
+	}
+	if strings.TrimSpace(capturedQuery) != "query NexAdapterHealth { shop { id } }" {
+		t.Fatalf("unexpected health query: %q", capturedQuery)
+	}
+	latency, tokenSource := trace.snapshot()
+	for _, phase := range []string{
+		"token",
+		"governor_state",
+		"governor_slot_wait",
+		"governor_reservation_wait",
+		"http_headers",
+		"body_read_decode",
+		"provider_verification_total",
+	} {
+		if _, ok := latency[phase]; !ok {
+			t.Fatalf("missing health latency phase %q: %#v", phase, latency)
+		}
+	}
+	if tokenSource != "oauth_exchange" {
+		t.Fatalf("unexpected token source: %q", tokenSource)
 	}
 }
 
