@@ -33,8 +33,10 @@ const (
 // reached Nex (W1-X89). The monitor reads the list again back to the transactions it last read as open:
 //   - a run's first poll reads the whole open-transaction window;
 //   - while a transaction created in the last week is open, once an hour back to the oldest such one;
-//   - while an older one is open, once a day back to the oldest open one (a read back weeks holds every row since,
-//     in a receipt that is kept, so it comes once a day).
+//   - while an older one is open, every 12 hours back to the oldest open one (a read back weeks holds every row since,
+//     in a receipt that is kept, so it is not hourly). It must stay well inside the 24-hour replay: a run that ends
+//     before its next such read leaves a posting to the next run's first poll, which records only what posted within
+//     its replay.
 //
 // A read reaches back one margin before the open transaction's creation. A transaction still open at the window's
 // edge is no longer read again, and the log says so as an error.
@@ -42,7 +44,7 @@ const (
 	mercuryMonitorOpenTransactionWindow       = 45 * 24 * time.Hour
 	mercuryMonitorRecentOpenTransactionWindow = 7 * 24 * time.Hour
 	mercuryMonitorOpenTransactionReread       = time.Hour
-	mercuryMonitorOldOpenTransactionReread    = 24 * time.Hour
+	mercuryMonitorOldOpenTransactionReread    = 12 * time.Hour
 	mercuryMonitorOpenTransactionMargin       = time.Minute
 )
 
@@ -321,7 +323,7 @@ func (reads *mercuryTransactionReads) fetch(
 			}
 			if createdAt.Before(transactionsSince) {
 				// A full read begins at the oldest open transaction, so one it leaves out is past the window's edge. A
-				// read of the last week leaves the older ones to the daily read.
+				// read of the last week leaves the older ones to the 12-hourly read.
 				if full {
 					delete(reads.open, id)
 					delete(reads.missing, id)
