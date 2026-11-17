@@ -437,11 +437,13 @@ func TestPrimaryProjectionFetchesAllCanonicalReadFamilies(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// A bounded window keeps the statement read to one three-month window whatever today's date: open-ended, it read up
+	// to the clock, which made a second window after 2026-10-20 and failed this test.
 	records, cursor, err := fetchMercuryProjection(
 		context.Background(),
 		testMercuryClient(server, rolePrimaryRead),
 		time.Date(2026, 7, 21, 0, 0, 0, 0, time.UTC),
-		time.Time{},
+		time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC),
 	)
 	if err != nil {
 		t.Fatal(err)
