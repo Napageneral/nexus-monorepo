@@ -247,28 +247,38 @@ func TestMonitorRecordsAnOpenTransactionAgainOnlyWhenItChanges(t *testing.T) {
 	}
 }
 
-// An open transaction older than a week is read again once a day, not every hour (a read back weeks holds every row
-// since in a receipt that is kept), and its posting is recorded at that read.
-func TestMonitorReadsAnOldOpenTransactionOnceADay(t *testing.T) {
+// An open transaction older than a week is read again every 12 hours, not every hour (a read back weeks holds every row
+// since in a receipt that is kept), and its posting is recorded at that read. The bounded Fable re-read of 533cb5279:
+// at 24 hours, a posting 10 minutes after a run's first poll was lost when that run ended just before its daily read
+// and the next run's 24-hour replay began after the posting.
+func TestMonitorReadsAnOldOpenTransactionEveryTwelveHours(t *testing.T) {
 	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	mercury := newTransactionsMercury(t)
 	created := now.Add(-10 * 24 * time.Hour)
 	mercury.set(mercuryTransactionRowAt("txn_hold", created, "pending", time.Time{}))
 	reads := newMercuryTransactionReads()
 	pollTransactions(t, reads, mercury, now.Add(-mercuryMonitorReplayWindow), now)
-	mercury.set(mercuryTransactionRowAt("txn_hold", created, "sent", now.Add(2*time.Hour)))
+	mercury.set(mercuryTransactionRowAt("txn_hold", created, "sent", now.Add(10*time.Minute)))
 	if got := pollTransactions(t, reads, mercury, now.Add(3*time.Hour), now.Add(3*time.Hour+5*time.Minute)); len(got) != 0 {
 		t.Fatalf("an hourly poll reached the week-old row: %v", got)
 	}
 	if got, want := mercury.lastStart(), now.Add(3*time.Hour).Format(time.RFC3339); got != want {
 		t.Fatalf("hourly poll start = %q, want the cursor %q", got, want)
 	}
-	day := now.Add(24*time.Hour + 5*time.Minute)
-	if got := pollTransactions(t, reads, mercury, day.Add(-5*time.Minute), day); !reflect.DeepEqual(got, []string{"txn_hold sent"}) {
-		t.Fatalf("the daily read recorded %v", got)
+	read := now.Add(12*time.Hour + 5*time.Minute)
+	if got := pollTransactions(t, reads, mercury, read.Add(-5*time.Minute), read); !reflect.DeepEqual(got, []string{"txn_hold sent"}) {
+		t.Fatalf("the 12-hourly read recorded %v", got)
 	}
 	if got, want := mercury.lastStart(), created.Add(-mercuryMonitorOpenTransactionMargin).Format(time.RFC3339); got != want {
-		t.Fatalf("daily read start = %q, want %q", got, want)
+		t.Fatalf("12-hourly read start = %q, want %q", got, want)
+	}
+}
+
+// The read back to old open rows must come well inside the replay a run's first poll reads: a run that ends before its
+// next such read leaves a posting to the next run, which records it only when it posted within the replay.
+func TestMonitorReadsOldOpenRowsWellInsideTheReplay(t *testing.T) {
+	if 2*mercuryMonitorOldOpenTransactionReread > mercuryMonitorReplayWindow {
+		t.Fatalf("old open rows are read every %s, more than half the %s replay", mercuryMonitorOldOpenTransactionReread, mercuryMonitorReplayWindow)
 	}
 }
 

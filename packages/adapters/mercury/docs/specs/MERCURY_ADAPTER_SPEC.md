@@ -89,7 +89,7 @@ transaction again until its status is final (sent, cancelled, failed or
 reversed). A run's first poll reads the transactions of the last 45 days. While
 a transaction created in the last week is open, the read reaches back to the
 oldest such one once an hour; while an older one is open, back to the oldest
-open one once a day. Within a run a transaction row is recorded only when it is
+open one every 12 hours (well inside the 24-hour replay a restart reads). Within a run a transaction row is recorded only when it is
 new to the run or Mercury changed it (its attachments' signed URLs left out),
 never again unchanged. At a run's first poll a transaction created before the
 24-hour replay is recorded only when it may have changed after an earlier run
