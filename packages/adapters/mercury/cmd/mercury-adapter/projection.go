@@ -30,12 +30,20 @@ const (
 
 // Mercury filters its transaction list by creation time, and the poll cursor moves to each capture's time, so a
 // transaction still open (pending) when the cursor passed its creation was never read again and its posting never
-// reached Nex (W1-X89). The monitor reads the list again from the creation time of the oldest transaction it last
-// read as open: at a run's first poll, back to the open-transaction window, and then at most once each re-read
-// interval while one is open. A transaction still open after the window is no longer read again, and is said once.
+// reached Nex (W1-X89). The monitor reads the list again back to the transactions it last read as open:
+//   - a run's first poll reads the whole open-transaction window;
+//   - while a transaction created in the last week is open, once an hour back to the oldest such one;
+//   - while an older one is open, once a day back to the oldest open one (a read back weeks holds every row since,
+//     in a receipt that is kept, so it comes once a day).
+//
+// A read reaches back one margin before the open transaction's creation. A transaction still open at the window's
+// edge is no longer read again, and the log says so as an error.
 const (
-	mercuryMonitorOpenTransactionWindow = 45 * 24 * time.Hour
-	mercuryMonitorOpenTransactionReread = time.Hour
+	mercuryMonitorOpenTransactionWindow       = 45 * 24 * time.Hour
+	mercuryMonitorRecentOpenTransactionWindow = 7 * 24 * time.Hour
+	mercuryMonitorOpenTransactionReread       = time.Hour
+	mercuryMonitorOldOpenTransactionReread    = 24 * time.Hour
+	mercuryMonitorOpenTransactionMargin       = time.Minute
 )
 
 type mercuryProjectionSource struct {
@@ -193,18 +201,30 @@ type mercuryTransactionRow struct {
 type mercuryTransactionReads struct {
 	open     map[string]time.Time // transaction id -> its creation time, for each transaction last read as open
 	digests  map[string]string    // transaction id -> its change digest when this run last read it
+	missing  map[string]bool      // open transaction ids a read that should have returned them did not (said once)
 	started  bool                 // this run's first read has succeeded
-	rereadAt time.Time            // when the read last reached back to the oldest open transaction
+	rereadAt time.Time            // when a read last reached back to the last week's open transactions
+	fullAt   time.Time            // when a read last reached back to every open transaction
 }
 
 func newMercuryTransactionReads() *mercuryTransactionReads {
-	return &mercuryTransactionReads{open: map[string]time.Time{}, digests: map[string]string{}}
+	return &mercuryTransactionReads{
+		open:    map[string]time.Time{},
+		digests: map[string]string{},
+		missing: map[string]bool{},
+	}
 }
 
-// fetch is one poll. Its transaction read starts at the poll cursor, as before, except at the run's first poll, which
-// reaches back over the open-transaction window, and once each re-read interval while a transaction is open, when it
-// reaches back to the oldest open one. Memory changes only when the whole fetch succeeds, so a failed fetch is read again
-// whole at the next poll.
+// mercuryFinalSince reports whether a final transaction reached its final status at or after the cursor, by the time
+// field that marks it (postedAt, failedAt); a missing time counts as after, so such a row is recorded.
+func mercuryFinalSince(object map[string]any, field string, since time.Time) bool {
+	at := providerTimestamp(object, []string{field}, time.Time{})
+	return at.IsZero() || !at.Before(since)
+}
+
+// fetch is one poll. Its transaction read starts at the poll cursor, as before, except when it reaches back to the open
+// transactions (the open-transaction constants say when). Memory changes only when the whole fetch succeeds, so a
+// failed fetch is read again whole at the next poll.
 func (reads *mercuryTransactionReads) fetch(
 	ctx context.Context,
 	client *mercuryClient,
@@ -212,24 +232,34 @@ func (reads *mercuryTransactionReads) fetch(
 	now time.Time,
 ) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	floor := now.Add(-mercuryMonitorOpenTransactionWindow)
-	reread := !reads.started || (len(reads.open) > 0 && now.Sub(reads.rereadAt) >= mercuryMonitorOpenTransactionReread)
+	recentEdge := now.Add(-mercuryMonitorRecentOpenTransactionWindow)
+	var oldestOpen, oldestRecentOpen time.Time
+	for _, createdAt := range reads.open {
+		if oldestOpen.IsZero() || createdAt.Before(oldestOpen) {
+			oldestOpen = createdAt
+		}
+		if !createdAt.Before(recentEdge) && (oldestRecentOpen.IsZero() || createdAt.Before(oldestRecentOpen)) {
+			oldestRecentOpen = createdAt
+		}
+	}
+	full := !reads.started ||
+		(!oldestOpen.IsZero() && oldestOpen.Before(recentEdge) &&
+			now.Sub(reads.fullAt) >= mercuryMonitorOldOpenTransactionReread)
+	recent := !full && !oldestRecentOpen.IsZero() && now.Sub(reads.rereadAt) >= mercuryMonitorOpenTransactionReread
 	transactionsSince := since
-	if reread {
-		from := floor
-		if reads.started {
-			from = now
-			for _, createdAt := range reads.open {
-				if createdAt.Before(from) {
-					from = createdAt
-				}
-			}
-			if from.Before(floor) {
-				from = floor
-			}
-		}
-		if from.Before(transactionsSince) {
-			transactionsSince = from
-		}
+	switch {
+	case full && !reads.started:
+		transactionsSince = floor
+	case full:
+		transactionsSince = oldestOpen.Add(-mercuryMonitorOpenTransactionMargin)
+	case recent:
+		transactionsSince = oldestRecentOpen.Add(-mercuryMonitorOpenTransactionMargin)
+	}
+	if transactionsSince.Before(floor) {
+		transactionsSince = floor
+	}
+	if transactionsSince.After(since) {
+		transactionsSince = since
 	}
 	firstRead := !reads.started
 	seen := map[string]mercuryTransactionRow{}
@@ -252,13 +282,23 @@ func (reads *mercuryTransactionReads) fetch(
 		if previous, known := reads.digests[id]; known {
 			return previous != digest, nil
 		}
-		if !firstRead || !row.createdAt.Before(since) || row.open || status != "sent" {
+		if !firstRead || !row.createdAt.Before(since) {
 			return true, nil
 		}
-		// The run's first read reaches back over the window: a transaction created before the cursor and posted before it
-		// was read by an earlier run (or is the backfill's to catch up), so it is not recorded again.
-		postedAt := providerTimestamp(object, []string{"postedAt"}, time.Time{})
-		return !postedAt.IsZero() && !postedAt.Before(since), nil
+		// The run's first poll reads back over the window. A transaction created before the cursor is recorded only when
+		// it may have changed after an earlier run read it: posted or failed at or after the cursor (or with no such
+		// time), or cancelled or reversed, which carry no time to judge by. An open one is remembered, and recorded
+		// when it changes.
+		switch status {
+		case "sent":
+			return mercuryFinalSince(object, "postedAt", since), nil
+		case "failed":
+			return mercuryFinalSince(object, "failedAt", since), nil
+		case "cancelled", "reversed":
+			return true, nil
+		default:
+			return false, nil
+		}
 	}
 	records, capturedAt, err := fetchMercuryProjectionReading(ctx, client, since, time.Time{}, transactionsSince, keep)
 	if err != nil {
@@ -270,26 +310,50 @@ func (reads *mercuryTransactionReads) fetch(
 			reads.open[id] = row.createdAt
 		} else {
 			delete(reads.open, id)
+			delete(reads.missing, id)
 		}
 	}
-	if reread && client != nil && client.role == rolePrimaryRead {
-		// The read covered every transaction created since it began: an open one it did not return began before the
-		// window (or is gone) and is no longer read again; the rest of the memory is what the window holds.
+	if (full || recent) && client != nil && client.role == rolePrimaryRead {
 		for id, createdAt := range reads.open {
-			if _, returned := seen[id]; !returned {
-				delete(reads.open, id)
-				nexadapter.LogInfo(
-					"Mercury transaction %s, open since %s, is older than the %d-day window and is no longer read again",
+			if _, returned := seen[id]; returned {
+				delete(reads.missing, id)
+				continue
+			}
+			if createdAt.Before(transactionsSince) {
+				// A full read begins at the oldest open transaction, so one it leaves out is past the window's edge. A
+				// read of the last week leaves the older ones to the daily read.
+				if full {
+					delete(reads.open, id)
+					delete(reads.missing, id)
+					nexadapter.LogError(
+						"Mercury transaction %s, open since %s, is past the %d-day window and is no longer read again: a later change of it reaches Nex only by a backfill",
+						id,
+						createdAt.Format(time.RFC3339),
+						int(mercuryMonitorOpenTransactionWindow/(24*time.Hour)),
+					)
+				}
+				continue
+			}
+			if !reads.missing[id] {
+				reads.missing[id] = true
+				nexadapter.LogError(
+					"Mercury transaction %s, open since %s, was not returned by a read that began at %s; it stays open and is read again",
 					id,
 					createdAt.Format(time.RFC3339),
-					int(mercuryMonitorOpenTransactionWindow/(24*time.Hour)),
+					transactionsSince.Format(time.RFC3339),
 				)
 			}
 		}
-		for id := range reads.digests {
-			if _, returned := seen[id]; !returned {
-				delete(reads.digests, id)
+		if full {
+			// The memory keeps what this read returned and what is still open; the rest is behind the window.
+			for id := range reads.digests {
+				_, returned := seen[id]
+				_, open := reads.open[id]
+				if !returned && !open {
+					delete(reads.digests, id)
+				}
 			}
+			reads.fullAt = now
 		}
 		reads.rereadAt = now
 	}
