@@ -67,15 +67,16 @@ type OleEntry = {
 const OLE_FREE = 0xffffffff;
 
 /** A minimal OLE2 compound file: header, one FAT sector, then the directory chain. */
-function oleCompoundFile(entries: OleEntry[]): Buffer {
-  const sectorSize = 512;
-  const directorySectors = Math.max(1, Math.ceil(entries.length / 4));
+function oleCompoundFile(entries: OleEntry[], sectorShift: 9 | 12 = 9): Buffer {
+  const sectorSize = 1 << sectorShift;
+  const entriesPerSector = sectorSize / 128;
+  const directorySectors = Math.max(1, Math.ceil(entries.length / entriesPerSector));
   const header = Buffer.alloc(sectorSize);
   Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(header, 0);
   header.writeUInt16LE(0x003e, 24);
   header.writeUInt16LE(0x0003, 26);
   header.writeUInt16LE(0xfffe, 28);
-  header.writeUInt16LE(9, 30);
+  header.writeUInt16LE(sectorShift, 30);
   header.writeUInt16LE(6, 32);
   header.writeUInt32LE(1, 44);
   header.writeUInt32LE(1, 48);
@@ -92,7 +93,7 @@ function oleCompoundFile(entries: OleEntry[]): Buffer {
   }
 
   const directory = Buffer.alloc(directorySectors * sectorSize);
-  for (let index = 0; index < directorySectors * 4; index += 1) {
+  for (let index = 0; index < directorySectors * entriesPerSector; index += 1) {
     const offset = index * 128;
     const entry = entries[index];
     directory.writeUInt32LE(entry?.left ?? OLE_FREE, offset + 68);
@@ -214,6 +215,19 @@ const FIXTURES = [
     expected: "application/vnd.ms-powerpoint",
   },
   {
+    // Version 4 compound files use 4096-byte sectors; the header fills the first one.
+    name: "legacy XLS with 4096-byte sectors",
+    bytes: oleCompoundFile(
+      [
+        { name: "Root Entry", type: 5, child: 1 },
+        { name: "Workbook", type: 2 },
+      ],
+      12,
+    ),
+    provider: "application/octet-stream",
+    expected: "application/vnd.ms-excel",
+  },
+  {
     name: "other compound file",
     bytes: oleCompoundFile([
       { name: "Root Entry", type: 5, child: 1 },
@@ -307,6 +321,9 @@ test("a damaged compound file is still a compound file and never loops", () => {
     { name: "Root Entry", type: 5, child: 1 },
     { name: "Workbook", type: 2, left: 1 },
   ]);
+  // A DIFAT sector that names itself as the next one, full of zero entries.
+  const difatLoop = Buffer.concat([LEGACY_XLS.subarray(0, 512), Buffer.alloc(512 * 64)]);
+  difatLoop.writeUInt32LE(0, 68);
   const childOutOfRange = oleCompoundFile([{ name: "Root Entry", type: 5, child: 40 }]);
   const noRoot = oleCompoundFile([{ name: "Workbook", type: 2 }]);
   for (const bytes of [
@@ -316,6 +333,7 @@ test("a damaged compound file is still a compound file and never loops", () => {
     strangeSectorSize,
     directoryOutOfRange,
     directoryChainLoop,
+    difatLoop,
     siblingLoop,
     childOutOfRange,
     noRoot,
@@ -323,6 +341,37 @@ test("a damaged compound file is still a compound file and never loops", () => {
     assert.equal(detectAlibabaAttachmentMime(bytes), "application/x-ole-storage");
     assert.equal(normalizeAlibabaAttachmentMime(bytes, "application/octet-stream"), "application/x-ole-storage");
   }
+});
+
+// The file that stopped MoonSleep's capture on 2026-11-17. It is supplier
+// evidence and is not in this repository; point the variable at a copy.
+const REAL_LEGACY_XLS_SHA256 = "18ac0442a36290afcd9b42c110d720d556aece80218c11c2dc98b74ed95bde44";
+const realLegacyXlsPath = process.env.NEXUS_ALIBABA_REAL_LEGACY_XLS;
+
+test(
+  "the real legacy .xls that stopped the capture types as Excel",
+  { skip: !realLegacyXlsPath },
+  () => {
+    assert.ok(realLegacyXlsPath);
+    const bytes = readFileSync(realLegacyXlsPath);
+    assert.equal(bytes.length, 120_320);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), REAL_LEGACY_XLS_SHA256);
+    assert.equal(detectAlibabaAttachmentMime(bytes), "application/vnd.ms-excel");
+    assert.equal(
+      normalizeAlibabaAttachmentMime(bytes, "application/octet-stream"),
+      "application/vnd.ms-excel",
+    );
+  },
+);
+
+test("a crafted DIFAT loop cannot claim memory beyond the file's own size", () => {
+  // 32 MiB of zeros behind a compound-file header: DIFAT sector 0 lists FAT
+  // sector 0 127 times and names itself as the next DIFAT sector.
+  const bytes = Buffer.concat([LEGACY_XLS.subarray(0, 512), Buffer.alloc(32 * 1024 * 1024)]);
+  bytes.writeUInt32LE(0, 68);
+  const before = process.memoryUsage().heapUsed;
+  assert.equal(detectAlibabaAttachmentMime(bytes), "application/x-ole-storage");
+  assert.ok(process.memoryUsage().heapUsed - before < 16 * 1024 * 1024);
 });
 
 type CorpusEntry = {

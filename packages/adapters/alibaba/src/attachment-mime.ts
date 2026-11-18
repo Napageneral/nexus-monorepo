@@ -138,21 +138,28 @@ function readOleRootEntryNames(bytes: Buffer): Set<string> | undefined {
   // The first 109 FAT sector ids sit in the header; more follow in DIFAT sectors.
   // Unused slots (FREESECT) only ever trail the used ones, so the list stays
   // positional: fatSectors[n] holds the ids of sectors n * idsPerSector onward.
+  // A FAT sector past maxFatSectors could only describe sectors beyond the end
+  // of the file, so the list (and the memory a crafted DIFAT loop can claim)
+  // is bounded by the file's own size.
+  const maxFatSectors = Math.ceil(sectorCount / idsPerSector);
   const fatSectors: number[] = [];
-  for (let index = 0; index < 109; index += 1) {
+  for (let index = 0; index < 109 && fatSectors.length < maxFatSectors; index += 1) {
     const sector = bytes.readUInt32LE(76 + index * 4);
     if (sector > OLE_MAX_REGULAR_SECTOR) break;
     fatSectors.push(sector);
   }
   let difatSector = bytes.readUInt32LE(68);
-  for (let hops = 0; difatSector <= OLE_MAX_REGULAR_SECTOR; hops += 1) {
+  while (difatSector <= OLE_MAX_REGULAR_SECTOR && fatSectors.length < maxFatSectors) {
     const offset = sectorOffset(difatSector);
-    if (offset === undefined || hops > sectorCount) return undefined;
-    for (let index = 0; index < idsPerSector - 1; index += 1) {
+    if (offset === undefined) return undefined;
+    // Every pass adds at least one FAT sector or ends the walk, so it terminates.
+    const before = fatSectors.length;
+    for (let index = 0; index < idsPerSector - 1 && fatSectors.length < maxFatSectors; index += 1) {
       const sector = bytes.readUInt32LE(offset + index * 4);
       if (sector > OLE_MAX_REGULAR_SECTOR) break;
       fatSectors.push(sector);
     }
+    if (fatSectors.length === before) break;
     difatSector = bytes.readUInt32LE(offset + sectorSize - 4);
   }
   const nextSector = (sector: number): number | undefined => {
