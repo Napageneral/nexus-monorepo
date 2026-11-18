@@ -570,6 +570,106 @@ test("attachment custody fails on byte-count or digest but ignores misleading pr
   assert.equal(record.payload.attachments?.[0]?.mime_type, "application/pdf");
 });
 
+/** A minimal legacy Excel file: an OLE2 compound file whose root storage holds a Workbook stream. */
+function legacyXlsBytes(): Buffer {
+  const header = Buffer.alloc(512);
+  Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(header, 0);
+  header.writeUInt16LE(0xfffe, 28);
+  header.writeUInt16LE(9, 30);
+  header.writeUInt32LE(1, 44);
+  header.writeUInt32LE(1, 48);
+  header.writeUInt32LE(0xfffffffe, 68);
+  header.fill(0xff, 76);
+  header.writeUInt32LE(0, 76);
+  const fat = Buffer.alloc(512, 0xff);
+  fat.writeUInt32LE(0xfffffffd, 0);
+  fat.writeUInt32LE(0xfffffffe, 4);
+  const directory = Buffer.alloc(512);
+  for (const [index, name, type, child] of [
+    [0, "Root Entry", 5, 1],
+    [1, "Workbook", 2, 0xffffffff],
+  ] as const) {
+    const offset = index * 128;
+    const nameBytes = Buffer.from(`${name}\u0000`, "utf16le");
+    nameBytes.copy(directory, offset);
+    directory.writeUInt16LE(nameBytes.length, offset + 64);
+    directory.writeUInt8(type, offset + 66);
+    directory.writeUInt32LE(0xffffffff, offset + 68);
+    directory.writeUInt32LE(0xffffffff, offset + 72);
+    directory.writeUInt32LE(child, offset + 76);
+  }
+  for (const offset of [256, 384]) directory.fill(0xff, offset + 68, offset + 80);
+  return Buffer.concat([header, fat, directory]);
+}
+
+// Replays the attachment row that stopped MoonSleep's capture on 2026-11-17:
+// the capture sealed a legacy .xls in its opaque custody class (provider type
+// application/octet-stream, status downloaded) and every backfill then failed
+// on "unsupported sealed byte signature".
+function resealAttachment(
+  attachment: ReturnType<typeof __test__.loadSnapshot>["attachments"][number],
+  path: string,
+  fileName: string,
+  bytes: Buffer,
+): void {
+  writeFileSync(path, bytes);
+  attachment.fileName = fileName;
+  attachment.category = "document";
+  attachment.contentType = "application/octet-stream";
+  attachment.status = "downloaded";
+  attachment.bytes = bytes.length;
+  attachment.contentHash = createHash("sha256").update(bytes).digest("hex");
+  attachment.provider_object_json = JSON.stringify({
+    cid: attachment.cid,
+    contentFormat: "opaque",
+    contentHash: attachment.contentHash,
+    fileName,
+    messageId: attachment.messageId,
+  });
+  attachment.provider_object_sha256 = createHash("sha256")
+    .update(attachment.provider_object_json)
+    .digest("hex");
+}
+
+test("a sealed legacy .xls in opaque custody is emitted as evidence and the window completes", () => {
+  const { root, attachmentPath } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  const bytes = legacyXlsBytes();
+  resealAttachment(attachment, attachmentPath, "292ad677ddabe591-ChAFTA-information-collection-form.xls", bytes);
+
+  const record = __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba");
+  const emitted = record.payload.attachments?.[0];
+  assert.equal(emitted?.mime_type, "application/vnd.ms-excel");
+  assert.equal(emitted?.filename, "292ad677ddabe591-ChAFTA-information-collection-form.xls");
+  assert.equal(emitted?.size, bytes.length);
+  assert.equal(emitted?.content_hash, attachment.contentHash);
+  AdapterInboundRecordSchema.parse(record);
+
+  const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
+  assert.equal(rows.length, snapshot.messages.length + snapshot.attachments.length);
+});
+
+test("a sealed file of no known type is emitted as opaque bytes; custody checks still fail closed", () => {
+  const { root, attachmentPath } = fixture();
+  const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));
+  const attachment = snapshot.attachments[0]!;
+  const bytes = Buffer.from("a supplier file in a format nobody has profiled yet");
+  resealAttachment(attachment, attachmentPath, "drawing.dwg", bytes);
+
+  const record = __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba");
+  assert.equal(record.payload.attachments?.[0]?.mime_type, "application/octet-stream");
+  assert.equal(record.payload.attachments?.[0]?.content_hash, attachment.contentHash);
+  const rows = __test__.recordsForWindow(snapshot, config(root), "conn-alibaba", 0);
+  assert.equal(rows.length, snapshot.messages.length + snapshot.attachments.length);
+
+  attachment.contentHash = "f".repeat(64);
+  assert.throws(
+    () => __test__.buildAttachmentRecord(attachment, snapshot, config(root), "conn-alibaba"),
+    /attachment digest mismatch/,
+  );
+});
+
 test("capture-level provenance cannot change immutable message identity or payload", () => {
   const { root } = fixture();
   const snapshot = __test__.loadSnapshot(__test__.latestSnapshot(root));

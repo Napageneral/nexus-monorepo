@@ -55,6 +55,65 @@ function storedZip(entryNames: string[]): Buffer {
   return Buffer.concat([...localParts, centralDirectory, eocd]);
 }
 
+type OleEntry = {
+  name: string;
+  /** 1 storage, 2 stream, 5 root. */
+  type: 1 | 2 | 5;
+  left?: number;
+  right?: number;
+  child?: number;
+};
+
+const OLE_FREE = 0xffffffff;
+
+/** A minimal OLE2 compound file: header, one FAT sector, then the directory chain. */
+function oleCompoundFile(entries: OleEntry[], sectorShift: 9 | 12 = 9): Buffer {
+  const sectorSize = 1 << sectorShift;
+  const entriesPerSector = sectorSize / 128;
+  const directorySectors = Math.max(1, Math.ceil(entries.length / entriesPerSector));
+  const header = Buffer.alloc(sectorSize);
+  Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]).copy(header, 0);
+  header.writeUInt16LE(0x003e, 24);
+  header.writeUInt16LE(0x0003, 26);
+  header.writeUInt16LE(0xfffe, 28);
+  header.writeUInt16LE(sectorShift, 30);
+  header.writeUInt16LE(6, 32);
+  header.writeUInt32LE(1, 44);
+  header.writeUInt32LE(1, 48);
+  header.writeUInt32LE(0x1000, 56);
+  header.writeUInt32LE(0xfffffffe, 60);
+  header.writeUInt32LE(0xfffffffe, 68);
+  header.fill(0xff, 76);
+  header.writeUInt32LE(0, 76);
+
+  const fat = Buffer.alloc(sectorSize, 0xff);
+  fat.writeUInt32LE(0xfffffffd, 0);
+  for (let sector = 1; sector <= directorySectors; sector += 1) {
+    fat.writeUInt32LE(sector === directorySectors ? 0xfffffffe : sector + 1, sector * 4);
+  }
+
+  const directory = Buffer.alloc(directorySectors * sectorSize);
+  for (let index = 0; index < directorySectors * entriesPerSector; index += 1) {
+    const offset = index * 128;
+    const entry = entries[index];
+    directory.writeUInt32LE(entry?.left ?? OLE_FREE, offset + 68);
+    directory.writeUInt32LE(entry?.right ?? OLE_FREE, offset + 72);
+    directory.writeUInt32LE(entry?.child ?? OLE_FREE, offset + 76);
+    if (!entry) continue;
+    const name = Buffer.from(`${entry.name}\u0000`, "utf16le");
+    name.copy(directory, offset);
+    directory.writeUInt16LE(name.length, offset + 64);
+    directory.writeUInt8(entry.type, offset + 66);
+  }
+  return Buffer.concat([header, fat, directory]);
+}
+
+const LEGACY_XLS = oleCompoundFile([
+  { name: "Root Entry", type: 5, child: 1 },
+  { name: "Workbook", type: 2, right: 2 },
+  { name: "\u0005SummaryInformation", type: 2 },
+]);
+
 const FIXTURES = [
   {
     name: "JPEG",
@@ -110,6 +169,73 @@ const FIXTURES = [
     provider: "application/octet-stream",
     expected: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   },
+  {
+    name: "GIF",
+    bytes: Buffer.from("GIF89a\u0001\u0000\u0001\u0000\u0000\u0000\u0000;", "latin1"),
+    provider: "image/gif",
+    expected: "image/gif",
+  },
+  {
+    name: "legacy XLS",
+    bytes: LEGACY_XLS,
+    provider: "application/octet-stream",
+    expected: "application/vnd.ms-excel",
+  },
+  {
+    name: "Excel 5 XLS",
+    bytes: oleCompoundFile([
+      { name: "Root Entry", type: 5, child: 1 },
+      { name: "Book", type: 2 },
+    ]),
+    provider: "application/vnd.ms-excel",
+    expected: "application/vnd.ms-excel",
+  },
+  {
+    // The Word stream sits in the second directory sector, reached through the
+    // FAT, and an embedded workbook below a storage must not rename the file.
+    name: "legacy DOC with an embedded workbook",
+    bytes: oleCompoundFile([
+      { name: "Root Entry", type: 5, child: 1 },
+      { name: "1Table", type: 2, left: 2, right: 5 },
+      { name: "ObjectPool", type: 1, child: 3 },
+      { name: "Workbook", type: 2 },
+      { name: "\u0005SummaryInformation", type: 2 },
+      { name: "WordDocument", type: 2 },
+    ]),
+    provider: "application/msword",
+    expected: "application/msword",
+  },
+  {
+    name: "legacy PPT",
+    bytes: oleCompoundFile([
+      { name: "Root Entry", type: 5, child: 1 },
+      { name: "PowerPoint Document", type: 2 },
+    ]),
+    provider: "application/octet-stream",
+    expected: "application/vnd.ms-powerpoint",
+  },
+  {
+    // Version 4 compound files use 4096-byte sectors; the header fills the first one.
+    name: "legacy XLS with 4096-byte sectors",
+    bytes: oleCompoundFile(
+      [
+        { name: "Root Entry", type: 5, child: 1 },
+        { name: "Workbook", type: 2 },
+      ],
+      12,
+    ),
+    provider: "application/octet-stream",
+    expected: "application/vnd.ms-excel",
+  },
+  {
+    name: "other compound file",
+    bytes: oleCompoundFile([
+      { name: "Root Entry", type: 5, child: 1 },
+      { name: "__properties_version1.0", type: 2 },
+    ]),
+    provider: "application/octet-stream",
+    expected: "application/x-ole-storage",
+  },
 ] as const;
 
 test("recognized attachment signatures deterministically normalize provider MIME", () => {
@@ -133,36 +259,119 @@ test("recognized attachment signatures deterministically normalize provider MIME
   }
 });
 
-test("misleading provider MIME cannot veto sealed bytes; malformed bytes fail closed", () => {
+test("misleading provider MIME cannot veto or rename sealed bytes", () => {
   assert.equal(
     normalizeAlibabaAttachmentMime(FIXTURES[0].bytes, "image/png"),
     "image/jpeg",
   );
-  assert.throws(
-    () => normalizeAlibabaAttachmentMime(Buffer.from("not an attachment"), "application/pdf"),
-    /unsupported sealed byte signature/,
+  assert.equal(
+    normalizeAlibabaAttachmentMime(Buffer.from("not an attachment"), "application/pdf"),
+    "application/octet-stream",
   );
+});
+
+test("a file the adapter cannot name is kept as opaque bytes, never refused", () => {
+  // The capture's own custody classes the adapter has no profile for: an
+  // opaque provider-bound file and validated UTF-8 text.
+  for (const bytes of [
+    Buffer.from("not an attachment"),
+    Buffer.from("sku,qty\nMS-1,2\n"),
+    Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00]),
+    storedZip(["mimetype", "content.xml"]),
+    Buffer.alloc(1),
+  ]) {
+    assert.equal(detectAlibabaAttachmentMime(bytes), undefined);
+    assert.equal(normalizeAlibabaAttachmentMime(bytes, "application/octet-stream"), "application/octet-stream");
+    assert.equal(normalizeAlibabaAttachmentMime(bytes, null), "application/octet-stream");
+  }
+});
+
+test("a recognized container the adapter cannot parse is kept as opaque bytes", () => {
   const truncatedOffice = FIXTURES[7].bytes.subarray(0, FIXTURES[7].bytes.length - 1);
-  assert.throws(
-    () => normalizeAlibabaAttachmentMime(truncatedOffice, "application/zip"),
-    /ZIP container is truncated/,
-  );
+  assert.throws(() => detectAlibabaAttachmentMime(truncatedOffice), /ZIP container is truncated/);
   const contradictoryOffice = Buffer.from(FIXTURES[7].bytes);
   contradictoryOffice[30] = "x".charCodeAt(0);
   assert.throws(
-    () => normalizeAlibabaAttachmentMime(contradictoryOffice, "application/zip"),
+    () => detectAlibabaAttachmentMime(contradictoryOffice),
     /local and central entry names disagree/,
   );
   const malformedMedia = Buffer.from(FIXTURES[5].bytes);
   malformedMedia.writeUInt32BE(malformedMedia.length + 4, 0);
-  assert.throws(
-    () => normalizeAlibabaAttachmentMime(malformedMedia, "video/mp4"),
-    /media container is malformed/,
-  );
-  assert.throws(
-    () => normalizeAlibabaAttachmentMime(isoBaseMedia("zzzz", "zzzz"), "application/octet-stream"),
-    /media container brand is unsupported/,
-  );
+  assert.throws(() => detectAlibabaAttachmentMime(malformedMedia), /media container is malformed/);
+  const unknownBrand = isoBaseMedia("zzzz", "zzzz");
+  assert.throws(() => detectAlibabaAttachmentMime(unknownBrand), /media container brand is unsupported/);
+  const malformedWebp = Buffer.from("RIFF\u0000\u0000\u0000\u0000WEBPVP8 ", "latin1");
+  assert.throws(() => detectAlibabaAttachmentMime(malformedWebp), /WebP container size is malformed/);
+  for (const bytes of [truncatedOffice, contradictoryOffice, malformedMedia, unknownBrand, malformedWebp]) {
+    assert.equal(normalizeAlibabaAttachmentMime(bytes, "application/zip"), "application/octet-stream");
+  }
+});
+
+test("a damaged compound file is still a compound file and never loops", () => {
+  const magicOnly = LEGACY_XLS.subarray(0, 8);
+  const headerOnly = LEGACY_XLS.subarray(0, 512);
+  const directoryCut = LEGACY_XLS.subarray(0, 1024 + 128);
+  const strangeSectorSize = Buffer.from(LEGACY_XLS);
+  strangeSectorSize.writeUInt16LE(31, 30);
+  const directoryOutOfRange = Buffer.from(LEGACY_XLS);
+  directoryOutOfRange.writeUInt32LE(900, 48);
+  const directoryChainLoop = Buffer.from(LEGACY_XLS);
+  directoryChainLoop.writeUInt32LE(1, 512 + 4);
+  const siblingLoop = oleCompoundFile([
+    { name: "Root Entry", type: 5, child: 1 },
+    { name: "Workbook", type: 2, left: 1 },
+  ]);
+  // A DIFAT sector that names itself as the next one, full of zero entries.
+  const difatLoop = Buffer.concat([LEGACY_XLS.subarray(0, 512), Buffer.alloc(512 * 64)]);
+  difatLoop.writeUInt32LE(0, 68);
+  const childOutOfRange = oleCompoundFile([{ name: "Root Entry", type: 5, child: 40 }]);
+  const noRoot = oleCompoundFile([{ name: "Workbook", type: 2 }]);
+  for (const bytes of [
+    magicOnly,
+    headerOnly,
+    directoryCut,
+    strangeSectorSize,
+    directoryOutOfRange,
+    directoryChainLoop,
+    difatLoop,
+    siblingLoop,
+    childOutOfRange,
+    noRoot,
+  ]) {
+    assert.equal(detectAlibabaAttachmentMime(bytes), "application/x-ole-storage");
+    assert.equal(normalizeAlibabaAttachmentMime(bytes, "application/octet-stream"), "application/x-ole-storage");
+  }
+});
+
+// The file that stopped MoonSleep's capture on 2026-11-17. It is supplier
+// evidence and is not in this repository; point the variable at a copy.
+const REAL_LEGACY_XLS_SHA256 = "18ac0442a36290afcd9b42c110d720d556aece80218c11c2dc98b74ed95bde44";
+const realLegacyXlsPath = process.env.NEXUS_ALIBABA_REAL_LEGACY_XLS;
+
+test(
+  "the real legacy .xls that stopped the capture types as Excel",
+  { skip: !realLegacyXlsPath },
+  () => {
+    assert.ok(realLegacyXlsPath);
+    const bytes = readFileSync(realLegacyXlsPath);
+    assert.equal(bytes.length, 120_320);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), REAL_LEGACY_XLS_SHA256);
+    assert.equal(detectAlibabaAttachmentMime(bytes), "application/vnd.ms-excel");
+    assert.equal(
+      normalizeAlibabaAttachmentMime(bytes, "application/octet-stream"),
+      "application/vnd.ms-excel",
+    );
+  },
+);
+
+test("a crafted DIFAT loop cannot claim memory beyond the file's own size", () => {
+  // 32 MiB of zeros behind a compound-file header: DIFAT sector 0 lists FAT
+  // sector 0 127 times and names itself as the next DIFAT sector.
+  const bytes = Buffer.concat([LEGACY_XLS.subarray(0, 512), Buffer.alloc(32 * 1024 * 1024)]);
+  bytes.writeUInt32LE(0, 68);
+  const before = process.memoryUsage().heapUsed;
+  assert.equal(detectAlibabaAttachmentMime(bytes), "application/x-ole-storage");
+  assert.ok(process.memoryUsage().heapUsed - before < 16 * 1024 * 1024);
 });
 
 type CorpusEntry = {
