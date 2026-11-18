@@ -50,6 +50,27 @@ the unchanged parent message. Truly unlinked rows carry
 `orphan_attachment_evidence`, preserve unresolved attribution, and never guess
 their sender. No attachment row may be silently dropped.
 
+### Attachment type is a label, never a gate
+
+The attachment MIME type is derived from the sealed bytes after the digest and
+byte count are proved; the provider's content type is advisory and ignored.
+The capture keeps every file the provider's download endpoint serves,
+including files it cannot profile (its opaque custody class), so the adapter
+must be able to emit all of them:
+
+- recognized by signature and structure: JPEG, PNG, GIF, WebP, HEIC, PDF, MP4,
+  QuickTime, DOCX, XLSX, and legacy Office compound files (`.doc`, `.xls`,
+  `.ppt`, named by the stream in the root storage; any other compound file is
+  `application/x-ole-storage`);
+- anything else, and any recognized container the adapter cannot parse, is
+  emitted as `application/octet-stream`.
+
+Typing never throws. Custody failures still do (missing evidence, digest or
+byte-count mismatch, a path outside the sealed boundary). A backfill re-reads
+every published snapshot, so one attachment that fails typing would fail every
+later backfill and stop the capture; on 2026-11-17 one legacy `.xls` did that
+to MoonSleep's capture for 16 hours (0.4.3).
+
 ## Delivery and deduplication
 
 Historical capture uses exact lower and optional upper time bounds. Ongoing monitoring replays a rolling time overlap from the latest completed snapshot. Nex deduplicates by platform and external record id.
