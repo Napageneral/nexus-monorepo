@@ -84,6 +84,20 @@ Backfill uses the requested transaction/statement start date. Monitoring polls
 every five minutes, replays the prior 24 hours on start, and advances only after
 a complete successful capture.
 
+Mercury filters its transaction list by creation time, so the monitor reads a
+transaction again until its status is final (sent, cancelled, failed or
+reversed). A run's first poll reads the transactions of the last 45 days. While
+a transaction created in the last week is open, the read reaches back to the
+oldest such one once an hour; while an older one is open, back to the oldest
+open one every 12 hours (well inside the 24-hour replay a restart reads). Within a run a transaction row is recorded only when it is
+new to the run or Mercury changed it (its attachments' signed URLs left out),
+never again unchanged. At a run's first poll a transaction created before the
+24-hour replay is recorded only when it may have changed after an earlier run
+read it: posted or failed within the replay (or with no such time), or
+cancelled or reversed (no time to judge by). An open one is remembered and
+recorded when it changes. A transaction still open at the 45-day edge is no
+longer read again, and the log says so as an error.
+
 ## Fact and observation projection
 
 The companion `mercury-provenance` binary consumes only rows returned by Nex

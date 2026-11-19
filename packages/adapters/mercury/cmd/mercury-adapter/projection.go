@@ -28,6 +28,26 @@ const (
 	mercuryProjectionRecordText = "Mercury provider snapshot"
 )
 
+// Mercury filters its transaction list by creation time, and the poll cursor moves to each capture's time, so a
+// transaction still open (pending) when the cursor passed its creation was never read again and its posting never
+// reached Nex (W1-X89). The monitor reads the list again back to the transactions it last read as open:
+//   - a run's first poll reads the whole open-transaction window;
+//   - while a transaction created in the last week is open, once an hour back to the oldest such one;
+//   - while an older one is open, every 12 hours back to the oldest open one (a read back weeks holds every row since,
+//     in a receipt that is kept, so it is not hourly). It must stay well inside the 24-hour replay: a run that ends
+//     before its next such read leaves a posting to the next run's first poll, which records only what posted within
+//     its replay.
+//
+// A read reaches back one margin before the open transaction's creation. A transaction still open at the window's
+// edge is no longer read again, and the log says so as an error.
+const (
+	mercuryMonitorOpenTransactionWindow       = 45 * 24 * time.Hour
+	mercuryMonitorRecentOpenTransactionWindow = 7 * 24 * time.Hour
+	mercuryMonitorOpenTransactionReread       = time.Hour
+	mercuryMonitorOldOpenTransactionReread    = 12 * time.Hour
+	mercuryMonitorOpenTransactionMargin       = time.Minute
+)
+
 type mercuryProjectionSource struct {
 	OperationID  string
 	Family       string
@@ -110,16 +130,237 @@ func mercuryBackfill(ctx nexadapter.AdapterContext[*mercuryClient], window nexad
 }
 
 func mercuryMonitor(ctx nexadapter.AdapterContext[*mercuryClient], emit nexadapter.EmitFunc) error {
+	transactions := newMercuryTransactionReads()
 	poll := nexadapter.PollMonitor(nexadapter.PollConfig[nexadapter.AdapterInboundRecord]{
 		Interval:      mercuryMonitorInterval,
 		ErrorBackoff:  mercuryMonitorErrorBackoff,
 		InitialCursor: time.Now().UTC().Add(-mercuryMonitorReplayWindow),
 		Fetch: func(fetchContext context.Context, since time.Time) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
-			return fetchMercuryProjection(fetchContext, ctx.Client, since.UTC(), time.Time{})
+			return transactions.fetch(fetchContext, ctx.Client, since.UTC(), time.Now().UTC())
 		},
 		MaxConsecutiveErrors: 5,
 	})
 	return poll(ctx.Context, ctx.ConnectionID, emit)
+}
+
+// mercuryTransactionFinalStatuses are the statuses after which the monitor stops reading a transaction again: sent (the
+// bank's posted), cancelled, failed and reversed. Any other status, pending or one this code does not know, is open.
+var mercuryTransactionFinalStatuses = map[string]bool{
+	"sent":      true,
+	"cancelled": true,
+	"failed":    true,
+	"reversed":  true,
+}
+
+func mercuryTransactionStatus(object map[string]any) string {
+	status, _ := object["status"].(string)
+	return strings.ToLower(strings.TrimSpace(status))
+}
+
+// mercuryTransactionChangeDigest is the SHA-256 of a transaction row with its attachments' URLs left out: Mercury signs
+// those again on every read, so they are no change of the transaction.
+func mercuryTransactionChangeDigest(object map[string]any) (string, error) {
+	stable := make(map[string]any, len(object))
+	for key, value := range object {
+		stable[key] = value
+	}
+	if items, ok := object["attachments"].([]any); ok {
+		attachments := make([]any, 0, len(items))
+		for _, item := range items {
+			attachment, ok := item.(map[string]any)
+			if !ok {
+				attachments = append(attachments, item)
+				continue
+			}
+			trimmed := make(map[string]any, len(attachment))
+			for key, value := range attachment {
+				if key != "url" {
+					trimmed[key] = value
+				}
+			}
+			attachments = append(attachments, trimmed)
+		}
+		stable["attachments"] = attachments
+	}
+	canonical, err := json.Marshal(stable)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize Mercury transaction for change: %w", err)
+	}
+	return sha256Hex(canonical), nil
+}
+
+// mercuryTransactionRow is what one read saw of a transaction, kept until the whole fetch has succeeded.
+type mercuryTransactionRow struct {
+	createdAt time.Time
+	open      bool
+	digest    string
+}
+
+// mercuryTransactionReads is the monitor's memory of Mercury's transactions for one run (W1-X89). It decides where each
+// poll's transaction read starts and which rows of it are recorded: a row is recorded when it is new to this run or
+// Mercury changed it, never again unchanged (each record carries its capture time, so an unchanged row read again would
+// be a new record). Nothing is kept across runs: a run's first read reaches back over the open-transaction window.
+type mercuryTransactionReads struct {
+	open     map[string]time.Time // transaction id -> its creation time, for each transaction last read as open
+	digests  map[string]string    // transaction id -> its change digest when this run last read it
+	missing  map[string]bool      // open transaction ids a read that should have returned them did not (said once)
+	started  bool                 // this run's first read has succeeded
+	rereadAt time.Time            // when a read last reached back to the last week's open transactions
+	fullAt   time.Time            // when a read last reached back to every open transaction
+}
+
+func newMercuryTransactionReads() *mercuryTransactionReads {
+	return &mercuryTransactionReads{
+		open:    map[string]time.Time{},
+		digests: map[string]string{},
+		missing: map[string]bool{},
+	}
+}
+
+// mercuryFinalSince reports whether a final transaction reached its final status at or after the cursor, by the time
+// field that marks it (postedAt, failedAt); a missing time counts as after, so such a row is recorded.
+func mercuryFinalSince(object map[string]any, field string, since time.Time) bool {
+	at := providerTimestamp(object, []string{field}, time.Time{})
+	return at.IsZero() || !at.Before(since)
+}
+
+// fetch is one poll. Its transaction read starts at the poll cursor, as before, except when it reaches back to the open
+// transactions (the open-transaction constants say when). Memory changes only when the whole fetch succeeds, so a
+// failed fetch is read again whole at the next poll.
+func (reads *mercuryTransactionReads) fetch(
+	ctx context.Context,
+	client *mercuryClient,
+	since time.Time,
+	now time.Time,
+) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+	floor := now.Add(-mercuryMonitorOpenTransactionWindow)
+	recentEdge := now.Add(-mercuryMonitorRecentOpenTransactionWindow)
+	var oldestOpen, oldestRecentOpen time.Time
+	for _, createdAt := range reads.open {
+		if oldestOpen.IsZero() || createdAt.Before(oldestOpen) {
+			oldestOpen = createdAt
+		}
+		if !createdAt.Before(recentEdge) && (oldestRecentOpen.IsZero() || createdAt.Before(oldestRecentOpen)) {
+			oldestRecentOpen = createdAt
+		}
+	}
+	full := !reads.started ||
+		(!oldestOpen.IsZero() && oldestOpen.Before(recentEdge) &&
+			now.Sub(reads.fullAt) >= mercuryMonitorOldOpenTransactionReread)
+	recent := !full && !oldestRecentOpen.IsZero() && now.Sub(reads.rereadAt) >= mercuryMonitorOpenTransactionReread
+	transactionsSince := since
+	switch {
+	case full && !reads.started:
+		transactionsSince = floor
+	case full:
+		transactionsSince = oldestOpen.Add(-mercuryMonitorOpenTransactionMargin)
+	case recent:
+		transactionsSince = oldestRecentOpen.Add(-mercuryMonitorOpenTransactionMargin)
+	}
+	if transactionsSince.Before(floor) {
+		transactionsSince = floor
+	}
+	if transactionsSince.After(since) {
+		transactionsSince = since
+	}
+	firstRead := !reads.started
+	seen := map[string]mercuryTransactionRow{}
+	keep := func(object map[string]any) (bool, error) {
+		id, err := requiredProviderID(object, "id")
+		if err != nil {
+			return false, err
+		}
+		digest, err := mercuryTransactionChangeDigest(object)
+		if err != nil {
+			return false, err
+		}
+		status := mercuryTransactionStatus(object)
+		row := mercuryTransactionRow{
+			createdAt: providerTimestamp(object, []string{"createdAt"}, transactionsSince),
+			open:      !mercuryTransactionFinalStatuses[status],
+			digest:    digest,
+		}
+		seen[id] = row
+		if previous, known := reads.digests[id]; known {
+			return previous != digest, nil
+		}
+		if !firstRead || !row.createdAt.Before(since) {
+			return true, nil
+		}
+		// The run's first poll reads back over the window. A transaction created before the cursor is recorded only when
+		// it may have changed after an earlier run read it: posted or failed at or after the cursor (or with no such
+		// time), or cancelled or reversed, which carry no time to judge by. An open one is remembered, and recorded
+		// when it changes.
+		switch status {
+		case "sent":
+			return mercuryFinalSince(object, "postedAt", since), nil
+		case "failed":
+			return mercuryFinalSince(object, "failedAt", since), nil
+		case "cancelled", "reversed":
+			return true, nil
+		default:
+			return false, nil
+		}
+	}
+	records, capturedAt, err := fetchMercuryProjectionReading(ctx, client, since, time.Time{}, transactionsSince, keep)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	for id, row := range seen {
+		reads.digests[id] = row.digest
+		if row.open {
+			reads.open[id] = row.createdAt
+		} else {
+			delete(reads.open, id)
+			delete(reads.missing, id)
+		}
+	}
+	if (full || recent) && client != nil && client.role == rolePrimaryRead {
+		for id, createdAt := range reads.open {
+			if _, returned := seen[id]; returned {
+				delete(reads.missing, id)
+				continue
+			}
+			if createdAt.Before(transactionsSince) {
+				// A full read begins at the oldest open transaction, so one it leaves out is past the window's edge. A
+				// read of the last week leaves the older ones to the 12-hourly read.
+				if full {
+					delete(reads.open, id)
+					delete(reads.missing, id)
+					nexadapter.LogError(
+						"Mercury transaction %s, open since %s, is past the %d-day window and is no longer read again: a later change of it reaches Nex only by a backfill",
+						id,
+						createdAt.Format(time.RFC3339),
+						int(mercuryMonitorOpenTransactionWindow/(24*time.Hour)),
+					)
+				}
+				continue
+			}
+			if !reads.missing[id] {
+				reads.missing[id] = true
+				nexadapter.LogError(
+					"Mercury transaction %s, open since %s, was not returned by a read that began at %s; it stays open and is read again",
+					id,
+					createdAt.Format(time.RFC3339),
+					transactionsSince.Format(time.RFC3339),
+				)
+			}
+		}
+		if full {
+			// The memory keeps what this read returned and what is still open; the rest is behind the window.
+			for id := range reads.digests {
+				_, returned := seen[id]
+				_, open := reads.open[id]
+				if !returned && !open {
+					delete(reads.digests, id)
+				}
+			}
+			reads.fullAt = now
+		}
+		reads.rereadAt = now
+	}
+	reads.started = true
+	return records, capturedAt, nil
 }
 
 func fetchMercuryProjection(
@@ -127,6 +368,20 @@ func fetchMercuryProjection(
 	client *mercuryClient,
 	since time.Time,
 	to time.Time,
+) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
+	return fetchMercuryProjectionReading(ctx, client, since, to, since, nil)
+}
+
+// fetchMercuryProjectionReading is fetchMercuryProjection whose transaction read starts at transactionsSince (no later
+// than since), and records only the transaction rows keepTransaction keeps (all of them when it is nil). The capture
+// receipts always hold every row read.
+func fetchMercuryProjectionReading(
+	ctx context.Context,
+	client *mercuryClient,
+	since time.Time,
+	to time.Time,
+	transactionsSince time.Time,
+	keepTransaction func(object map[string]any) (bool, error),
 ) ([]nexadapter.AdapterInboundRecord, time.Time, error) {
 	if client == nil {
 		return nil, time.Time{}, errors.New("missing Mercury client")
@@ -136,6 +391,9 @@ func fetchMercuryProjection(
 	}
 	if !to.IsZero() && to.Before(since) {
 		return nil, time.Time{}, errors.New("Mercury projection end boundary precedes cursor")
+	}
+	if transactionsSince.IsZero() || transactionsSince.After(since) {
+		transactionsSince = since
 	}
 	capturedAt := time.Now().UTC()
 	fetches := []mercuryProjectionFetch{}
@@ -158,7 +416,7 @@ func fetchMercuryProjection(
 			mercuryProjectionFetch{
 				Source: mercuryProjectionSources["listTransactions"],
 				Query: map[string]any{
-					"start": since.UTC().Format(time.RFC3339),
+					"start": transactionsSince.UTC().Format(time.RFC3339),
 					"limit": mercuryProjectionPageSize,
 					"order": "asc",
 				},
@@ -196,11 +454,16 @@ func fetchMercuryProjection(
 		if scopeErr != nil {
 			return nil, time.Time{}, scopeErr
 		}
-		projected, err := projectMercuryResponse(
+		var keepRow func(object map[string]any) (bool, error)
+		if fetch.Source.OperationID == "listTransactions" {
+			keepRow = keepTransaction
+		}
+		projected, err := projectMercuryResponseKeeping(
 			client,
 			fetch.Source,
 			response,
 			capturedAt,
+			keepRow,
 			captureScopeSHA256,
 		)
 		if err != nil {
@@ -333,6 +596,19 @@ func projectMercuryResponse(
 	capturedAt time.Time,
 	captureScopeSHA256Values ...string,
 ) ([]nexadapter.AdapterInboundRecord, error) {
+	return projectMercuryResponseKeeping(client, source, response, capturedAt, nil, captureScopeSHA256Values...)
+}
+
+// projectMercuryResponseKeeping is projectMercuryResponse that makes revision records only of the rows keepRow keeps
+// (every row when it is nil); each page's capture receipt still holds and counts every row of the page.
+func projectMercuryResponseKeeping(
+	client *mercuryClient,
+	source mercuryProjectionSource,
+	response *mercuryMethodResponse,
+	capturedAt time.Time,
+	keepRow func(object map[string]any) (bool, error),
+	captureScopeSHA256Values ...string,
+) ([]nexadapter.AdapterInboundRecord, error) {
 	if client == nil || response == nil {
 		return nil, errors.New("Mercury projection requires client and response")
 	}
@@ -388,6 +664,19 @@ func projectMercuryResponse(
 			return nil, fmt.Errorf("Mercury %s page %d: %w", source.OperationID, pageIndex+1, err)
 		}
 		for _, row := range rows {
+			if keepRow != nil {
+				object, _, err := canonicalProviderObject(row)
+				if err != nil {
+					return nil, fmt.Errorf("Mercury %s page %d: %w", source.OperationID, pageIndex+1, err)
+				}
+				keep, err := keepRow(object)
+				if err != nil {
+					return nil, fmt.Errorf("Mercury %s page %d: %w", source.OperationID, pageIndex+1, err)
+				}
+				if !keep {
+					continue
+				}
+			}
 			rowRecords, err := buildMercuryRecords(client, source, row, capturedAt)
 			if err != nil {
 				return nil, fmt.Errorf("Mercury %s page %d: %w", source.OperationID, pageIndex+1, err)
