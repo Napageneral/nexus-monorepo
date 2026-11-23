@@ -49,8 +49,14 @@ export type FlexportBundle = {
   events: FlexportRow[] | null;
 };
 
-/** Answers that mean "this account cannot read this list", which leave the new parts of a bundle null (0.1.2). */
-export const OPTIONAL_READ_REFUSED = new Set([400, 403, 404, 422]);
+/**
+ * The answers to a list added in 0.1.2 that still fail the bundle, as every older read does: a busy or unavailable
+ * Flexport after the read retries. Any other answer Flexport gives (a refusal, a 500, a redirect, a shape or size this
+ * client cannot read) leaves that list null, so the capture that worked on 0.1.1 never stops on it.
+ */
+export const OPTIONAL_READ_TRANSIENT = new Set([429, 502, 503, 504]);
+/** A shipment with more events than this is not read as its own (the shipment filter was not applied): null. */
+export const MAX_SHIPMENT_EVENTS = 2000;
 
 export type FlexportNetwork = {
   me_company: unknown;
@@ -146,12 +152,15 @@ export class FlexportError extends Error {
    * request: no usable token, or Flexport refused the token (HTTP 401). The pass stops there.
    */
   readonly abortsPass: boolean;
+  /** Flexport answered, but not with something this client can read (a shape, a size, a page count it refuses). */
+  readonly unreadable: boolean;
 
-  constructor(message: string, options: { status?: number; abortsPass?: boolean } = {}) {
+  constructor(message: string, options: { status?: number; abortsPass?: boolean; unreadable?: boolean } = {}) {
     super(message);
     this.name = "FlexportError";
     this.status = options.status;
     this.abortsPass = options.abortsPass === true;
+    this.unreadable = options.unreadable === true;
   }
 }
 
@@ -617,7 +626,7 @@ async function readCapped(response: Response, limit: number, label: string): Pro
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > limit) {
     await response.body?.cancel();
-    throw new FlexportError(`${label} is larger than ${limit} bytes`);
+    throw new FlexportError(`${label} is larger than ${limit} bytes`, { unreadable: true });
   }
   if (!response.body) return Buffer.alloc(0);
   const chunks: Buffer[] = [];
@@ -629,7 +638,7 @@ async function readCapped(response: Response, limit: number, label: string): Pro
     total += value.byteLength;
     if (total > limit) {
       await reader.cancel();
-      throw new FlexportError(`${label} is larger than ${limit} bytes`);
+      throw new FlexportError(`${label} is larger than ${limit} bytes`, { unreadable: true });
     }
     chunks.push(Buffer.from(value));
   }
@@ -992,11 +1001,11 @@ export function createFlexportClient(options: FlexportClientOptions) {
       document = JSON.parse((await readCapped(response, MAX_JSON_BODY_BYTES, label)).toString("utf8"));
     } catch (error) {
       if (error instanceof FlexportError) throw error;
-      throw new FlexportError(`${label} returned invalid JSON`);
+      throw new FlexportError(`${label} returned invalid JSON`, { unreadable: true });
     }
     // Success text is never echoed: only a refused write's error message reaches an error (refusalDetail).
     if (!isRecord(document) || !Object.hasOwn(document, "data")) {
-      throw new FlexportError(`${label} returned no data`);
+      throw new FlexportError(`${label} returned no data`, { unreadable: true });
     }
     return document.data;
   }
@@ -1020,7 +1029,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const data = asRecord(await getJson(path, { ...params, per: PAGE_SIZE, page }));
       if (!Array.isArray(data.data)) {
-        throw new FlexportError(`Flexport ${path} is not a paginated collection`);
+        throw new FlexportError(`Flexport ${path} is not a paginated collection`, { unreadable: true });
       }
       for (const row of data.data) {
         if (isRecord(row)) rows.push(row);
@@ -1028,7 +1037,7 @@ export function createFlexportClient(options: FlexportClientOptions) {
       }
       if (!data.next || data.data.length === 0) return rows;
     }
-    throw new FlexportError(`Flexport ${path} has more than ${MAX_PAGES} pages`);
+    throw new FlexportError(`Flexport ${path} has more than ${MAX_PAGES} pages`, { unreadable: true });
   }
 
   function shipmentPath(shipmentId: string): string {
@@ -1052,14 +1061,20 @@ export function createFlexportClient(options: FlexportClientOptions) {
   }
 
   /**
-   * A list added in 0.1.2: a refusal (OPTIONAL_READ_REFUSED) is null, so the capture that worked before never stops
-   * on it. A 401, a refused token request and a server error still fail as every other read does.
+   * A list added in 0.1.2. Flexport's answer that is not the list (a refusal, a 500, a redirect, an unreadable shape or
+   * size) is null. A 401, a refused token, a network failure, a busy or unavailable Flexport after the retries
+   * (OPTIONAL_READ_TRANSIENT) and this adapter's own state errors fail the bundle as every older read does, so a passing
+   * outage never flips a list to null and back.
    */
-  async function optionalRead(read: () => Promise<FlexportRow[]>): Promise<FlexportRow[] | null> {
+  async function optionalRead(read: () => Promise<FlexportRow[] | null>): Promise<FlexportRow[] | null> {
     try {
       return await read();
     } catch (error) {
-      if (error instanceof FlexportError && !error.abortsPass && error.status !== undefined && OPTIONAL_READ_REFUSED.has(error.status)) {
+      if (
+        error instanceof FlexportError &&
+        !error.abortsPass &&
+        (error.unreadable || (error.status !== undefined && !OPTIONAL_READ_TRANSIENT.has(error.status)))
+      ) {
         return null;
       }
       throw error;
@@ -1085,19 +1100,21 @@ export function createFlexportClient(options: FlexportClientOptions) {
     const legIds = byId(legs).map((leg) => textValue(leg.id) as string);
     for (const legId of legIds) {
       for (const row of await collection("/ocean/shipment_container_legs", { "f.leg.id": legId })) {
-        const owner = textValue(asRecord(row.leg).id);
-        if (owner === undefined || owner === legId) rows.push(row);
+        // Only a row that names this leg: a filter Flexport ignored never brings in other shipments' containers.
+        if (textValue(asRecord(row.leg).id) === legId) rows.push(row);
       }
     }
     return byId(rows);
   }
 
-  /** The shipment's events, oldest first; an event naming another shipment is dropped. */
-  async function shipmentEvents(shipmentId: string): Promise<FlexportRow[]> {
-    const rows = (await collection("/events", { "f.data.shipment.id": shipmentId })).filter((row) => {
-      const owner = textValue(asRecord(asRecord(row.data).shipment).id);
-      return owner === undefined || owner === shipmentId;
-    });
+  /**
+   * The shipment's events, oldest first: only events that name this shipment. More than MAX_SHIPMENT_EVENTS rows means
+   * the filter was not applied (the account's whole feed): null, never a partial list, and no paging the whole feed.
+   */
+  async function shipmentEvents(shipmentId: string): Promise<FlexportRow[] | null> {
+    const listed = await collection("/events", { "f.data.shipment.id": shipmentId }, MAX_SHIPMENT_EVENTS + 1);
+    if (listed.length > MAX_SHIPMENT_EVENTS) return null;
+    const rows = listed.filter((row) => textValue(asRecord(asRecord(row.data).shipment).id) === shipmentId);
     return byId(rows).sort((left, right) =>
       String(left.occurred_at ?? left.created_at ?? "").localeCompare(String(right.occurred_at ?? right.created_at ?? "")),
     );
