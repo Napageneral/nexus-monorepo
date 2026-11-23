@@ -1,7 +1,7 @@
 # Flexport Adapter
 
 **Status:** CANONICAL
-**Last Updated:** 2026-10-22 (adversarial review amendments A1-A8)
+**Last Updated:** 2026-11-23 (0.1.2: container legs and events in the bundle); 2026-10-22 (adversarial review amendments A1-A8)
 
 ## Purpose
 
@@ -9,7 +9,7 @@ This adapter connects MoonSleep's Flexport API v2 client to Nex. It turns each F
 
 ## Connection identity
 
-- adapter and platform: `flexport`; version `0.1.1`
+- adapter and platform: `flexport`; version `0.1.2`
 - auth method: `flexport_client_credentials` (`api_key`, service `flexport`) with fields `client_id` (text, required), `client_secret` (secret, required), `account` (text, optional)
 - production connection: `moonsleep-flexport`, account `moonsleep`, credential row `flexport/moonsleep-flexport`
 - the adapter reads only `credential.fields.client_id` and `credential.fields.client_secret`, never `credential.value`
@@ -51,11 +51,18 @@ Shipment bundle Record, one per Flexport shipment:
 - routing: platform `flexport`, sender `flexport` (`Flexport`), receiver the connection, container `direct` `shipment:<id>` named after the shipment
 - `external_record_id` `shipment:<id>`, `source_record_type` `flexport_shipment_bundle`, `provider_version_ref` `bundle:sha256:<sha256>`
 - timestamp, monotonic per Record: the first emission uses `shipment.updated_at`, else the newest timestamp in the bundle, else the first-seen time kept in state; an emission whose bundle or attachment set differs from the last one emitted uses `max(that time, last emitted timestamp + 1)`, so a return to an earlier exact state is a newer Record rather than a replay the head never sees; an unchanged re-emission reuses the last timestamp, byte for byte
-- content: `Flexport shipment <id> <name>: <status>; entries <n> (<release statuses>); invoices <n>; documents <n>`
-- payload: `completeProviderSnapshot` of the bundle `{shipment, containers, legs, customs_entries, invoices, documents}` as stable JSON (keys sorted recursively, no insignificant whitespace), with `contract: "moonsleep.flexport_shipment_bundle.v1"` and `flexport_shipment_id`
+- content: `Flexport shipment <id> <name>: <status>; entries <n> (<release statuses>); invoices <n>; documents <n>; container legs <n | not readable>; events <n | not readable>`
+- payload: `completeProviderSnapshot` of the bundle `{shipment, containers, legs, customs_entries, invoices, documents, container_legs, events}` as stable JSON (keys sorted recursively, no insignificant whitespace), with `contract: "moonsleep.flexport_shipment_bundle.v1"` and `flexport_shipment_id`
 - attachments: one per final (not archived) document whose bytes are in custody, `{id: "document:<id>", filename, mime_type, size, content_hash, local_path, metadata: {flexport_document_id, document_type, uploaded_at}}`
 
 The bundle comes from `GET /shipments/{id}` and the `f.shipment.id` lists of `/ocean/shipment_containers`, `/shipment_legs`, `/customs_entries`, `/invoices` and `/documents`. Lists are read with `per=100` and `page=1,2,...` carrying the original query every time; Flexport's `next` link only says another page exists (a documented `next` drops the shipment filter). Child rows that name a different shipment are dropped.
+
+Since 0.1.2 the bundle also carries `container_legs` and `events` (the contract stays `moonsleep.flexport_shipment_bundle.v1`: both keys are additive and the Python reader reads every key with a default):
+
+- `container_legs`: for a shipment with containers, `GET /ocean/shipment_container_legs` with `f.leg.id` once per shipment leg in id order (Flexport's list has no shipment filter); each row is one container on one leg with its `dates` (for example `actual_loaded_on_board_date`; Flexport's milestones `#loaded_on_board` and `#unloaded_off_board` are "loaded on vessel or rail" and "discharged from vessel or rail"). A row naming another leg is dropped; rows are kept once per id, in id order. A shipment with no containers asks for none and carries `[]`.
+- `events`: `GET /events` with `f.data.shipment.id` (Flexport documents the list as the events it delivers to the client's webhooks, so an account without a webhook may read none); an event naming another shipment is dropped; kept once per id, oldest `occurred_at` first.
+- Either list is `null` when Flexport refuses it with HTTP 400, 403, 404 or 422, so a list this account cannot read never stops the capture that worked before and is never mistaken for an empty one. A 401, a refused token request, and a 5xx after the read retries fail the bundle as every other read does.
+- Both lists are sorted, so an unchanged shipment still gives identical bytes; the first pass after the upgrade emits every selected bundle once (its bytes gained the two keys).
 
 Network Record: `external_record_id` `network:me`, `source_record_type` `flexport_network`, container `network`, provider object `{me_company, company_entities, companies, locations}` from `/network/me/companies` and the three network lists, contract `moonsleep.flexport_network.v1`. Its timestamp is the emission time when its sha256 changes, kept strictly after the last one emitted; an unchanged re-emission reuses the last timestamp.
 

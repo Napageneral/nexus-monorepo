@@ -584,7 +584,7 @@ test("collections page by number with the original filters; other shipments' row
   await withFake(
     async (fake, dir) => {
       const bundle = await clientFor(fake, dir).bundle("1234567");
-      assert.deepEqual(Object.keys(bundle), ["shipment", "containers", "legs", "customs_entries", "invoices", "documents"]);
+      assert.deepEqual(Object.keys(bundle), ["shipment", "containers", "legs", "customs_entries", "invoices", "documents", "container_legs", "events"]);
       assert.deepEqual(bundle.containers.map((row) => row.id), [11, 12]);
       assert.deepEqual(bundle.legs.map((row) => row.id), [21, 22], "filter ignored by the server, row 99 dropped");
       assert.deepEqual(bundle.customs_entries.map((row) => row.id), ["CE1"]);
@@ -600,6 +600,52 @@ test("collections page by number with the original filters; other shipments' row
     },
     { pageSize: 1, ignoreFilter: ["/shipment_legs"] },
   );
+});
+
+test("0.1.2: container legs are read per leg and events by shipment, each in a stable order", async () => {
+  await withFake(
+    async (fake, dir) => {
+      const bundle = await clientFor(fake, dir).bundle("1234567");
+      // Leg 21 (truck) has no container legs; leg 22 (ocean) has two. Leg 99 is another shipment's and is never asked for.
+      assert.deepEqual(bundle.container_legs?.map((row) => row.id), [311, 312], "one row per id, in id order");
+      assert.deepEqual(
+        fake.requests.filter((request) => request.path === "/ocean/shipment_container_legs").map((request) => request.query["f.leg.id"]),
+        ["21", "22"],
+      );
+      assert.deepEqual(bundle.events?.map((row) => row.id), ["EV1", "EV2", "EV3"], "oldest first; another shipment's event dropped");
+      assert.deepEqual(
+        fake.requests.filter((request) => request.path === "/events").map((request) => request.query),
+        [{ "f.data.shipment.id": "1234567", per: "100", page: "1" }],
+      );
+    },
+    { ignoreFilter: ["/events"] },
+  );
+});
+
+test("0.1.2: a shipment with no containers asks for no container legs", async () => {
+  await withFake(async (fake, dir) => {
+    fake.fixtures.containers = [];
+    const bundle = await clientFor(fake, dir).bundle("1234567");
+    assert.deepEqual(bundle.container_legs, []);
+    assert.equal(fake.requests.filter((request) => request.path === "/ocean/shipment_container_legs").length, 0);
+  });
+});
+
+test("0.1.2: a list Flexport refuses is null and the bundle still comes; a server error still fails it", async () => {
+  for (const status of [400, 403, 404, 422]) {
+    await withFake(async (fake, dir) => {
+      fake.inject({ path: "/events", method: "GET", status });
+      fake.inject({ path: "/ocean/shipment_container_legs", method: "GET", status });
+      const bundle = await clientFor(fake, dir).bundle("1234567");
+      assert.equal(bundle.events, null, `events on HTTP ${status}`);
+      assert.equal(bundle.container_legs, null, `container legs on HTTP ${status}`);
+      assert.deepEqual(bundle.containers.map((row) => row.id), [11, 12], "the parts read before 0.1.2 are unchanged");
+    });
+  }
+  await withFake(async (fake, dir) => {
+    for (let attempt = 0; attempt < 4; attempt += 1) fake.inject({ path: "/events", method: "GET", status: 500 });
+    await assert.rejects(clientFor(fake, dir).bundle("1234567"), /GET \/events failed \(HTTP 500\)/);
+  });
 });
 
 test("a final document is downloaded once into private sha256 custody", async () => {

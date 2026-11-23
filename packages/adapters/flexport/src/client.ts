@@ -37,7 +37,20 @@ export type FlexportBundle = {
   customs_entries: FlexportRow[];
   invoices: FlexportRow[];
   documents: FlexportRow[];
+  /**
+   * Each container's movement on each leg (`/ocean/shipment_container_legs` by `f.leg.id`), with Flexport's
+   * dates (loaded on a vessel or rail car, discharged, ...). Since 0.1.2; null when Flexport refuses the read.
+   */
+  container_legs: FlexportRow[] | null;
+  /**
+   * Flexport's events about this shipment (`/events` by `f.data.shipment.id`): milestones and exceptions, oldest
+   * first. Since 0.1.2; null when Flexport refuses the read (it lists the events it delivers to webhooks).
+   */
+  events: FlexportRow[] | null;
 };
+
+/** Answers that mean "this account cannot read this list", which leave the new parts of a bundle null (0.1.2). */
+export const OPTIONAL_READ_REFUSED = new Set([400, 403, 404, 422]);
 
 export type FlexportNetwork = {
   me_company: unknown;
@@ -1038,18 +1051,74 @@ export function createFlexportClient(options: FlexportClientOptions) {
     return await collection("/shipments", { sort: "updated_at", direction: "desc" }, limit);
   }
 
+  /**
+   * A list added in 0.1.2: a refusal (OPTIONAL_READ_REFUSED) is null, so the capture that worked before never stops
+   * on it. A 401, a refused token request and a server error still fail as every other read does.
+   */
+  async function optionalRead(read: () => Promise<FlexportRow[]>): Promise<FlexportRow[] | null> {
+    try {
+      return await read();
+    } catch (error) {
+      if (error instanceof FlexportError && !error.abortsPass && error.status !== undefined && OPTIONAL_READ_REFUSED.has(error.status)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /** One row per id, in id order (numbers by value), so an unchanged list always gives the same bytes. */
+  function byId(rows: FlexportRow[]): FlexportRow[] {
+    const seen = new Map<string, FlexportRow>();
+    for (const row of rows) {
+      const id = textValue(row.id);
+      if (id !== undefined && !seen.has(id)) seen.set(id, row);
+    }
+    return [...seen.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "en", { numeric: true }))
+      .map(([, row]) => row);
+  }
+
+  /** Container legs, read per shipment leg; a row naming another leg (a filter Flexport ignored) is dropped. */
+  async function containerLegs(legs: FlexportRow[], containers: FlexportRow[]): Promise<FlexportRow[]> {
+    if (containers.length === 0) return [];
+    const rows: FlexportRow[] = [];
+    const legIds = byId(legs).map((leg) => textValue(leg.id) as string);
+    for (const legId of legIds) {
+      for (const row of await collection("/ocean/shipment_container_legs", { "f.leg.id": legId })) {
+        const owner = textValue(asRecord(row.leg).id);
+        if (owner === undefined || owner === legId) rows.push(row);
+      }
+    }
+    return byId(rows);
+  }
+
+  /** The shipment's events, oldest first; an event naming another shipment is dropped. */
+  async function shipmentEvents(shipmentId: string): Promise<FlexportRow[]> {
+    const rows = (await collection("/events", { "f.data.shipment.id": shipmentId })).filter((row) => {
+      const owner = textValue(asRecord(asRecord(row.data).shipment).id);
+      return owner === undefined || owner === shipmentId;
+    });
+    return byId(rows).sort((left, right) =>
+      String(left.occurred_at ?? left.created_at ?? "").localeCompare(String(right.occurred_at ?? right.created_at ?? "")),
+    );
+  }
+
   async function bundle(shipmentId: string): Promise<FlexportBundle> {
     const shipment = asRecord(await getJson(shipmentPath(shipmentId)));
     if (textValue(shipment.id) !== shipmentId) {
       throw new FlexportError(`Flexport GET ${shipmentPath(shipmentId)} returned a different shipment`);
     }
+    const containers = await children("/ocean/shipment_containers", shipmentId);
+    const legs = await children("/shipment_legs", shipmentId);
     return {
       shipment,
-      containers: await children("/ocean/shipment_containers", shipmentId),
-      legs: await children("/shipment_legs", shipmentId),
+      containers,
+      legs,
       customs_entries: await children("/customs_entries", shipmentId),
       invoices: await children("/invoices", shipmentId),
       documents: await children("/documents", shipmentId),
+      container_legs: await optionalRead(() => containerLegs(legs, containers)),
+      events: await optionalRead(() => shipmentEvents(shipmentId)),
     };
   }
 
