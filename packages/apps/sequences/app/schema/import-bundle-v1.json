@@ -1,0 +1,605 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.moonsleep.co/apps/sequences/schema/import-bundle-v1.json",
+  "title": "October import bundle (scripts/sequences_import.py): ids, hashes and counts only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "series",
+    "scope",
+    "built_at",
+    "files",
+    "team_hashes",
+    "ledger",
+    "drawings"
+  ],
+  "properties": {
+    "contract": {
+      "const": "sequences.import.bundle.v1"
+    },
+    "series": {
+      "type": "string",
+      "description": "The series slug.",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "scope": {
+      "enum": [
+        "full",
+        "drawing"
+      ],
+      "description": "full: every drawing and note so far; drawing: one morning's push. (The build manual's `kind`, renamed: NX-P17.)"
+    },
+    "built_at": {
+      "type": "string",
+      "description": "When the client built it, UTC.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "definitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "body",
+          "yaml_sha256",
+          "source_commit"
+        ],
+        "properties": {
+          "body": {
+            "type": "object"
+          },
+          "yaml_sha256": {
+            "type": "string",
+            "description": "sha256 of the YAML file bytes.",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_commit": {
+            "type": "string",
+            "description": "moonsleep-v1 commit.",
+            "pattern": "^[0-9a-f]{7,40}$"
+          }
+        }
+      },
+      "description": "Sequence definitions to register (PyYAML-normalized JSON). A full bundle for a new series carries them."
+    },
+    "series_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "body",
+        "yaml_sha256",
+        "source_commit"
+      ],
+      "properties": {
+        "body": {
+          "type": "object"
+        },
+        "yaml_sha256": {
+          "type": "string",
+          "description": "sha256 of the YAML file bytes.",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_commit": {
+          "type": "string",
+          "description": "moonsleep-v1 commit.",
+          "pattern": "^[0-9a-f]{7,40}$"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path_rel",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "path_rel": {
+            "type": "string",
+            "description": "Path under the track dir."
+          },
+          "sha256": {
+            "type": "string",
+            "description": "File sha256.",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "description": "Every file the client read."
+    },
+    "team_hashes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "sha256 of a team mailbox (draw_group.py TEAM).",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "description": "Team hashes, never the addresses.",
+      "maxItems": 16
+    },
+    "ledger": {
+      "type": "object",
+      "description": "drawings/winners.json: entry_id -> address sha256.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^e_[0-9a-f]{16}$": {
+          "type": "string",
+          "description": "Address sha256.",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "drawings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "night",
+          "drawing_no",
+          "receipt",
+          "entries",
+          "free_hashes"
+        ],
+        "properties": {
+          "night": {
+            "type": "string",
+            "description": "Group night.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "drawing_no": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "commit",
+              "entry_ids",
+              "drand_randomness",
+              "winners",
+              "alternates",
+              "promoted",
+              "method"
+            ],
+            "properties": {
+              "commit": {
+                "type": "object",
+                "description": "The Mac's drawing commit (draw_group.py v3, 15 keys), verbatim.",
+                "required": [
+                  "entries",
+                  "entry_list_sha256",
+                  "committed_at_utc",
+                  "drand_round",
+                  "drand_chain"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "group": {
+                    "type": "string",
+                    "description": "Group night.",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "drawing": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2
+                  },
+                  "deadline_utc": {
+                    "type": "string",
+                    "description": "Close, UTC."
+                  },
+                  "group_size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invitation_statuses": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "group_email_at_utc": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "entries": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reviews_entered": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "free_entries_from_group": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "free_carried_from_drawing_1": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "left_out_earlier_winners_or_team": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "entry_list_sha256": {
+                    "type": "string",
+                    "description": "sha256('\\n'.join(entry_ids))",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "committed_at_utc": {
+                    "type": "string",
+                    "description": "Commit time, UTC."
+                  },
+                  "drand_round": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "drand_chain": {
+                    "type": "string",
+                    "description": "'quicknet 52db9ba7'"
+                  }
+                }
+              },
+              "entry_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "Entry id.",
+                  "pattern": "^e_[0-9a-f]{16}$"
+                },
+                "description": "Sorted entry ids."
+              },
+              "drand_randomness": {
+                "type": "string",
+                "description": "Beacon randomness.",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "winners": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "Entry id.",
+                  "pattern": "^e_[0-9a-f]{16}$"
+                },
+                "description": "Ranked winners."
+              },
+              "alternates": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "Entry id.",
+                  "pattern": "^e_[0-9a-f]{16}$"
+                },
+                "description": "Ranked alternates."
+              },
+              "promoted": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "replaces",
+                    "entry_id",
+                    "at_utc"
+                  ],
+                  "properties": {
+                    "replaces": {
+                      "type": "string",
+                      "description": "Entry id.",
+                      "pattern": "^e_[0-9a-f]{16}$"
+                    },
+                    "entry_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^e_[0-9a-f]{16}$"
+                    },
+                    "why": {
+                      "type": "string",
+                      "description": "Why."
+                    },
+                    "at_utc": {
+                      "type": "string",
+                      "description": "When, UTC."
+                    }
+                  }
+                },
+                "description": "Promotions, in order."
+              },
+              "method": {
+                "type": "string",
+                "description": "The method line."
+              }
+            }
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "entry_id",
+                "address_sha256",
+                "basis"
+              ],
+              "properties": {
+                "entry_id": {
+                  "type": "string",
+                  "description": "Entry id.",
+                  "pattern": "^e_[0-9a-f]{16}$"
+                },
+                "address_sha256": {
+                  "type": "string",
+                  "description": "Address sha256.",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "basis": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "review:rev_<32 hex> or free",
+                    "pattern": "^(review:rev_[0-9a-f]{32}|free)$"
+                  },
+                  "description": "Why they entered.",
+                  "minItems": 1
+                }
+              }
+            },
+            "description": "From *-entries.private.json: only the address hash and basis."
+          },
+          "free_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "sha256(line.strip().lower()).",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "description": "Free-entry hashes for this drawing."
+          },
+          "beacon": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "round",
+                  "randomness",
+                  "signature"
+                ],
+                "properties": {
+                  "round": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "randomness": {
+                    "type": "string",
+                    "description": "hex",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "hex",
+                    "pattern": "^[0-9a-f]{64,256}$"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "description": "Each drawing's receipt and entries."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "night",
+          "drawing_no",
+          "note",
+          "campaigns"
+        ],
+        "properties": {
+          "night": {
+            "type": "string",
+            "description": "Group night.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "drawing_no": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "note": {
+            "enum": [
+              "winner",
+              "still_entered"
+            ],
+            "description": "Which note (the build manual's `kind`, renamed: NX-P17)."
+          },
+          "campaigns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "trust",
+                "source"
+              ],
+              "properties": {
+                "campaign_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[0-9A-Z]{8,40}$"
+                },
+                "campaign_id_prefix": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^[0-9A-Z]{4,40}$",
+                  "description": "A truncated id as the LOG has it (resolved by exact name later)."
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Exact Klaviyo campaign name; null for a resend whose name was never recorded."
+                },
+                "resend_no": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "0 for the first send, 1.. for a resend to the ones Klaviyo skipped."
+                },
+                "want": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "Recipients the send meant to reach (the list's exact count)."
+                },
+                "overrides": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "What a LOG.md reading replaced on this row: the earlier received, trust, read time and source."
+                },
+                "list_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "template": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sent_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "list_exact": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "received": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "received_read_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "resend_of": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "trust": {
+                  "enum": [
+                    "aggregate",
+                    "early_read",
+                    "untrusted",
+                    "log_only"
+                  ]
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Where the row came from: receipts, adopt.json, LOG.md:<line>."
+                }
+              }
+            },
+            "description": "Campaigns, resends included."
+          }
+        }
+      },
+      "description": "Winner and still-entered notes (winner-notes-receipts.jsonl + adopt.json)."
+    },
+    "nights": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "night"
+        ],
+        "properties": {
+          "night": {
+            "type": "string",
+            "description": "Group night.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "mac_send": {
+            "type": "object",
+            "description": "Counts from group-send-*.json (G1 hand runs).",
+            "additionalProperties": true
+          },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "A hand follow-up run's counts.",
+              "additionalProperties": true
+            },
+            "description": "Follow-up runs."
+          }
+        }
+      },
+      "description": "Hand-run night asks and follow-ups (G1 only)."
+    },
+    "exclusion_refresh": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "{site, lines, sha256_prefix, at}",
+        "additionalProperties": true
+      },
+      "description": "Recorded only if supplied; never needed."
+    }
+  }
+}

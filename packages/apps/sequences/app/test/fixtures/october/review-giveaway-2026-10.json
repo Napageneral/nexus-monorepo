@@ -1,0 +1,112 @@
+{
+ "adopt": "steps finished outside the engine, with evidence: drawings/*.json, winners.json, Klaviyo campaign receipts, review_invitation counts",
+ "approvals": {
+  "about_to_send": "2h",
+  "go": "tyler",
+  "money": "tyler_each_step",
+  "reconfirm": "on_change",
+  "words": "casey"
+ },
+ "ask": {
+  "at": "2026-10-24 20:45",
+  "by": "tyler",
+  "text": "Yeah, let's do this, please. Set this all up. Build it. ...",
+  "via": "chat"
+ },
+ "evidence": {
+  "mac": {
+   "files": [
+    "drawings/winners.json",
+    "drawings/group-*-drawing-*.json",
+    "private/winner-notes-receipts.jsonl",
+    "private/free-entries-*.txt"
+   ],
+   "heartbeat": "private/morning-done",
+   "track_dir": "moonsleep-review-sender-campaigns-20261017"
+  },
+  "review_sender": {
+   "files": [
+    "group-exclusions.hashes"
+   ],
+   "settings": [
+    "PRODUCT_REVIEW_GROUP_NIGHTS",
+    "PRODUCT_REVIEW_GROUP_LIMIT"
+   ]
+  }
+ },
+ "instances": [
+  {
+   "group": 1,
+   "id": "g1",
+   "limit": 2690,
+   "night": "2026-10-21"
+  },
+  {
+   "group": 2,
+   "id": "g2",
+   "limit": 2690,
+   "night": "2026-10-23"
+  },
+  {
+   "group": 3,
+   "id": "g3",
+   "limit": 2690,
+   "night": "2026-10-24"
+  },
+  {
+   "group": 4,
+   "id": "g4",
+   "limit": 2690,
+   "night": "2026-10-25"
+  },
+  {
+   "group": 5,
+   "id": "g5",
+   "limit": 2690,
+   "night": "2026-10-26"
+  }
+ ],
+ "modes": {
+  "adopt_from_import": true,
+  "observe_live": [
+   "g5.followup"
+  ],
+  "shadow": [
+   "g3.draw_2",
+   "g4.draw_2",
+   "g5.draw_2"
+  ]
+ },
+ "owners": {
+  "engine": [
+   "claims_1",
+   "claims_2",
+   "code_go",
+   "codes",
+   "half_off_note"
+  ],
+  "mac": [
+   "entries_1",
+   "entries_2",
+   "draw_1",
+   "draw_2",
+   "winner_note_1",
+   "winner_note_2",
+   "still_entered_1"
+  ],
+  "review_sender": [
+   "night_ask",
+   "followup"
+  ]
+ },
+ "replan": {
+  "code_go": {
+   "ask_by": "2026-11-02 09:00"
+  },
+  "half_off_note": {
+   "at": "2026-11-02 10:00"
+  }
+ },
+ "sequence": "review-group-giveaway@1",
+ "series": "review-giveaway-2026-10"
+}

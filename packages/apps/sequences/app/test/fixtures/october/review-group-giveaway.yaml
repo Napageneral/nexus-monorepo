@@ -1,0 +1,155 @@
+# Test fixture: the design's sequences/review-group-giveaway.yaml (revision 1) with the build
+# manual's two changes (§2b): messages used only by Mac or review-sender steps carry
+# `sha256: observed` (plus the Mac's exact campaign name), and the rules-page sha is left for
+# `seqctl check --fill`. The `on:`/`off:` keys are quoted, because PyYAML (YAML 1.1) reads a bare
+# `on`/`off` key as a boolean. Regenerate the JSON twin with test/fixtures/october/to-json.py.
+sequence: review-group-giveaway
+title: Review group giveaway, two drawings per group
+timezone: America/Chicago
+program: reviews                          # rules owner: RV-P7, RV-P8, RV-P9
+needs:
+  rules_page: {url: "https://moonsleep.co/reviews/group-drawings/", content_sha256: "<sha>"}
+  entry_window_utc: ["2026-10-16T05:00:00Z", "2026-11-01T05:00:00Z"]
+  last_night: 2026-10-28
+  prize_scope: review-giveaway-2026-10    # one prize per person across the scope
+params: {night: date, group: int, limit: int}
+
+sources:                                  # ops sources API routes; sha + count + as_of kept on every step
+  standing_negatives: {from: standing_exclusions, max_age: 24h}
+  survey:             {from: survey_respondents_and_ask_lists, max_age: 24h}
+  refunds:            {from: refunds, max_age: 1h}
+  desk_complaints:    {from: desk_complaints, max_age: 2h, warn_before_due: 2h}
+  team:               {from: team_addresses, max_age: 24h}
+  winners:            {from: ledger, scope: prize_scope}
+exclude_sets:
+  giveaway: [standing_negatives, survey, refunds, desk_complaints, team, winners]
+
+messages:
+  night_ask:     {template: review-group-night, sha256: observed, metric: review_group_night, consent: review_reach,
+                  promises: [{says: "pick the 10 winners tomorrow morning", step: draw_1, by: "night+1 12:00"}]}
+  followup:      {template: review-group-followup, sha256: observed, metric: review_group_followup, consent: review_reach,
+                  states: [{says: "we've picked the winners of our first drawing", needs: draw_1}],
+                  promises: [{step: draw_2, by: "night+4 12:00"}]}
+  winner_note:   {template: group-winner-note, sha256: observed, campaign_name: "Review group winners · {night} · drawing {n}",
+                  metric: group_winner_note, consent: transactional,
+                  says: {"this morning": "07:00-11:59"}, late: winner_note_today}
+  winner_note_today:   {template: group-winner-note-today, sha256: observed, metric: group_winner_note_today,
+                  consent: transactional, says: {"today": "12:00-17:00"}}
+  still_entered: {template: group-still-entered, sha256: observed, campaign_name: "Review group still entered · {night} · drawing 1",
+                  metric: group_still_entered, consent: transactional,
+                  fills: [close_day, pick_day], says: {"this morning": "07:00-11:59"}, late: still_entered_today,
+                  promises: [{step: draw_2, by: "night+4 12:00"}]}
+  still_entered_today: {template: group-still-entered-today, sha256: observed, metric: group_still_entered_today,
+                  consent: transactional, fills: [close_day, pick_day], says: {"today": "12:00-18:00"}}
+  alternate_win: {template: group-alternate-winner, sha256: "<sha>", metric: group_alternate_winner, consent: transactional}
+  half_off:      {template: group-half-off-thanks, sha256: "<sha>", metric: group_half_off, consent: marketing,
+                  fills: [code, expires_on]}
+
+defaults:
+  owner: engine
+  send: {window: "09:00-21:00", consent_check: klaviyo, settle: [5m, 30m, 2h, 24h], settle_gate: 30m,
+         shard: 250, fence: {sequence_email: 24h}}
+  late: {grace: 10m, then: hold}
+
+steps:
+  - {id: preflight, do: assert, at: "night 17:00",
+     checks: [rules_page_live, flows_live_and_match_copy, "night <= last_night"]}
+
+  - id: night_ask
+    do: send_flow_event
+    after: preflight
+    at: "night 19:30"
+    window: "19:17-23:00"
+    message: night_ask
+    audience: {rule: backfill, us_only: true, band: "group of 5", limit: limit}
+    exclude: giveaway
+    fence: {review_email: 24h, quiet_days: 7, never_after: [day7, day14]}
+    fills: {deadline: "night 23:59:59"}
+    expect: {count: limit, within: 5%}
+    target: {accepted: 95%}
+    on_partial: continue
+
+  - {id: entries_1, do: free_entry_intake, at: "night+1 00:15", subject_has: "review drawing",
+     between: ["night 19:00", "night 23:59:59"], from_members_of: night_ask}
+
+  - id: draw_1
+    do: draw
+    after: entries_1
+    at: "night+1 08:00"
+    closes: "night 23:59:59"
+    entrants: {members_of: night_ask, reviews: first_submission_after_own_invitation, free_entries: [entries_1]}
+    exclude: [winners, team]
+    pick: {winners: 10, alternates: 10}
+    beacon: {drand: quicknet, round_after: 90s}
+    late: {grace: 15m, then: run}
+
+  - id: winner_note_1
+    do: send_flow_event
+    after: draw_1
+    message: winner_note
+    audience: draw_1.winners
+    exclude: consent_only
+    target: {delivered: all}
+    on_partial: block
+    late: {then: late_copy, after_that: hold}
+
+  - id: still_entered_1
+    do: send_flow_event
+    after: winner_note_1 settled
+    message: still_entered
+    audience: draw_1.non_winners
+    exclude: giveaway
+    fills: {close_day: "night+3", pick_day: "night+4"}
+    target: {delivered: 99%}
+    late: {then: late_copy, after_that: hold}
+
+  - {id: claims_1, do: spawn, sequence: prize-claim, each: draw_1.winners, params: {notice: winner_note_1}}
+
+  - id: followup
+    do: send_flow_event
+    after: [night_ask, draw_1]
+    at: "night+1 19:30"
+    not_before: "night_ask.first_post + 24h"
+    window: "19:17-23:00"
+    message: followup
+    audience: {members_of: night_ask, has_review: false}
+    exclude: giveaway
+    fence: {review_email: 24h}
+    fills: {deadline: "night+3 23:59:59"}
+    not_after: "night+3 23:59:59"
+    on_partial: continue
+
+  - {id: entries_2, do: free_entry_intake, at: "night+4 00:15", subject_has: "review drawing",
+     between: ["night 19:00", "night+3 23:59:59"], from_members_of: night_ask}
+
+  - id: draw_2
+    do: draw
+    after: [draw_1, entries_2]
+    at: "night+4 08:00"
+    closes: "night+3 23:59:59"
+    entrants: {members_of: night_ask, reviews: first_submission_after_own_invitation,
+               free_entries: [entries_1, entries_2]}
+    exclude: [winners, team]
+    pick: {winners: 10, alternates: 10}
+    beacon: {drand: quicknet, round_after: 90s}
+    late: {grace: 15m, then: run}
+
+  - {id: winner_note_2, do: send_flow_event, after: draw_2, message: winner_note, audience: draw_2.winners,
+     exclude: consent_only, target: {delivered: all}, on_partial: block, late: {then: late_copy, after_that: hold}}
+  - {id: claims_2, do: spawn, sequence: prize-claim, each: draw_2.winners, params: {notice: winner_note_2}}
+
+  - id: code_go
+    do: approval
+    after: draw_2
+    who: tyler
+    for: money
+    shows: {codes: "entrants(draw_1, draw_2) minus winners, after exclusions", "off": 50%, "on": lunair_cover,
+            single_use: true, expires: 14d, tag: giveaway-2026-10, max_face_value: computed}
+    ask_by: "night+4 09:00"
+
+  - {id: codes, do: issue_codes, after: code_go, via: ops_api, for: "entrants(draw_1, draw_2) minus winners",
+     exclude: giveaway, code: {"off": 50%, "on": lunair_cover, single_use: true, expires: 14d, tag: giveaway-2026-10}}
+
+  - {id: half_off_note, do: send_flow_event, after: codes, at: "night+4 10:00", message: half_off,
+     audience: codes.holders, exclude: giveaway, fills: {code: codes.code, expires_on: codes.expires_on},
+     target: {delivered: 99%}}

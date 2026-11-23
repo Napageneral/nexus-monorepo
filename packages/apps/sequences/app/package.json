@@ -1,0 +1,17 @@
+{
+  "name": "sequences-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:store": "SEQUENCES_TEST_DATABASE_URL=${SEQUENCES_TEST_DATABASE_URL:?set a throwaway PostgreSQL 17} vitest run",
+    "release": "bash scripts/package-release.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "pg": "^8.16.3",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  }
+}

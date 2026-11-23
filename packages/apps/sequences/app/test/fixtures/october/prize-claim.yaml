@@ -1,0 +1,16 @@
+# Test fixture: the design's sequences/prize-claim.yaml, verbatim. One instance per winner
+# (spawned by claims_1/claims_2); its messages come from the parent definition.
+sequence: prize-claim
+params: {winner: entry_ref, notice: step_ref}
+steps:
+  - {id: opens, do: wait_until, at: "notice.delivered_at(winner)"}
+  - {id: desk_row, do: desk_handoff, after: opens, row: prize_claim, closes: "opens + 7 days 23:59:59"}
+  - {id: remind, do: notify, at: "desk_row.closes - 24h", when: "desk_row.state == open"}
+  - {id: settle, do: wait_for, poll: 15m, until: [order_tagged, desk_ineligible, desk_declined],
+     deadline: desk_row.closes, on_deadline: expired}
+  - {id: promote, do: promote_alternates, after_any: [settle.expired, settle.ineligible, settle.declined, opens.bounced],
+     gate: tyler}
+  - {id: alternate_note, do: send_flow_event, after: promote, when: "promote.alternate != null",
+     message: alternate_win, audience: [promote.alternate], exclude: consent_only, target: {delivered: all}}
+  - {id: alternate_claim, do: spawn, after: alternate_note, sequence: prize-claim,
+     params: {winner: promote.alternate, notice: alternate_note}}

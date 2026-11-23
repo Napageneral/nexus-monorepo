@@ -1,0 +1,606 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nex.moonsleep.co/apps/sequences/schema/output-v1.json",
+  "title": "The one output contract every sequences.* read and write returns",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "command",
+    "ok",
+    "exit",
+    "verdict",
+    "as_of",
+    "subject",
+    "data",
+    "problems",
+    "next",
+    "apply",
+    "relay",
+    "tyler_told",
+    "links",
+    "text"
+  ],
+  "properties": {
+    "contract": {
+      "const": "sequences_output_v1"
+    },
+    "command": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "exit": {
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "description": "0 ok · 1 usage · 2 file errors · 3 needs Tyler · 4 held · 5 refused · 6 transient · 7 token stale · 8 needs an agent"
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "behind",
+        "ahead"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "behind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ahead": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "as_of": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ct",
+        "utc"
+      ],
+      "properties": {
+        "ct": {
+          "type": "string"
+        },
+        "utc": {
+          "type": "string"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "series",
+        "ref",
+        "resolved_from"
+      ],
+      "properties": {
+        "series": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved_from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "The command's own payload."
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "tier",
+          "ref",
+          "message",
+          "impact",
+          "resumes",
+          "fixer",
+          "fix_by",
+          "claimed_by",
+          "tyler_told",
+          "next"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "A stable code (check.*, sim.*, hold.*, refuse.*, transient.*, alert rules)."
+          },
+          "tier": {
+            "enum": [
+              "error",
+              "pending",
+              "warn",
+              "hold",
+              "refuse",
+              "transient"
+            ]
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "impact": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resumes": {
+            "enum": [
+              "auto",
+              "on_resume",
+              "never"
+            ]
+          },
+          "fixer": {
+            "enum": [
+              "none",
+              "agent",
+              "desk",
+              "casey",
+              "tyler",
+              "owner:mac",
+              "owner:review_sender"
+            ]
+          },
+          "fix_by": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ct",
+                  "utc",
+                  "reason"
+                ],
+                "properties": {
+                  "ct": {
+                    "type": "string"
+                  },
+                  "utc": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "enum": [
+                      "not_after",
+                      "copy_window",
+                      "promise",
+                      "dependent_start"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "by",
+                  "until",
+                  "eta"
+                ],
+                "properties": {
+                  "by": {
+                    "type": "string"
+                  },
+                  "until": {
+                    "type": "string"
+                  },
+                  "eta": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "tyler_told": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "emailed_at",
+                  "incident",
+                  "in_digest",
+                  "relayed_by",
+                  "relayed_at"
+                ],
+                "properties": {
+                  "emailed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "incident": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "in_digest": {
+                    "type": "boolean"
+                  },
+                  "relayed_by": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "relayed_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "next": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cmd",
+                "why",
+                "who",
+                "fix_type",
+                "lead_time",
+                "reasks_tyler"
+              ],
+              "properties": {
+                "cmd": {
+                  "type": "string",
+                  "description": "An exact command with ids filled in."
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Why."
+                },
+                "who": {
+                  "type": "string",
+                  "description": "Who acts."
+                },
+                "fix_type": {
+                  "enum": [
+                    "command",
+                    "edit",
+                    "code_release",
+                    "ruling",
+                    "human",
+                    "tyler_tap"
+                  ],
+                  "description": "The ax draft's `kind`, renamed (NX-P17)."
+                },
+                "lead_time": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reasks_tyler": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "Exact next commands."
+          },
+          "file": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "fix_type",
+              "who",
+              "lead_time",
+              "safe"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "fix_type": {
+                "type": "string"
+              },
+              "who": {
+                "type": "string"
+              },
+              "lead_time": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "safe": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "description": "Every problem names its fix, who makes it, the deadline and what is at stake."
+    },
+    "next": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cmd",
+          "why",
+          "who",
+          "fix_type",
+          "lead_time",
+          "reasks_tyler"
+        ],
+        "properties": {
+          "cmd": {
+            "type": "string",
+            "description": "An exact command with ids filled in."
+          },
+          "why": {
+            "type": "string",
+            "description": "Why."
+          },
+          "who": {
+            "type": "string",
+            "description": "Who acts."
+          },
+          "fix_type": {
+            "enum": [
+              "command",
+              "edit",
+              "code_release",
+              "ruling",
+              "human",
+              "tyler_tap"
+            ],
+            "description": "The ax draft's `kind`, renamed (NX-P17)."
+          },
+          "lead_time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasks_tyler": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "Exact next commands."
+    },
+    "apply": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "token",
+            "expires_at",
+            "cmd",
+            "effect_sha"
+          ],
+          "properties": {
+            "token": {
+              "type": "string"
+            },
+            "expires_at": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ct",
+                    "utc"
+                  ],
+                  "properties": {
+                    "ct": {
+                      "type": "string"
+                    },
+                    "utc": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            },
+            "cmd": {
+              "type": "string"
+            },
+            "effect_sha": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "relay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "facts"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "2 to 4 sentences for Tyler, or 'none needed'."
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "priority",
+              "text",
+              "needs_tyler",
+              "link"
+            ],
+            "properties": {
+              "priority": {
+                "type": "integer"
+              },
+              "text": {
+                "type": "string"
+              },
+              "needs_tyler": {
+                "type": "boolean"
+              },
+              "link": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "description": "Ranked relay facts."
+        }
+      }
+    },
+    "tyler_told": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "emailed_at",
+              "incident",
+              "in_digest",
+              "relayed_by",
+              "relayed_at"
+            ],
+            "properties": {
+              "emailed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "incident": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "in_digest": {
+                "type": "boolean"
+              },
+              "relayed_by": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "relayed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "description": "What Tyler already heard."
+        }
+      ]
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page"
+      ],
+      "properties": {
+        "page": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "text": {
+      "type": "string",
+      "description": "The text twin: verdict line, body, next: lines, relay: line."
+    }
+  }
+}
