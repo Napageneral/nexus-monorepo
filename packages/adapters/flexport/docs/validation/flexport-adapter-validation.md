@@ -11,7 +11,7 @@
 - renewal keeps a still-valid token while the token endpoint fails, and failed token requests back off 15 min, 1 h, 4 h until a success resets them;
 - no redirect is followed and no token is sent to another origin; error text carries no token or secret, a read's error no response text, and a refused write's error only Flexport's cleaned, capped `error.message`;
 - collections page by number with their original filters and drop rows of another shipment;
-- the bundle has the six keys the Python reader takes, identical input builds a byte-identical Record, an unchanged bundle is not re-emitted within 24 h and is re-emitted byte for byte after 24 h, and a backfill re-emits identical Records;
+- the bundle has the eight keys the Python reader takes (0.1.2 added container legs and events, each null when Flexport refuses it), identical input builds a byte-identical Record, an unchanged bundle is not re-emitted within 24 h and is re-emitted byte for byte after 24 h, and a backfill re-emits identical Records;
 - timestamps are monotonic per Record: a return to an earlier exact bundle or network is a newer Record, and an unchanged re-emission keeps its timestamp;
 - a final document is downloaded once, attached with `local_path` under the state directory, and archived documents are never attached; a download that fails (400, 302) leaves only that attachment off, the bundle is still emitted, the pass succeeds with `document_failures` in the status file, and the next pass attaches it;
 - health and `flexport.status` never call the network and report `automatic_writes: false`;

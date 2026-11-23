@@ -32,6 +32,8 @@ function fixtureBundle(): FlexportBundle {
     customs_entries: own(structuredClone(fixtures.customs_entries)),
     invoices: own(structuredClone(fixtures.invoices)),
     documents: own(structuredClone(fixtures.documents)),
+    container_legs: structuredClone(fixtures.container_legs).filter((row: Record<string, any>) => row.leg?.id === 22),
+    events: structuredClone(fixtures.events).filter((row: Record<string, any>) => row.data?.shipment?.id === 1234567),
   };
 }
 
@@ -61,10 +63,13 @@ test("stable JSON sorts keys recursively and drops insignificant whitespace", ()
   assert.equal(stableJson({ a: undefined, b: "é" }), '{"b":"é"}');
 });
 
-test("the bundle has exactly the six keys the Python reader takes", () => {
+test("the bundle has exactly the eight keys the Python reader takes (0.1.2 added container_legs and events)", () => {
   const snapshot = bundleSnapshot(fixtureBundle());
   const parsed = JSON.parse(snapshot.json);
-  assert.deepEqual(Object.keys(parsed), ["containers", "customs_entries", "documents", "invoices", "legs", "shipment"]);
+  assert.deepEqual(Object.keys(parsed), ["container_legs", "containers", "customs_entries", "documents", "events", "invoices", "legs", "shipment"]);
+  // A list Flexport refused stays in the bundle as null, so "not readable" is never mistaken for "none".
+  const refused = JSON.parse(bundleSnapshot({ ...fixtureBundle(), events: null }).json);
+  assert.equal(refused.events, null);
   assert.equal(snapshot.sha256, createHash("sha256").update(snapshot.json, "utf8").digest("hex"));
   assert.ok(!snapshot.json.includes("\n") && !snapshot.json.includes(": "));
 });
@@ -109,7 +114,7 @@ test("the shipment record follows the contract", () => {
   assert.equal(record.payload.timestamp, Date.parse("2026-10-20T12:00:00.000Z"));
   assert.equal(
     record.payload.content,
-    "Flexport shipment 1234567 SWRC26012 S3 Ningbo to Vernon: in_transit_to_arrival_port; entries 1 (pending); invoices 1; documents 2",
+    "Flexport shipment 1234567 SWRC26012 S3 Ningbo to Vernon: in_transit_to_arrival_port; entries 1 (pending); invoices 1; documents 2; container legs 2; events 3",
   );
   assert.equal(record.payload.content_type, "text");
   const provider = record.payload.payload as Record<string, unknown>;
@@ -156,9 +161,11 @@ test("the timestamp falls back to the newest bundle time, then the first-seen ti
     customs_entries: [],
     invoices: [],
     documents: [],
+    container_legs: [],
+    events: null,
   };
   assert.equal(bundleTimestamp(bare, 7), 7);
-  assert.equal(bundleSummary(bare), "Flexport shipment 1: seller_location; entries 0 (none); invoices 0; documents 0");
+  assert.equal(bundleSummary(bare), "Flexport shipment 1: seller_location; entries 0 (none); invoices 0; documents 0; container legs 0; events not readable");
 });
 
 test("the network record follows the contract", () => {

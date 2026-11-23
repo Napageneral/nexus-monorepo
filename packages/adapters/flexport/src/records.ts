@@ -70,6 +70,8 @@ export function bundleSnapshot(bundle: FlexportBundle): Snapshot {
     customs_entries: bundle.customs_entries,
     invoices: bundle.invoices,
     documents: bundle.documents,
+    container_legs: bundle.container_legs,
+    events: bundle.events,
   });
 }
 
@@ -124,7 +126,9 @@ export function bundleSummary(bundle: FlexportBundle): string {
   return oneLine(
     `Flexport shipment ${id}${name ? ` ${name}` : ""}: ${status}; ` +
       `entries ${bundle.customs_entries.length} (${releases || "none"}); ` +
-      `invoices ${bundle.invoices.length}; documents ${bundle.documents.length}`,
+      `invoices ${bundle.invoices.length}; documents ${bundle.documents.length}; ` +
+      `container legs ${bundle.container_legs ? bundle.container_legs.length : "not readable"}; ` +
+      `events ${bundle.events ? bundle.events.length : "not readable"}`,
   );
 }
 

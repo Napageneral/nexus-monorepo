@@ -209,6 +209,19 @@ export async function startFakeFlexport(options = {}) {
       else send(response, 200, envelope(shipment, 2, url.href));
       return;
     }
+    // 0.1.2: container legs by leg, events by shipment (the filters Flexport documents for them).
+    if (method === "GET" && path === "/ocean/shipment_container_legs") {
+      const legId = url.searchParams.get("f.leg.id");
+      const rows = fixtures.container_legs ?? [];
+      page(response, url, !legId || ignoreFilter.has(path) ? rows : rows.filter((row) => String(row?.leg?.id ?? "") === legId));
+      return;
+    }
+    if (method === "GET" && path === "/events") {
+      const shipmentId = url.searchParams.get("f.data.shipment.id");
+      const rows = fixtures.events ?? [];
+      page(response, url, !shipmentId || ignoreFilter.has(path) ? rows : rows.filter((row) => String(row?.data?.shipment?.id ?? "") === shipmentId));
+      return;
+    }
     if (method === "GET" && CHILD_COLLECTIONS[path]) {
       page(response, url, ownedBy(fixtures[CHILD_COLLECTIONS[path]] ?? [], url, path));
       return;

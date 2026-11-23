@@ -198,7 +198,7 @@ test("adapter.info declares the api_key auth, ingest operations and exactly eigh
   const reflected = await info();
   assert.equal(reflected.platform, "flexport");
   assert.equal(reflected.name, "flexport-adapter");
-  assert.equal(reflected.version, "0.1.1");
+  assert.equal(reflected.version, "0.1.2");
   assert.equal(reflected.credential_service, "flexport");
   assert.equal(reflected.supports_payload_file, true, "document bodies over 64 KiB arrive as a payload file");
   assert.deepEqual(reflected.auth?.methods, [
